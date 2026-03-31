@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+chroma_db/
+archimedes_diagnostic_report.md
+venv/
+node_modules/
+.dockerignore

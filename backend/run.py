@@ -1,0 +1,27 @@
+import uvicorn
+import os
+
+import socket
+import sys
+
+def check_port(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("0.0.0.0", port))
+            return True
+        except socket.error:
+            return False
+
+if __name__ == "__main__":
+    port = 8001
+    if not check_port(port):
+        print(f"ERROR: Port {port} is already in use!")
+        print(f"Please kill the process using 'netstat -ano | findstr :{port}' and then 'taskkill /F /PID <PID>'")
+        sys.exit(1)
+
+    # Ensure workspace exists
+    os.makedirs("./workspace", exist_ok=True)
+    
+    # Run FastAPI
+    print(f"Starting Archimedes Backend on http://localhost:{port}")
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port, reload=False, log_level="debug")
