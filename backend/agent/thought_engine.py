@@ -36,6 +36,8 @@ MANDATORY RULES:
 - ALWAYS check shell exit codes. Non-zero = error.
 - Save all important outputs to /home/ubuntu/workspace/
 - When task is complete, use message(type="result") with attachments.
+- NEVER use shell to list large directories (ls -la on /). Use targeted paths only.
+- If a tool returns "[output truncated]", acknowledge it and move on — do not retry the same command.
 
 TOOL SELECTION:
 - shell: run code/commands.

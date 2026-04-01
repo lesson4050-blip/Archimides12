@@ -32,7 +32,11 @@ class ShellTool:
         if action == "exec":
             if not command:
                 return {"success": False, "error": "Command is required for 'exec' action."}
-            return await self.executor.run_command(session_id, command, timeout=timeout)
+            result = await self.executor.run_command(session_id, command, timeout=timeout)
+            output = result.get("output", "")
+            if isinstance(output, str) and len(output) > 2000:
+                result["output"] = output[:2000] + "\n...[truncated]"
+            return result
         
         elif action == "view":
             # In MVP, 'view' might just return a generic message or last output

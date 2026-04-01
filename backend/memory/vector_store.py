@@ -28,7 +28,7 @@ class VectorStore:
                 self.genai_client.models.embed_content,
                 model=self.embedding_model,
                 contents=text,
-                config={"task_type": "RETRIEVAL_DOCUMENT"}
+                config={"task_type": "RETRIEVAL_QUERY"}
             )
             return result.embeddings[0].values
         except Exception as e:

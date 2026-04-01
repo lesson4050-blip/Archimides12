@@ -155,11 +155,8 @@ STUB_SIGNATURES = [
     "simulated",
     "not implemented",
     "todo",
-    "pass",
     "dummy",
     "fake",
-    "return true",
-    "return {\"success\": true}",
 ]
 
 def is_stub(source: str) -> Tuple[bool, str]:

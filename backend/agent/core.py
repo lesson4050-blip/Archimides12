@@ -154,11 +154,14 @@ class AgentLoop:
                 })
                 
                 # Tool result message
+                raw_output = str(result.get("output", result.get("error", "No output")))
+                if len(raw_output) > 2000:
+                    raw_output = raw_output[:2000] + "\n...[output truncated, too large]"
                 self.history.append({
                     "role": "tool",
                     "tool_call_id": tool_call_id,
                     "name": tool_name,
-                    "content": str(result.get("output", result.get("error", "No output")))
+                    "content": raw_output
                 })
                 
                 if websocket_send:

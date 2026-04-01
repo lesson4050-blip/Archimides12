@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = ""
     
     # Sandbox
-    SANDBOX_IMAGE: str = "archemidas-sandbox:latest"
+    SANDBOX_IMAGE: str = "cosmo-sandbox:latest"
     SANDBOX_MAX_CONTAINERS: int = 3
     SANDBOX_INACTIVITY_TIMEOUT: int = 1800  # 30 minutes
     SANDBOX_SHELL_TIMEOUT: int = 60
