@@ -1,1 +1,81 @@
-<html><head><title>To-Do App</title></head><body><h1>To-Do App</h1><ul id="tasks"></ul><input id="task" type="text"><button id="add">Add</button><button id="delete">Delete</button><script>const tasks = [];</script><script src="main.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #tasks {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        #tasks li {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+        }
+        #tasks li:last-child {
+            border-bottom: none;
+        }
+        .completed {
+            text-decoration: line-through;
+        }
+    </style>
+</head>
+<body>
+    <h1>To-Do App</h1>
+    <input id="new-task" type="text" placeholder="New task">
+    <button id="add-task">Add Task</button>
+    <ul id="tasks"></ul>
+    <script>
+        let tasks = [];
+        const taskList = document.getElementById('tasks');
+        const newTaskInput = document.getElementById('new-task');
+        const addTaskButton = document.getElementById('add-task');
+        
+        addTaskButton.addEventListener('click', addTask);
+        
+        function addTask() {
+            const newTask = newTaskInput.value.trim();
+            if (newTask) {
+                tasks.push({ text: newTask, completed: false });
+                newTaskInput.value = '';
+                renderTasks();
+            }
+        }
+        
+        function renderTasks() {
+            taskList.innerHTML = '';
+            tasks.forEach((task, index) => {
+                const taskElement = document.createElement('li');
+                taskElement.textContent = task.text;
+                if (task.completed) {
+                    taskElement.classList.add('completed');
+                }
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'Delete';
+                deleteButton.addEventListener('click', () => deleteTask(index));
+                const completeButton = document.createElement('button');
+                completeButton.textContent = task.completed ? 'Uncomplete' : 'Complete';
+                completeButton.addEventListener('click', () => completeTask(index));
+                taskElement.appendChild(deleteButton);
+                taskElement.appendChild(completeButton);
+                taskList.appendChild(taskElement);
+            });
+        }
+        
+        function deleteTask(index) {
+            tasks.splice(index, 1);
+            renderTasks();
+        }
+        
+        function completeTask(index) {
+            tasks[index].completed = !tasks[index].completed;
+            renderTasks();
+        }
+    </script>
+</body>
+</html>

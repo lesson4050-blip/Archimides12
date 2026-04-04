@@ -61,6 +61,10 @@ export class ArchimedesSocket {
     }
   }
 
+  getReadyState(): number {
+    return this.socket ? this.socket.readyState : WebSocket.CLOSED;
+  }
+
   sendTask(task: string) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
     this.socket.send(JSON.stringify({ type: 'task', task }));

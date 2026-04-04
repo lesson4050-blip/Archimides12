@@ -15,7 +15,7 @@ interface Message {
 
 // Utility to strip raw JSON blocks, backticks, <think> blocks, and _TOOL markers for clean display
 // Utility to strip raw JSON blocks, backticks, <think> blocks, and _TOOL markers for clean display
-const cleanMessageContent = (content: string): string => {
+const cleanMessageContent = (content: string | undefined): string => {
   if (!content) return "";
   
   // 1. Remove <think>...</think> or <thought>...</thought> blocks (common in DeepSeek/Llama)
@@ -102,12 +102,18 @@ export default function ChatPanel({ sessionId, onStart }: { sessionId: string, o
   const handleSend = () => {
     if (!input.trim() || isWorking) return;
     
+    // Check if socket is actually connected before getting stuck
+    if (!socket || socket.getReadyState() !== WebSocket.OPEN) {
+      alert("Please wait for connection to establish before sending.");
+      return;
+    }
+    
     const task = input.trim();
     setMessages(prev => [...prev, { role: "user", type: "text", content: task }]);
     setInput("");
     setIsWorking(true);
     onStart();
-    socket?.sendTask(task);
+    socket.sendTask(task);
   };
 
   useEffect(() => {

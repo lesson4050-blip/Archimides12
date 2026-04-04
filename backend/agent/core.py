@@ -173,6 +173,13 @@ class AgentLoop:
                         "success": result.get("success", True),
                         "iteration": self.current_iteration
                     })
+                    
+                if tool_name == "plan" and tool_params.get("action") in ("create_plan", "update") and websocket_send:
+                    await websocket_send({
+                        "type": "plan_update",
+                        "phases": tool_params.get("phases", []),
+                        "iteration": self.current_iteration
+                    })
                 
                 # Special case: if message(type="result"), we are done
                 if tool_name == "message" and tool_params.get("type") == "result":

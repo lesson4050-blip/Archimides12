@@ -14,41 +14,57 @@ class ExposeTool:
         self.executor = executor
         self._tunnels: Dict[int, asyncio.subprocess.Process] = {}
 
-    async def execute(self, session_id: str, port: int, **kwargs) -> Dict[str, Any]:
+    def get_definition(self) -> Dict[str, Any]:
+        return {
+            "type": "function",
+            "function": {
+                "name": "expose",
+                "description": "Exposes a port to the public internet.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "port": {"type": "integer", "description": "The port number to expose"},
+                        "action": {"type": "string", "description": "Optional action"},
+                        "path": {"type": "string", "description": "Optional path"}
+                    },
+                    "required": ["port"]
+                }
+            }
+        }
+
+    async def execute(self, session_id: str = None, port: int = None, action: str = None, path: str = None, **kwargs) -> Dict[str, Any]:
+        import re as _re
+        if port is None and path:
+            match = _re.search(r':(\d+)', path)
+            if match:
+                port = int(match.group(1))
+        if port is None and path:
+            # try extracting just digits
+            digits = _re.findall(r'\d{4,5}', path)
+            if digits:
+                port = int(digits[-1])
+        if port is None:
+            return {"success": False, "error": "port is required"}
         try:
-            # Kill any existing tunnel for this port
-            if port in self._tunnels:
-                try:
-                    self._tunnels[port].terminate()
-                except Exception:
-                    pass
+            # Kill any existing tunnel inside the container
+            await self.executor.run_command(session_id, "pkill -f 'nokey@localhost.run'")
 
-            # Start SSH tunnel to localhost.run in background
-            proc = await asyncio.create_subprocess_exec(
-                "ssh",
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ServerAliveInterval=30",
-                "-R", f"80:localhost:{port}",
-                "nokey@localhost.run",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT
-            )
-            self._tunnels[port] = proc
+            # Start SSH tunnel inside the sandbox in background
+            ssh_cmd = f"nohup ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:{port} nokey@localhost.run > /tmp/tunnel_{port}.log 2>&1 &"
+            await self.executor.run_command(session_id, ssh_cmd)
 
-            # Read output for up to 15 seconds to capture the public URL
+            # Read log file for up to 15 seconds to capture the public URL
             url = None
             deadline = asyncio.get_event_loop().time() + 15
             while asyncio.get_event_loop().time() < deadline:
-                try:
-                    line = await asyncio.wait_for(proc.stdout.readline(), timeout=2)
-                    line_str = line.decode("utf-8", errors="ignore").strip()
-                    logger.info(f"localhost.run: {line_str}")
-                    match = re.search(r"https?://[a-zA-Z0-9\-]+\.lhr\.life", line_str)
+                cat_res = await self.executor.run_command(session_id, f"cat /tmp/tunnel_{port}.log")
+                if cat_res.get("success"):
+                    line_str = cat_res.get("output", "")
+                    match = _re.search(r"https?://[a-zA-Z0-9\-]+\.lhr\.life", line_str)
                     if match:
                         url = match.group(0)
                         break
-                except asyncio.TimeoutError:
-                    continue
+                await asyncio.sleep(2)
 
             if url:
                 return {

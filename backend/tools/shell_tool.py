@@ -31,7 +31,16 @@ class ShellTool:
             
         if action == "exec":
             if not command:
-                return {"success": False, "error": "Command is required for 'exec' action."}
+                return {"success": False, "error": "Command is required"}
+            # If command ends with & or starts with nohup, it's background — don't wait for output
+            if command.strip().endswith('&') or command.strip().startswith('nohup'):
+                return {"success": True, "output": f"Command started in background: {command}"}
+
+            if command.strip().endswith(' &'):
+                bg_cmd = command.strip()
+                result = await self.executor.run_command(session_id, bg_cmd, timeout=5)
+                return {"success": True, "output": f"Background process started."}
+                
             result = await self.executor.run_command(session_id, command, timeout=timeout)
             output = result.get("output", "")
             if isinstance(output, str) and len(output) > 2000:

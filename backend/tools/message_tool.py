@@ -4,7 +4,7 @@ class MessageTool:
     """
     Handles communication with the user.
     """
-    async def execute(self, action: str, text: Optional[str] = None, content: Optional[str] = None, attachments: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
+    async def execute(self, action: str = "result", text: Optional[str] = None, content: Optional[str] = None, attachments: Optional[List[str]] = None, **kwargs) -> Dict[str, Any]:
         return {
             "success": True,
             "type": action, 
