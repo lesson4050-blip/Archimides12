@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Countdown Timer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+        .timer-container {
+            background-color: #fff;
+            padding: 30px 50px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        #countdown {
+            font-size: 5em;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="timer-container">
+        <h1>Countdown Timer</h1>
+        <div id="countdown">60</div>
+        <button onclick="startTimer()">Start Timer</button>
+    </div>
+
+    <script>
+        let countdownElement = document.getElementById('countdown');
+        let timeLeft = 60;
+        let timerInterval;
+
+        function updateTimer() {
+            countdownElement.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                countdownElement.textContent = "Time's Up!";
+            }
+            timeLeft--;
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval); // Clear any existing interval
+            timeLeft = 60; // Reset timer
+            updateTimer(); // Display initial value immediately
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+    </script>
+</body>
+</html>

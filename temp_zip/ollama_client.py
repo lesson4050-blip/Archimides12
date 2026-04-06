@@ -36,21 +36,16 @@ class OllamaClient:
                 messages.insert(0, {"role": "system", "content": system_injection})
 
         try:
-            chat_kwargs = {
-                "model": self.model,
-                "messages": messages,
-                "options": {
+            response = await self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={
                     "num_ctx": settings.AGENT_MAX_CONTEXT_TOKENS,
                     "num_predict": 4096
                 }
-            }
-            if tools:
-                chat_kwargs["tools"] = tools
-                chat_kwargs["format"] = "json"
+            )
 
-            response = await self.client.chat(**chat_kwargs)
-
-            content = response.message.content or ""
+            content = response.message.content
             thought = ""
             text = content
             tool_call = None
@@ -59,44 +54,36 @@ class OllamaClient:
                 thought = content.split("<thought>")[1].split("</thought>")[0].strip()
                 text = content.split("</thought>")[1].strip()
 
-            native_tool_calls = getattr(response.message, "tool_calls", None)
-            if native_tool_calls and len(native_tool_calls) > 0:
-                call = native_tool_calls[0]
-                if isinstance(call, dict):
-                    func = call.get("function", {})
-                    tool_call = {
-                        "name": func.get("name", ""),
-                        "params": func.get("arguments", {})
-                    }
-                else:
-                    tool_call = {
-                        "name": getattr(call.function, "name", ""),
-                        "params": getattr(call.function, "arguments", {})
-                    }
-            else:
-                import json
-                text_to_parse = text.strip()
-                if "```json" in text_to_parse:
-                    text_to_parse = text_to_parse.split("```json")[1].split("```")[0].strip()
-                elif "```" in text_to_parse:
-                    text_to_parse = text_to_parse.split("```")[1].split("```")[0].strip()
-                
-                if text_to_parse.startswith("{") and text_to_parse.endswith("}"):
-                    try:
-                        data = json.loads(text_to_parse, strict=False)
-                        logger.info(f"Parsed JSON from Ollama fallback: (keys: {list(data.keys())})")
+            import json
+            if "{" in text and "}" in text:
+                try:
+                    # Try to find JSON block, possibly inside markdown code blocks
+                    json_text = text
+                    if "```json" in text:
+                        json_text = text.split("```json")[1].split("```")[0]
+                    elif "```" in text:
+                        json_text = text.split("```")[1].split("```")[0]
+                    
+                    start = json_text.find("{")
+                    end = json_text.rfind("}") + 1
+                    if start != -1 and end != -1:
+                        json_str = json_text[start:end]
+                        data = json.loads(json_str)
+                        logger.info(f"Parsed JSON from Ollama: {data}")
                         
                         if "tool_call" in data:
                             tool_call = data["tool_call"]
-                            text = ""
+                            # Keep only text BEFORE the tool call
+                            text = text.split(json_str)[0].strip()
                         elif "name" in data and ("params" in data or "arguments" in data):
                             tool_call = {
                                 "name": data["name"],
                                 "params": data.get("params") or data.get("arguments")
                             }
-                            text = ""
-                    except Exception as e:
-                        logger.warning(f"Failed to parse JSON from Ollama fallback: {e}")
+                            text = text.split(json_str)[0].strip()
+                except Exception as e:
+                    logger.warning(f"Failed to parse JSON from Ollama output: {e}")
+                    pass
 
             return {
                 "model_used": "ollama",

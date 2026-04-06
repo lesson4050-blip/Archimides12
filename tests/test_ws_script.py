@@ -10,7 +10,7 @@ async def test_ws():
         response = await websocket.recv()
         print(f"Received: {response}")
         
-        msg = {"type": "task", "task": "Создай index.html со змейкой (HTML5 Canvas + JS), запусти python3 -m http.server 8000 в фоне и через expose выведи порт 8000."}
+        msg = {"type": "task", "task": "Create a simple HTML page with a countdown timer from 60 seconds. Save it to /home/ubuntu/workspace/timer.html and serve it on port 8080."}
         print(f"Sending: {msg}")
         await websocket.send(json.dumps(msg))
         

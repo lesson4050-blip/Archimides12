@@ -7,7 +7,7 @@ class ContextManager:
     """
     Manages short-term memory: conversation history and summarization.
     """
-    def __init__(self, max_tokens: int = 8192, summarization_threshold: int = 6000):
+    def __init__(self, max_tokens: int = 16384, summarization_threshold: int = 12000):
         self.history: List[Dict[str, Any]] = []
         self.max_tokens = max_tokens
         self.summarization_threshold = summarization_threshold

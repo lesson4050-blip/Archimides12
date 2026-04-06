@@ -33,13 +33,10 @@ class ShellTool:
             if not command:
                 return {"success": False, "error": "Command is required"}
             # If command ends with & or starts with nohup, it's background — don't wait for output
-            if command.strip().endswith('&') or command.strip().startswith('nohup'):
-                return {"success": True, "output": f"Command started in background: {command}"}
-
-            if command.strip().endswith(' &'):
-                bg_cmd = command.strip()
-                result = await self.executor.run_command(session_id, bg_cmd, timeout=5)
-                return {"success": True, "output": f"Background process started."}
+            is_background = command.strip().endswith(' &') or command.strip().startswith('nohup ')
+            if is_background:
+                result = await self.executor.run_command(session_id, command.strip(), timeout=10)
+                return {"success": True, "output": f"Background process started. {result.get('output', '')}"}
                 
             result = await self.executor.run_command(session_id, command, timeout=timeout)
             output = result.get("output", "")

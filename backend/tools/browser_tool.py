@@ -56,16 +56,11 @@ async def run():
 
 asyncio.run(run())
 """
-            # Run the script via executor
-            # We first write it to a temp file then run it
             tmp_script = f"/tmp/browser_{action}.py"
-            # Write using executor / filesystem? 
-            # Simplified: just run via python -c for very short ones?
-            # Actually better to use filesystem for cleanliness.
-            
-            # For brevity, let's assume we have a simpler way 
-            # or we just run it as a command line.
-            cmd = f"python3 -c {script!r}"
+            cmd = f"""cat << 'EOF' > {tmp_script}
+{script.strip()}
+EOF
+python3 {tmp_script}"""
             return await self.executor.run_command(session_id, cmd)
             
         elif action == "screenshot":
@@ -85,7 +80,12 @@ async def run():
         await browser.close()
 asyncio.run(run())
 """
-            return await self.executor.run_command(session_id, f"python3 -c {script!r}")
+            tmp_script = f"/tmp/browser_{action}.py"
+            cmd = f"""cat << 'EOF' > {tmp_script}
+{script.strip()}
+EOF
+python3 {tmp_script}"""
+            return await self.executor.run_command(session_id, cmd)
             
         else:
             return {"success": False, "error": f"Action '{action}' not yet fully implemented in BrowserTool MVP."}

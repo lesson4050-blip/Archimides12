@@ -10,8 +10,10 @@ class AllModelsExhausted(Exception):
     pass
 
 class ModelRouter:
-    # Tasks that require Gemini's quality (long context, planning, research)
-    GEMINI_FIRST_TASKS = {"plan", "browser", "search", "result", "summarize"}
+    # Tasks that require Gemini's quality (long context, browser, research)
+    GEMINI_FIRST_TASKS = {"browser", "search", "result", "summarize"}
+    # Tasks that benefit from Gemma 4's native reasoning via Ollama
+    OLLAMA_FIRST_TASKS = {"think", "plan"}
 
     def __init__(self):
         self.ollama = OllamaClient()
@@ -31,6 +33,8 @@ class ModelRouter:
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
         if task_hint in self.GEMINI_FIRST_TASKS:
             order = [self.gemini, self.groq, self.ollama]
+        elif task_hint in self.OLLAMA_FIRST_TASKS:
+            order = [self.ollama, self.groq, self.gemini]
         else:
             order = [self.groq, self.gemini, self.ollama]
 

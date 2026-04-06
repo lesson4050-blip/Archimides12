@@ -25,7 +25,7 @@ class SearchTool:
                 }
             }
         }
-    async def execute(self, query: str, search_depth: str = "basic", **kwargs) -> Dict[str, Any]:
+    async def execute(self, query: str, search_depth: str = "advanced", **kwargs) -> Dict[str, Any]:
         api_key = settings.TAVILY_API_KEY
         if not api_key:
             return {"success": False, "error": "TAVILY_API_KEY not set in environment."}
@@ -35,7 +35,7 @@ class SearchTool:
             "api_key": api_key,
             "query": query,
             "search_depth": search_depth,
-            "max_results": 5
+            "max_results": 10
         }
         
         try:
