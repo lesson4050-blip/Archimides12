@@ -1,0 +1,28 @@
+[1] Top 10 In-Demand Programming Languages for 2026 (Updated)
+URL: https://www.crossover.com/resources/top-10-in-demand-programming-languages-for-2026-updated
+Snippet: Top 10 In-Demand Programming Languages for 2026 [Updated] · 1. Python · 2. JavaScript · 3. Java · 4. C# · 5. Swift · 6. TypeScript · 7. Kotlin · 8. Ruby....
+[2] Most In-demand Programming Languages for 2026 - Itransition
+URL: https://www.itransition.com/developers/in-demand-programming-languages
+Snippet: | #### Key stats |
+
+| Consistently ranked high in the TIOBE Index, C++ has the fourth highest rating in 2026 (8.67%). | TIOBE |
+| 9.75% of projects on GitHub are written in C++, securing the 4th position in popularity. | GitHut |
+| 24.4% of companieshave high demand in C++, making it the 5th most po...
+[3] Top 7 Programming Languages That Get You Hired in 2026 - ESILV
+URL: https://www.esilv.fr/en/top-7-programming-languages-that-get-you-hired-in-2026/
+Snippet: Top 7 Programming Languages That Get You Hired in 2026 · 1. Python · 2. JavaScript · 3. TypeScript · 4. SQL · 5. Java · 6. Go · 7. Rust....
+[4] Most Popular Programming Languages in 2026 - Coursera
+URL: https://www.coursera.org/articles/popular-programming-languages
+Snippet: ## Most popular programming languages to learn in 2026
+
+The following list outlines a few of the most popular programming languages among software developers worldwide . Here's what you need to know:
+
+### 1. JavaScript
+
+JavaScript is the most popular language to learn, according to a study by Statis...
+[5] World Most Popular Programming Language in 2025–2026 - Medium
+URL: https://medium.com/@blogs-world/world-most-popular-programming-language-in-2025-2026-what-really-leads-77c3f732923a
+Snippet: If you need a single headline for 2025–2026, Python is the most defensible “worldwide” winner because it appears strongly across multiple measures of popularity and is used across many domains: automation, scripting, backend services, data engineering, AI/ML, and education.
+
+But “most
+...[output truncated, too large]

@@ -46,7 +46,6 @@ class OllamaClient:
             }
             if tools:
                 chat_kwargs["tools"] = tools
-                chat_kwargs["format"] = "json"
 
             response = await self.client.chat(**chat_kwargs)
 
@@ -81,9 +80,16 @@ class OllamaClient:
                 elif "```" in text_to_parse:
                     text_to_parse = text_to_parse.split("```")[1].split("```")[0].strip()
                 
-                if text_to_parse.startswith("{") and text_to_parse.endswith("}"):
+                # Check for <tool_call> tags
+                if "<tool_call>" in text_to_parse and "</tool_call>" in text_to_parse:
+                    text_to_parse = text_to_parse.split("<tool_call>")[1].split("</tool_call>")[0].strip()
+
+                start = text_to_parse.find("{")
+                end = text_to_parse.rfind("}") + 1
+                if start != -1 and end != -1:
+                    json_str = text_to_parse[start:end]
                     try:
-                        data = json.loads(text_to_parse, strict=False)
+                        data = json.loads(json_str, strict=False)
                         logger.info(f"Parsed JSON from Ollama fallback: (keys: {list(data.keys())})")
                         
                         if "tool_call" in data:

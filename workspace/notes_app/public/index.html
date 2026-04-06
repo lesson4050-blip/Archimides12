@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes App</title>
+    <style>
+        body { font-family: Arial, sans    serif; margin: 20px; }
+        #notes-list { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px; }
+        .note-item { background: #f4f4f4; margin: 5px 0; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Notes App</h1>
+    <div>
+        <input type="text" id="note-input" placeholder="Enter a note">
+        <button id="save-btn">Save Note</button>
+    </div>
+    <div id="notes-list"></div>
+
+    <script>
+        const noteInput = document.getElementById('note-input');
+        const saveBtn = document.getElementById('save-btn');
+        const notesList = document.getElementById('notes-list');
+
+        async function fetchNotes() {
+            try {
+                const response = await fetch('/api/notes');
+                const notes = await response.json();
+                notes.forEach(appendNoteToList);
+            } catch (err) {
+                console.error('Error fetching notes:', err);
+            }
+        }
+
+        function appendNoteToList(note) {
+            const div = document.createElement('div');
+            div.className = 'note-item';
+            div.textContent = note;
+            notesList.appendChild(div);
+        }
+
+        saveBtn.addEventListener('click', async () => {
+            const note = noteInput.value.trim();
+            if (!note) return;
+
+            try {
+                const response = await fetch('/api/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note })
+                });
+
+                if (response.ok) {
+                    appendNoteToUi(note);
+                    noteInput.value = '';
+                } else {
+                    alert('Failed to save note');
+                }
+            } catch (err) {
+                console.error('Error saving note:', err);
+            }
+        });
+
+        function appendNoteToUi(note) {
+            const div = document.createElement('div');
+            div.className = 'note-item';
+            div.textContent = note;
+            notesList.prepend(div);
+        }
+
+        // Load notes on startup
+        fetchNotes();
+    </script>
+</body>
+</html>
