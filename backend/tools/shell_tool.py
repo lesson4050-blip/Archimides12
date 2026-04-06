@@ -36,7 +36,8 @@ class ShellTool:
             is_background = command.strip().endswith(' &') or command.strip().startswith('nohup ')
             if is_background:
                 result = await self.executor.run_command(session_id, command.strip(), timeout=10)
-                return {"success": True, "output": f"Background process started. {result.get('output', '')}"}
+                out = result.get('output', '').strip()
+                return {"success": True, "output": f"Background process started. {out}"}
                 
             result = await self.executor.run_command(session_id, command, timeout=timeout)
             output = result.get("output", "")
