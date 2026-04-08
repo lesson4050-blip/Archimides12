@@ -7,7 +7,7 @@ from backend.config import settings
 from backend.websocket.handler import manager
 from backend.sandbox.singleton import sandbox_manager
 from backend.db.crud import init_db
-from backend.api.cosmo_routes import router as cosmo_router
+from backend.api.routes import router as main_router
 
 
 # Configure logging
@@ -49,7 +49,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(cosmo_router)
+app.include_router(main_router)
 
 
 

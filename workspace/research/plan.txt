@@ -1,5 +1,0 @@
-Plan for AI Agent Framework Research:
-1. Broad Search: Overview of CrewAI and LangGraph (what they are, core concepts).
-2. Technical Deep Dive: Compare architecture (e.g., CrewAI's role-playing vs. LangGraph's state machines/graphs), key features, and dependencies.
-3. Comparison/Recent Trends: Search for benchmarks, pros/cons, and recent updates (2024/2025).
-4. Report Generation: Create frameworks.md with a structured comparison including Architecture, Key Features, Use Cases, and Pros/Cons.

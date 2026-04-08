@@ -3,7 +3,7 @@ import logging
 import asyncio
 from typing import Dict, List, Any
 from fastapi import WebSocket, WebSocketDisconnect
-from backend.agent.cosmo_core import ArchimedesCosmoAgent
+from backend.agent.core import ArchimedesCosmoAgent
 from backend.agent.agent_profiles import get_profile
 from backend.sandbox.singleton import sandbox_manager
 from backend.config import settings
