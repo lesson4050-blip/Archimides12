@@ -3,7 +3,8 @@ import logging
 import asyncio
 from typing import Dict, List, Any
 from fastapi import WebSocket, WebSocketDisconnect
-from backend.agent.core import AgentLoop
+from backend.agent.cosmo_core import ArchimedesCosmoAgent
+from backend.agent.agent_profiles import get_profile
 from backend.sandbox.singleton import sandbox_manager
 from backend.config import settings
 
@@ -18,7 +19,7 @@ class ConnectionManager:
 
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
-        self.agent_loops: Dict[str, AgentLoop] = {}
+        self.agent_loops: Dict[str, ArchimedesCosmoAgent] = {}
 
     async def connect(self, websocket: WebSocket, session_id: str):
         await websocket.accept()
@@ -33,11 +34,16 @@ class ConnectionManager:
 
         if success:
             await websocket.send_json({"type": "session_ready", "message": "Sandbox container is ready."})
+            
+            # Send novnc_ready
+            novnc_url = sandbox_manager.get_novnc_url(session_id)
+            if novnc_url:
+                await websocket.send_json({"type": "novnc_ready", "url": novnc_url, "success": True})
         else:
             await websocket.send_json({"type": "agent_error", "message": "Failed to create sandbox container."})
 
         if session_id not in self.agent_loops:
-            self.agent_loops[session_id] = AgentLoop(session_id)
+            self.agent_loops[session_id] = ArchimedesCosmoAgent(name="Archimedes COSMO", session_id=session_id)
 
         logger.info(f"WebSocket connected for session: {session_id}")
 
@@ -50,8 +56,9 @@ class ConnectionManager:
 
         # Clean up agent loop
         if session_id in self.agent_loops:
+            # Try to gracefully clean up agent
             agent = self.agent_loops[session_id]
-            agent.is_running = False
+            # ArchimedesCosmoAgent doesn't have a simple is_running flag, but we can clear it
             del self.agent_loops[session_id]
 
         logger.info(f"WebSocket disconnected for session: {session_id}")
@@ -73,6 +80,7 @@ class ConnectionManager:
         logger.info(f"Received WebSocket message for {session_id}: {message}")
         data = json.loads(message)
         task = data.get("task")
+        agent_profile_id = data.get("agent_id", "archimedes-cosmo")
         
         if not task:
             await self.send_event(session_id, {"type": "agent_error", "message": "No task provided."})
@@ -80,11 +88,21 @@ class ConnectionManager:
 
         agent = self.agent_loops.get(session_id)
         if agent:
-            logger.info(f"Starting AgentLoop.run for {session_id} with task: {task}")
+            # Update agent profile based on frontend selection
+            profile = get_profile(agent_profile_id)
+            agent.name = profile["name"]
+            
+            logger.info(f"Starting COSMO agent '{agent.name}' for {session_id} with task: {task}")
+            
+            # Re-send novnc_ready because the frontend ComputerPanel only mounts after the first task
+            novnc_url = sandbox_manager.get_novnc_url(session_id)
+            if novnc_url:
+                await self.send_event(session_id, {"type": "novnc_ready", "url": novnc_url, "success": True})
+            
             async def sender(event):
                 await self.send_event(session_id, event)
 
-            asyncio.create_task(agent.run(task, websocket_send=sender))
+            asyncio.create_task(agent.process_task(task, websocket_send=sender))
         else:
             logger.warning(f"No agent found for {session_id}")
 

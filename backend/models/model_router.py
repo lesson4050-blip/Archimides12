@@ -10,9 +10,7 @@ class AllModelsExhausted(Exception):
     pass
 
 class ModelRouter:
-    # Tasks that require Gemini's quality (long context, browser, research)
-    GEMINI_FIRST_TASKS = {"browser", "search", "result", "summarize"}
-    # Tasks that benefit from Gemma 4's native reasoning via Ollama
+    # Tasks that benefit from Gemma's native reasoning via Ollama
     OLLAMA_FIRST_TASKS = {"think", "plan"}
 
     def __init__(self):
@@ -31,12 +29,12 @@ class ModelRouter:
             self.gemini = None
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
-        if task_hint in self.GEMINI_FIRST_TASKS:
-            order = [self.gemini, self.groq, self.ollama]
-        elif task_hint in self.OLLAMA_FIRST_TASKS:
+        # PRESET: Ollama First for reasoning, then Cloud failover
+        if task_hint in self.OLLAMA_FIRST_TASKS:
             order = [self.ollama, self.groq, self.gemini]
         else:
-            order = [self.groq, self.gemini, self.ollama]
+            # For tools like browser/search, Groq/Gemini are often better but Ollama is stable
+            order = [self.ollama, self.groq, self.gemini]
 
         # Filter out None clients (missing API keys)
         order = [c for c in order if c is not None]
@@ -44,8 +42,6 @@ class ModelRouter:
         errors = []
         for client in order:
             try:
-                # We need to make sure tool format is normalized? 
-                # Groq and Gemini clients should handle their respective formats.
                 return await client.generate_with_tools(messages, tools)
             except (GroqRateLimit, GeminiRateLimit) as e:
                 logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")

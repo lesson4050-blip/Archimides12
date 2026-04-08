@@ -1,4 +1,8 @@
 import logging
+import asyncio
+import os
+import io
+import tarfile
 from typing import Dict, Any, Optional
 from backend.sandbox.executor import SandboxExecutor
 
@@ -13,26 +17,47 @@ class NoVNCManager:
 
     async def start_streaming(self, session_id: str, port: int = 6080) -> Dict[str, Any]:
         """
-        Starts Xvfb, x11vnc, and websockify inside the container.
+        Starts Xvfb, x11vnc, and websockify inside the container using a single script.
         """
         logger.info(f"Starting desktop streaming for session {session_id}...")
         
-        # 1. Start Xvfb (Display :1)
-        # 2. Start Fluxbox (WM)
-        # 3. Start x11vnc
-        # 4. Start websockify
+        container = await self.executor.manager.get_container(session_id)
+        if not container:
+            return {"success": False, "error": "Container not found"}
+
+        # Copy browser_server.py to container
+        server_path = os.path.join(os.path.dirname(__file__), "browser_server.py")
+        if os.path.exists(server_path):
+            with open(server_path, "rb") as f:
+                tar_stream = io.BytesIO()
+                with tarfile.open(fileobj=tar_stream, mode='w') as tar:
+                    tar_add_info = tarfile.TarInfo(name="browser_server.py")
+                    content = f.read()
+                    tar_add_info.size = len(content)
+                    tar.addfile(tar_add_info, io.BytesIO(content))
+                tar_stream.seek(0)
+                container.put_archive("/home/ubuntu/workspace", tar_stream)
+
+        # Create a single startup script for the UI
+        startup_script = f"""#!/bin/bash
+export DISPLAY=:1
+Xvfb :1 -screen 0 1280x720x24 &
+sleep 1
+openbox &
+xterm -geometry 150x50+10+10 -bg '#312b3e' -fg white -title 'Archimedes Sandbox' -e "echo Archimedes Session Started; date; bash" &
+python3 /home/ubuntu/workspace/browser_server.py &
+x11vnc -display :1 -nopw -forever -shared -rfbport 5900 -bg
+/usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen {port}
+"""
+        # Write script to container
+        write_script_cmd = f"cat << 'EOF' > /home/ubuntu/start_ui.sh\n{startup_script}\nEOF\nchmod +x /home/ubuntu/start_ui.sh"
+        await self.executor.run_command(session_id, write_script_cmd)
+
+        # Run the script in DETACHED mode so processes persist
+        await self.executor.run_command(session_id, "/home/ubuntu/start_ui.sh", detach=True)
         
-        # We run these as background processes
-        cmds = [
-            "Xvfb :1 -screen 0 1280x720x24 &",
-            "DISPLAY=:1 fluxbox &",
-            "DISPLAY=:1 x11vnc -display :1 -nopw -forever -shared -bg &",
-            f"/usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen {port} &"
-        ]
-        
-        for cmd in cmds:
-            # We use & to run in background
-            await self.executor.run_command(session_id, cmd)
+        # Give it a moment to boot
+        await asyncio.sleep(2)
             
         # The VNC URL will be reachable from the host if we port forward or 
         # just return the proxy URL.

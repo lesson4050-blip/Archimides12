@@ -2,10 +2,12 @@
 КОСМО-уровневые API маршруты для Archimedes.
 """
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 from datetime import datetime
+from pathlib import Path
+import os
 import uuid
 import logging
 
@@ -267,3 +269,54 @@ async def reset_agent() -> Dict[str, Any]:
         "message": "Агент успешно сброшен",
         "timestamp": datetime.now().isoformat()
     }
+
+
+@router.get("/workspace", summary="Получить список файлов в рабочей директории")
+async def list_workspace_files() -> Dict[str, Any]:
+    """Возвращает список всех файлов в папке workspace."""
+    workspace_dir = Path("workspace")
+    workspace_dir.mkdir(exist_ok=True)
+    
+    files = []
+    for root, _, filenames in os.walk(workspace_dir):
+        for name in filenames:
+            file_path = Path(root) / name
+            rel_path = file_path.relative_to(workspace_dir)
+            files.append({
+                "name": name,
+                "path": str(rel_path).replace("\\", "/"),
+                "size": file_path.stat().st_size,
+                "modified": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
+            })
+            
+    return {
+        "status": "success",
+        "files": files,
+        "total": len(files)
+    }
+
+@router.post("/upload", summary="Загрузить файл в workspace")
+async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """Загружает файл в папку workspace фронтендом."""
+    workspace_dir = Path("workspace")
+    workspace_dir.mkdir(exist_ok=True)
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+        
+    file_location = workspace_dir / file.filename
+    try:
+        with open(file_location, "wb+") as file_object:
+            file_object.write(await file.read())
+            
+        logger.info(f"📤 Загружен файл: {file.filename}")
+        
+        return {
+            "status": "success",
+            "message": f"Файл {file.filename} успешно загружен",
+            "filename": file.filename,
+            "path": str(file_location)
+        }
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке файла: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

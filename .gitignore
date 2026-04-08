@@ -4,3 +4,15 @@ __pycache__/
 venv/
 node_modules/
 chroma_db/
+.env
+*.log
+backend_log.txt
+frontend_log.txt
+*.png
+*.jpg
+*.webp
+!frontend/public/*.png
+!frontend/public/*.webp
+!workspace/**/*.md
+!workspace/**/*.py
+!workspace/**/*.html

@@ -15,14 +15,14 @@ class SandboxExecutor:
     def __init__(self, manager: 'SandboxManager'):
         self.manager = manager
 
-    async def run_command(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu") -> Dict[str, Any]:
+    async def run_command(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu", detach: bool = False) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
             return {"success": False, "error": "Sandbox container not available."}
 
         # Wrap command in timeout and bash
         # Note: we use a list for cmd to avoid quoting issues with bash -c
-        cmd_list = ["timeout", str(timeout), "bash", "-c", command]
+        cmd_list = ["timeout", str(timeout), "bash", "-c", command] if not detach else ["bash", "-c", command]
         
         try:
             # Run using docker-py exec_run
@@ -35,9 +35,18 @@ class SandboxExecutor:
                 lambda: container.exec_run(
                     cmd=cmd_list,
                     user=user,
-                    workdir="/home/ubuntu/workspace"
+                    workdir="/home/ubuntu/workspace",
+                    environment={
+                        "DISPLAY": ":1",
+                        "LANG": "en_US.UTF-8",
+                        "LC_ALL": "en_US.UTF-8"
+                    },
+                    detach=detach
                 )
             )
+            
+            if detach:
+                return {"success": True, "output": "Command started in detached mode."}
             
             exit_code, output = exec_res
             output_str = output.decode("utf-8", errors="replace")

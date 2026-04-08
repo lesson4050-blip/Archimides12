@@ -1,12 +1,14 @@
 "use client";
 
-import { CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, ClipboardList } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AgentEvent } from "@/lib/websocket";
 
 export default function PlanTab({ events }: { events: AgentEvent[] }) {
-  const lastEvent = events[events.length - 1];
-  const phases = lastEvent?.type === "plan_update" ? lastEvent.phases : [];
+  // Find the latest plan_update event rather than just the absolute last event
+  const planEvents = events.filter(e => e.type === "plan_update");
+  const lastPlanEvent = planEvents.length > 0 ? planEvents[planEvents.length - 1] : null;
+  const phases = lastPlanEvent ? lastPlanEvent.phases : [];
 
   return (
     <div className="p-6 h-full overflow-y-auto custom-scrollbar">
@@ -18,7 +20,7 @@ export default function PlanTab({ events }: { events: AgentEvent[] }) {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: idx * 0.1 }}
-              className={`p-4 rounded-xl border transition-all ${
+              className={`p-4 rounded-xl border transition-all duration-300 ${
                 phase.status === "active"
                   ? "bg-[#111] border-amber-500/50 shadow-lg shadow-amber-500/5"
                   : phase.status === "complete"
@@ -52,12 +54,10 @@ export default function PlanTab({ events }: { events: AgentEvent[] }) {
         {phases.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-[#444] pt-20">
             <ClipboardList size={40} className="mb-2 opacity-20" />
-            <p>Waiting for Archimedes to create a plan...</p>
+            <p className="text-center px-4">Waiting for Archimedes to create a plan...</p>
           </div>
         )}
       </div>
     </div>
   );
 }
-
-import { ClipboardList } from "lucide-react";

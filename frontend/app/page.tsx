@@ -1,38 +1,40 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/Header";
+import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
-import ComputerPanel from "@/components/ComputerPanel";
+import FloatingDesktop from "@/components/FloatingDesktop";
 import ArtifactsDrawer from "@/components/ArtifactsDrawer";
 
 export default function Home() {
-  const [sessionId] = useState(() => `session-${Math.random().toString(36).substring(2, 9)}`);
+  const [sessionKey, setSessionKey] = useState(0);
+  const [sessionId, setSessionId] = useState(() => `session-${Math.random().toString(36).substring(2, 9)}`);
   const [isStarted, setIsStarted] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState("archimedes-cosmo");
+
+  const handleNewTask = () => {
+    // Generate a fresh session ID and reset state
+    setSessionId(`session-${Math.random().toString(36).substring(2, 9)}`);
+    setSessionKey(prev => prev + 1);
+    setIsStarted(false);
+  };
 
   return (
-    <main className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0a0a] text-white">
-      <Header />
+    <main className="flex h-screen w-screen overflow-hidden bg-[#0A0A0A] text-white">
+      {/* Sidebar Component */}
+      <Sidebar onNewTask={handleNewTask} onAgentSelect={setSelectedAgent} selectedAgent={selectedAgent} />
       
-      <div className="flex flex-1 overflow-hidden h-full">
-        {/* Left Panel: Chat Interface (35%) */}
-        <div className="w-[35%] h-full border-r border-[#222] flex flex-col overflow-hidden">
-          <ChatPanel sessionId={sessionId} onStart={() => setIsStarted(true)} />
-        </div>
-
-        {/* Right Panel: Archimedes's Computer (65%) */}
-        <div className="w-[65%] h-full bg-[#050505] flex flex-col relative overflow-hidden">
-          {isStarted ? (
-            <>
-              <ComputerPanel sessionId={sessionId} />
-              <ArtifactsDrawer />
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-[#444] italic">
-              Archimedes's workspace will activate once you provide a task.
-            </div>
-          )}
-        </div>
+      {/* Main Chat Area */}
+      <div className="flex-1 overflow-hidden h-full flex flex-col relative">
+        <ChatPanel 
+          key={`chat-${sessionKey}`} 
+          sessionId={sessionId} 
+          isStarted={isStarted}
+          onStart={() => setIsStarted(true)} 
+          selectedAgent={selectedAgent}
+        />
+        {/* Floating Desktop window will be managed conditionally inside ChatPanel or via global state/events */}
+        <FloatingDesktop key={`comp-${sessionKey}`} sessionId={sessionId} />
       </div>
     </main>
   );

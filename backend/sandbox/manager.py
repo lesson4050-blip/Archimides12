@@ -237,7 +237,6 @@ class SandboxManager:
             asyncio.create_task(self.novnc.start_streaming(session_id))
 
             # Create workspace dir
-            container.exec_run("mkdir -p /home/ubuntu/workspace")
             container.exec_run("chown -R ubuntu:ubuntu /home/ubuntu/workspace")
 
             logger.info(
@@ -249,6 +248,23 @@ class SandboxManager:
         except Exception as e:
             logger.error(f"Failed to create container: {e}")
             return False
+
+    def get_novnc_url(self, session_id: str) -> Optional[str]:
+        """Get the VNC URL for the host to expose to the frontend."""
+        session = self._sessions.get(session_id)
+        if not session:
+            return None
+        
+        try:
+            session.container.reload()
+            ports = session.container.attrs.get('NetworkSettings', {}).get('Ports', {})
+            novnc_port = ports.get('6080/tcp')
+            if novnc_port and len(novnc_port) > 0:
+                host_port = novnc_port[0].get('HostPort')
+                return f"http://localhost:{host_port}/vnc.html?autoconnect=true&reconnect=true"
+        except Exception as e:
+            logger.error(f"Failed to get novnc port: {e}")
+        return None
 
     def _stop_and_remove(self, container: Any, session_id: str):
         """Stop and remove a Docker container."""

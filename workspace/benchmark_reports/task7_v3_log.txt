@@ -1,6 +1,0 @@
-[2026-04-04 19:04:56] Connected to ws://localhost:8001/ws/session_task7_v3
-[2026-04-04 19:04:56] Received: {
-  "type": "session_queued",
-  "message": "All sandbox slots are in use. You are in the queue."
-}
-[2026-04-04 19:06:01] CONNECTION ERROR: no close frame received or sent

@@ -65,9 +65,9 @@ export class ArchimedesSocket {
     return this.socket ? this.socket.readyState : WebSocket.CLOSED;
   }
 
-  sendTask(task: string) {
+  sendTask(task: string, agentId?: string) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-    this.socket.send(JSON.stringify({ type: 'task', task }));
+    this.socket.send(JSON.stringify({ type: 'task', task, agent_id: agentId || 'archimedes-cosmo' }));
 
     } else {
       console.error("WebSocket is not open. Cannot send task.");
