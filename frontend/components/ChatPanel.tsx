@@ -1,16 +1,19 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Square, Play, RotateCcw, ChevronDown, CheckCircle, Bell, User as UserIcon } from "lucide-react";
+import { Send, Square, Play, RotateCcw, ChevronDown, CheckCircle, Bell, User as UserIcon, Monitor } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArchimedesSocket, AgentEvent } from "@/lib/websocket";
 import ReactMarkdown from "react-markdown";
 import Image from "next/image";
+import MessagePill from "./MessagePill";
+import ArtifactViewer, { ArtifactData } from "./ArtifactViewer";
 
 interface Message {
   role: "user" | "assistant" | "system";
-  type: "text" | "info" | "ask" | "result" | "plan";
+  type: "text" | "info" | "ask" | "result" | "plan" | "artifact";
   content: string;
+  artifactData?: ArtifactData;
 }
 
 const cleanMessageContent = (content: string | undefined): string => {
@@ -29,7 +32,7 @@ const cleanMessageContent = (content: string | undefined): string => {
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 };
 
-export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent }: { sessionId: string, isStarted: boolean, onStart: () => void, selectedAgent?: string }) {
+export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent, isComputerOpen, onToggleComputer }: { sessionId: string, isStarted: boolean, onStart: () => void, selectedAgent?: string, isComputerOpen?: boolean, onToggleComputer?: () => void }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isWorking, setIsWorking] = useState(false);
@@ -40,6 +43,9 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [globeEnabled, setGlobeEnabled] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
+  const [artifacts, setArtifacts] = useState<ArtifactData[]>([]);
+  const [viewingArtifact, setViewingArtifact] = useState<ArtifactData | null>(null);
+  const [hasToolEvents, setHasToolEvents] = useState(false);
 
   useEffect(() => {
     // Initialize SpeechRecognition if available
@@ -130,7 +136,31 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
     switch (event.type) {
       case "message_info": {
         const cleaned = cleanMessageContent(event.text || event.content);
-        if (cleaned) setMessages(prev => [...prev, { role: "assistant", type: "info", content: cleaned }]);
+        if (cleaned) {
+          let determinedType = "info";
+          const lower = cleaned.toLowerCase();
+          
+          if (cleaned.startsWith("PLAN:") || lower.includes("создан план")) {
+             determinedType = "plan";
+          } else if (
+             lower.includes("использую инструмент") || 
+             lower.includes("работа") || 
+             lower.includes("запускаю команду") ||
+             lower.includes("создан артефакт") ||
+             lower.includes("прочитан файл") ||
+             lower.includes("приступаю к выполнению")
+          ) {
+             determinedType = "tool";
+          } else if (
+             lower.includes("анализ") || 
+             lower.includes("проверяю результат") ||
+             lower.includes("думаю")
+          ) {
+             determinedType = "thought";
+          }
+          
+          setMessages(prev => [...prev, { role: "assistant", type: determinedType as any, content: cleaned }]);
+        }
         break;
       }
       case "message_ask": {
@@ -157,10 +187,18 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
         break;
       }
       case "artifact": {
+        const artifactData: ArtifactData = {
+          name: event.name || "file",
+          content: event.content || "",
+          path: event.path || event.name || "",
+          language: event.language,
+        };
+        setArtifacts(prev => [...prev, artifactData]);
         setMessages(prev => [...prev, { 
           role: "system", 
-          type: "info", 
-          content: `📁 Создан артефакт: **${event.name}**` 
+          type: "artifact", 
+          content: event.name || "file",
+          artifactData,
         }]);
         break;
       }
@@ -170,6 +208,11 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
       }
     }
     
+    // Track tool events for the toggle button
+    if (event.type === "tool_call" || event.type === "tool" || event.type === "artifact") {
+      setHasToolEvents(true);
+    }
+
     // Pass it along to FloatingDesktop
     window.dispatchEvent(new CustomEvent("archimedes-event", { detail: event }));
   };
@@ -211,6 +254,17 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
             <button className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 font-medium px-3 py-1.5 rounded-full bg-[#1e293b]/30">
                <SparklesIcon /> Обновление
             </button>
+            {/* Toggle Computer Panel button */}
+            {hasToolEvents && !isComputerOpen && onToggleComputer && (
+              <button
+                onClick={onToggleComputer}
+                className="flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 font-medium px-3 py-1.5 rounded-full bg-purple-900/20 hover:bg-purple-900/40 transition-colors border border-purple-500/20"
+                title="Открыть компьютер агента"
+              >
+                <Monitor size={14} />
+                Компьютер
+              </button>
+            )}
             <div className="flex items-center gap-3">
                <button className="text-gray-400 hover:text-white"><Bell size={18} /></button>
                <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-sm font-bold text-white shadow-inner">
@@ -239,25 +293,58 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
                    animate={{ opacity: 1, y: 0 }}
                    className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                  >
-                   {msg.role === "user" ? (
-                     <div className="bg-[#2B2B2B] text-white/90 px-5 py-3 rounded-[24px] max-w-[85%] text-[15px] font-medium leading-relaxed rounded-tr-sm">
-                       {msg.content}
-                     </div>
-                   ) : (
-                     <div className="flex gap-4 w-full max-w-[90%] group">
-                       <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center mt-0.5">
-                         <Image src="/logo-optimized.png" alt="Archimedes Logo" width={32} height={32} className="object-contain" />
-                       </div>
-                       <div className="flex flex-col gap-1 w-full">
-                         <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
-                           archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
-                         </div>
-                         <div className="markdown-content prose prose-invert prose-sm max-w-none text-[#ECECEC] text-[15px] leading-relaxed mt-1">
-                           <ReactMarkdown>{msg.content}</ReactMarkdown>
-                         </div>
-                       </div>
-                     </div>
-                   )}
+                    {msg.role === "user" ? (
+                      <div className="bg-[#2B2B2B] text-white/90 px-5 py-3 rounded-[24px] max-w-[85%] text-[15px] font-medium leading-relaxed rounded-tr-sm">
+                        {msg.content}
+                      </div>
+                    ) : msg.type === "artifact" && msg.artifactData ? (
+                      /* Clickable artifact card */
+                      <div className="flex gap-4 w-full max-w-[90%] group">
+                        <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center mt-0.5">
+                          <Image src="/logo-optimized.png" alt="Archimedes Logo" width={32} height={32} className="object-contain" />
+                        </div>
+                        <div className="flex flex-col gap-1 w-full">
+                          <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
+                            archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
+                          </div>
+                          <div className="mt-2">
+                            <button
+                              onClick={() => setViewingArtifact(msg.artifactData!)}
+                              className="flex items-center gap-3 px-4 py-3 bg-[#1A1B26] border border-[#2A2B3D] rounded-xl hover:border-blue-500/40 hover:bg-[#1E1F2E] transition-all cursor-pointer group/artifact w-fit max-w-full"
+                            >
+                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center shrink-0">
+                                <span className="text-lg">📄</span>
+                              </div>
+                              <div className="flex flex-col items-start min-w-0">
+                                <span className="text-white text-sm font-medium truncate">{msg.artifactData.name}</span>
+                                <span className="text-gray-500 text-xs">Нажмите для просмотра</span>
+                              </div>
+                              <svg className="w-4 h-4 text-gray-500 group-hover/artifact:text-blue-400 transition-colors ml-2 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-4 w-full max-w-[90%] group">
+                        <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center mt-0.5">
+                          <Image src="/logo-optimized.png" alt="Archimedes Logo" width={32} height={32} className="object-contain" />
+                        </div>
+                        <div className="flex flex-col gap-1 w-full">
+                          <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
+                            archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
+                          </div>
+                          <div className="mt-2">
+                            {(msg.type === "thought" || msg.type === "tool" || msg.type === "plan") ? (
+                              <MessagePill type={msg.type} content={msg.content} />
+                            ) : (
+                              <div className="markdown-content prose prose-invert prose-sm max-w-none text-[#ECECEC] text-[15px] leading-relaxed mt-1">
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                  </motion.div>
                ))}
                
@@ -288,6 +375,21 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
            </div>
         )}
       </div>
+
+      {/* Floating Task Progress Bar */}
+      <AnimatePresence>
+        {isWorking && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-[140px] left-1/2 -translate-x-1/2 bg-[#2D2D2D] border border-[#444] rounded-full px-4 py-2 flex items-center justify-center gap-3 shadow-xl z-20 pointer-events-none"
+          >
+             <div className="w-3 h-3 rounded-full border-2 border-b-transparent border-white animate-spin"></div>
+             <span className="text-white text-sm font-medium tracking-wide">Archimedes is executing...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Input Box Area (Fixed at bottom) */}
       <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#0B0B0B] via-[#0B0B0B] to-transparent pt-10 pb-8 flex justify-center px-4">
@@ -363,6 +465,11 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
            </div>
          </div>
       </div>
+
+      {/* Artifact Viewer Modal */}
+      {viewingArtifact && (
+        <ArtifactViewer artifact={viewingArtifact} onClose={() => setViewingArtifact(null)} />
+      )}
       
     </div>
   );

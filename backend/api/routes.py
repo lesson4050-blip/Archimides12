@@ -295,6 +295,75 @@ async def list_workspace_files() -> Dict[str, Any]:
         "total": len(files)
     }
 
+@router.get("/sandbox/{session_id}/vnc", summary="Получить URL-адрес VNC для сессии")
+async def get_sandbox_vnc(session_id: str) -> Dict[str, Any]:
+    """Возвращает URL-адрес VNC для указанной сессии."""
+    from backend.sandbox.singleton import sandbox_manager
+    
+    url = sandbox_manager.get_novnc_url(session_id)
+    if not url:
+        raise HTTPException(status_code=404, detail="VNC URL not found for session")
+    
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "url": url
+    }
+
+
+@router.get("/workspace/file", summary="Прочитать содержимое файла из workspace")
+async def read_workspace_file(path: str) -> Dict[str, Any]:
+    """Возвращает содержимое файла из workspace по относительному пути."""
+    workspace_dir = Path("workspace")
+    workspace_dir.mkdir(exist_ok=True)
+    
+    # Normalize the path — strip leading slashes and sandbox prefixes
+    clean_path = path.strip("/")
+    # Handle paths that come from the container like /home/ubuntu/workspace/...
+    for prefix in ["home/ubuntu/workspace/", "workspace/"]:
+        if clean_path.startswith(prefix):
+            clean_path = clean_path[len(prefix):]
+    
+    file_path = workspace_dir / clean_path
+    
+    # Security: prevent path traversal
+    try:
+        file_path = file_path.resolve()
+        workspace_resolved = workspace_dir.resolve()
+        if not str(file_path).startswith(str(workspace_resolved)):
+            raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {clean_path}")
+    
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+    
+    try:
+        content = file_path.read_text(encoding="utf-8")
+        ext = file_path.suffix.lstrip(".")
+        lang_map = {
+            "py": "python", "js": "javascript", "ts": "typescript", "tsx": "typescriptreact",
+            "jsx": "javascriptreact", "html": "html", "css": "css", "json": "json",
+            "md": "markdown", "yaml": "yaml", "yml": "yaml", "sh": "shell",
+            "sql": "sql", "xml": "xml", "txt": "plaintext"
+        }
+        return {
+            "status": "success",
+            "path": clean_path,
+            "filename": file_path.name,
+            "content": content,
+            "language": lang_map.get(ext, "plaintext"),
+            "size": file_path.stat().st_size
+        }
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File is not a text file")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/upload", summary="Загрузить файл в workspace")
 async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
     """Загружает файл в папку workspace фронтендом."""

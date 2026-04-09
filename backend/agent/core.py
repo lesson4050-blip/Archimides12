@@ -330,10 +330,18 @@ class ArchimedesCosmoAgent:
                         
                         if websocket_send:
                             # User friendly tool notification instead of JSON
+                            shell_str = f"Запускаю команду в терминале...\n$ {t_params.get('command', '')}" if t_name == "shell" else "Запускаю команду в терминале..."
+                            
+                            file_str = f"Работаю с файлом {t_params.get('path', '')}..."
+                            if t_name == "file" and t_params.get("action") == "write":
+                                ext = str(t_params.get("path", "")).split(".")[-1]
+                                content_preview = str(t_params.get("content", ""))
+                                file_str = f"Создан/Изменен файл: {t_params.get('path', '')}\n```{ext}\n{content_preview}\n```"
+
                             friendly_names = {
-                                "search": "Ищу информацию в интернете...",
-                                "file": f"Работаю с файлом {t_params.get('path', '')}...",
-                                "shell": "Запускаю команду в терминале...",
+                                "search": f"Ищу информацию: {t_params.get('query', '')}...",
+                                "file": file_str,
+                                "shell": shell_str,
                                 "browser": "Изучаю веб-страницу..."
                             }
                             await websocket_send({
