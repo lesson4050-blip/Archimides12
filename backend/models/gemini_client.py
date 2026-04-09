@@ -129,3 +129,54 @@ class GeminiClient:
                     raise e
                     
         raise RateLimitExceeded("Gemini Rate Limit exceeded")
+
+    async def generate_simple(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        image_mime: str = "image/png",
+        model_override: Optional[str] = None,
+    ) -> str:
+        """
+        Lightweight generation without tool-calling.
+        Supports text-only and vision (text + image) requests.
+        Used by Prompt Enhancer and Vision Critic.
+        """
+        model = model_override or self.model_name
+        parts = []
+
+        if image_bytes:
+            parts.append(types.Part.from_bytes(data=image_bytes, mime_type=image_mime))
+
+        parts.append(types.Part(text=prompt))
+
+        contents = [types.Content(role="user", parts=parts)]
+
+        retries = 0
+        backoff = 2
+        while retries < 3:
+            try:
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                    ),
+                )
+                if response.candidates and response.candidates[0].content.parts:
+                    return "".join(
+                        p.text for p in response.candidates[0].content.parts if p.text
+                    )
+                return ""
+            except Exception as e:
+                err_msg = str(e).lower()
+                if "429" in err_msg or "503" in err_msg or "quota" in err_msg:
+                    logger.warning(f"Gemini simple call rate-limited. Retry in {backoff}s…")
+                    await asyncio.sleep(backoff)
+                    retries += 1
+                    backoff *= 2
+                else:
+                    raise
+        raise RateLimitExceeded("Gemini Rate Limit exceeded (generate_simple)")

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     
     TAVILY_API_KEY: str = ""
     
+    # Image Generation
+    IMAGE_CRITIQUE_MODEL: str = "gemini-2.5-flash"
+    
     # Sandbox
     SANDBOX_IMAGE: str = "cosmo-sandbox:latest"
     SANDBOX_MAX_CONTAINERS: int = 3
