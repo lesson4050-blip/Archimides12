@@ -53,3 +53,29 @@ class ModelRouter:
                 continue
                 
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
+
+    async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
+        if task_hint in self.OLLAMA_FIRST_TASKS:
+            order = [self.ollama, self.groq, self.gemini]
+        else:
+            order = [self.ollama, self.groq, self.gemini]
+            
+        order = [c for c in order if c is not None]
+
+        errors = []
+        for client in order:
+            try:
+                if hasattr(client, "generate_stream"):
+                    return await client.generate_stream(messages, tools, on_token=on_token)
+                else:
+                    return await client.generate_with_tools(messages, tools)
+            except (GroqRateLimit, GeminiRateLimit) as e:
+                logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
+                errors.append(str(e))
+                continue
+            except Exception as e:
+                logger.error(f"Model tier {client.__class__.__name__} failed with error: {e}")
+                errors.append(str(e))
+                continue
+                
+        raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")

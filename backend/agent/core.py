@@ -15,6 +15,7 @@ import uuid
 
 from backend.models.model_router import ModelRouter
 from backend.agent.thought_engine import ThoughtEngine
+from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,18 @@ class ArchimedesCosmoAgent:
         # Регистрация расширенных инструментов
         self._init_extended_tools()
         
+        from backend.memory.context_manager import ContextManager
+        from backend.memory.vector_store import VectorStore
+        self.context_manager = ContextManager(
+            max_tokens=settings.AGENT_MAX_CONTEXT_TOKENS if hasattr(settings, 'AGENT_MAX_CONTEXT_TOKENS') else 16384
+        )
+        
+        # Синхронизировать начальную историю в context_manager
+        for msg in self.history:
+            self.context_manager.add_message(msg["role"], msg.get("content", ""))
+            
+        self.vector_store = VectorStore(user_id=session_id or "default")
+        
         logger.info(f"OK: Инициализирован {self.name} (ID: {self.agent_id})")
 
     def _init_extended_tools(self):
@@ -154,6 +167,41 @@ class ArchimedesCosmoAgent:
             
             self.schedule_tool = ScheduleTool()
             self.register_tool("schedule", self.schedule_tool.execute)
+            
+            # Phase 1: Voice Tool
+            from backend.tools.voice_tool import VoiceTool
+            self.voice_tool = VoiceTool()
+            self.register_tool("voice", self.voice_tool.execute)
+            
+            # Phase 1: Monitor Tool
+            from backend.tools.monitor_tool import MonitorTool
+            self.monitor_tool = MonitorTool()
+            self.register_tool("monitor", self.monitor_tool.execute)
+            
+            # Phase 1: Document Tool
+            from backend.tools.document_tool import DocumentTool
+            self.document_tool = DocumentTool()
+            self.register_tool("document", self.document_tool.execute)
+            
+            # Phase 2: Adversarial Self-Review
+            from backend.agent.self_review import AdversarialReviewer
+            self.reviewer = AdversarialReviewer()
+            
+            # Phase 2: MiroFish Tool
+            from backend.tools.mirofish_tool import MiroFishTool
+            self.mirofish_tool = MiroFishTool()
+            self.register_tool("mirofish", self.mirofish_tool.execute)
+            
+            # Phase 2: Persona Mode
+            from backend.agent.persona_mode import PersonaMode
+            self.persona_mode = PersonaMode()
+            
+            # Phase 2: Conditional Triggers
+            from backend.tools.trigger_tool import TriggerTool
+            self.trigger_tool = TriggerTool()
+            self.register_tool("trigger", self.trigger_tool.execute)
+            
+            # TODO: Add other tools later
 
             # Core Tool Registration
             self.file_tool = FileTool(sandbox_manager.filesystem)
@@ -308,16 +356,28 @@ class ArchimedesCosmoAgent:
             # For core logic steps, we use the LLM loop
             if subtask_type in ["execute", "analyze", "verify", "optimize"]:
                 # Real intelligent execution loop
-                max_steps = 5
+                max_steps = settings.AGENT_MAX_ITERATIONS
                 subtask_results = []
                 
                 for step in range(max_steps):
+                    async def handle_token(token_event):
+                        if websocket_send:
+                            await websocket_send(token_event)
+
                     # Request model for next action
-                    response = await self.router.generate(
-                        messages=self.history,
-                        tools=self._get_tool_definitions(),
-                        task_hint="think" if step == 0 else "default"
-                    )
+                    if hasattr(self.router, "generate_stream"):
+                        response = await self.router.generate_stream(
+                            messages=self.history,
+                            tools=self._get_tool_definitions(),
+                            task_hint="think" if step == 0 else "default",
+                            on_token=handle_token
+                        )
+                    else:
+                        response = await self.router.generate(
+                            messages=self.history,
+                            tools=self._get_tool_definitions(),
+                            task_hint="think" if step == 0 else "default"
+                        )
                     
                     thought = response.get("thought", "")
                     if thought and websocket_send:
@@ -368,18 +428,15 @@ class ArchimedesCosmoAgent:
                             
                             res = await self.tools[t_name](**t_args)
                             
-                            # Log to history in STANDARD format
-                            self.history.append({
-                                "role": "assistant", 
-                                "content": thought, 
-                                "tool_calls": [std_tool_call]
-                            })
-                            self.history.append({
-                                "role": "tool", 
-                                "tool_call_id": call_id, 
-                                "name": t_name, 
-                                "content": str(res.get("output", res.get("content", "OK")))
-                            })
+                            # Log to history in STANDARD format using ContextManager
+                            self.context_manager.add_message("assistant", thought or "", tool_calls=[std_tool_call])
+                            self.context_manager.add_message("tool", str(res.get("output", res.get("content", "OK"))), tool_call_id=call_id, name=t_name)
+                            
+                            # Проверить нужна ли summarization
+                            await self.context_manager.summarize_if_needed(self.router)
+                            
+                            # Синхронизировать self.history с context_manager
+                            self.history = self.context_manager.get_messages()
                             
                             # Artifact support
                             if t_name == "file" and t_params.get("action") == "write" and res.get("success"):
@@ -392,7 +449,48 @@ class ArchimedesCosmoAgent:
                                     })
                         
                         if t_name == "message" and t_params.get("type") == "result":
-                            return t_params.get("content")
+                            # --- ADVERSARIAL SELF-REVIEW ---
+                            # Extract original task from history (usually index 1)
+                            original_task = self.history[1]["content"] if len(self.history) > 1 else description
+                            review = await self.reviewer.review(
+                                task=original_task,
+                                answer=t_params.get("content", ""),
+                                router=self.router
+                            )
+                            if not review.get("passed") and step < max_steps - 3:
+                                fix_msg = "Please fix these issues before finishing:\n" + "\n".join(review.get("issues", []))
+                                self.history.append({"role": "system", "content": fix_msg})
+                                continue
+
+                            # --- AUTO-VERIFICATION ---
+                            description = subtask.get('description', '')
+                            verification_prompt = f"""
+The original task was: {description}
+The proposed result is: {t_params.get('content')}
+Did the agent completely solve the task?
+If yes, reply ONLY with 'VERIFIED'.
+If no, explain what is missing in 1-2 sentences.
+"""
+                            verdict_resp = await self.router.generate(
+                                messages=[{"role": "user", "content": verification_prompt}],
+                                task_hint="think"
+                            )
+                            verdict = verdict_resp.get("text", "")
+                            
+                            if "VERIFIED" not in verdict.upper() and step < max_steps - 2:
+                                self.history.append({
+                                    "role": "system", 
+                                    "content": f"Subtask not fully completed. Missing: {verdict}. Continue working."
+                                })
+                                continue  # Возврат в цикл LLM
+                            # -------------------------
+                            
+                            subtask_results.append({
+                                "step": step,
+                                "action": "complete",
+                                "result": t_params.get("content")
+                            })
+                            return {"status": "completed", "result": t_params.get("content"), "steps": subtask_results}
                     else:
                         # No more tool calls, subtask finished
                         return response.get("text", "Готово")
@@ -539,36 +637,18 @@ class ArchimedesCosmoAgent:
         """Получить определения всех инструментов для LLM."""
         definitions = []
         try:
-            # Используем уже инициализированные экземпляры инструментов
-            tool_instances = [
-                self.file_tool, 
-                self.search_tool, 
-                self.shell_tool, 
-                self.browser_tool,
-                self.pdf_tool,
-                self.image_gen_tool,
-                self.github_tool,
-                self.email_tool
-            ]
+            # Собираем из всех инстансов с get_definition()
+            for attr_name in dir(self):
+                obj = getattr(self, attr_name, None)
+                if obj and hasattr(obj, 'get_definition') and callable(obj.get_definition):
+                    try:
+                        defn = obj.get_definition()
+                        if "function" in defn:
+                            definitions.append(defn)
+                    except Exception:
+                        pass
             
-            for tool in tool_instances:
-                if hasattr(tool, "get_definition"):
-                    defn = tool.get_definition()
-                    # Ensure it's wrapped in standard OpenAI format
-                    if "function" not in defn:
-                        wrapped = {
-                            "type": "function",
-                            "function": {
-                                "name": defn["name"],
-                                "description": defn["description"],
-                                "parameters": defn["parameters"]
-                            }
-                        }
-                        definitions.append(wrapped)
-                    else:
-                        definitions.append(defn)
-            
-            # Дополнительный инструмент для завершения задачи
+            # Добавляем message tool вручную
             definitions.append({
                 "type": "function",
                 "function": {

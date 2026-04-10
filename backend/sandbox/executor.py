@@ -1,11 +1,75 @@
 import asyncio
 import logging
+import pty
+import os
+import select
 from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.sandbox.manager import SandboxManager
 
 logger = logging.getLogger(__name__)
+
+class PersistentShell:
+    """Держит один bash процесс живым весь lifetime сессии."""
+    
+    def __init__(self, container):
+        self.container = container
+        self._exec_id = None
+        self._socket = None
+        self._lock = asyncio.Lock()
+
+    async def start(self):
+        loop = asyncio.get_running_loop()
+        self._exec_id = await loop.run_in_executor(None, lambda: 
+            self.container.client.api.exec_create(
+                self.container.id,
+                cmd=["/bin/bash"],
+                stdin=True, stdout=True, stderr=True, tty=True,
+                workdir="/home/ubuntu/workspace",
+                user="ubuntu",
+                environment={"DISPLAY": ":1", "LANG": "en_US.UTF-8"}
+            )
+        )
+        self._socket = await loop.run_in_executor(None, lambda:
+            self.container.client.api.exec_start(
+                self._exec_id["Id"], detach=False, tty=True, socket=True
+            )
+        )
+
+    async def run(self, command: str, timeout: int = 60) -> Dict[str, Any]:
+        async with self._lock:
+            if not self._socket:
+                return {"success": False, "error": "Shell not started"}
+            
+            sentinel = f"__DONE_{id(command)}__"
+            full_cmd = f"{command}; echo {sentinel}\n"
+            loop = asyncio.get_running_loop()
+            
+            await loop.run_in_executor(None, 
+                lambda: self._socket._sock.send(full_cmd.encode()))
+            
+            output = ""
+            deadline = asyncio.get_event_loop().time() + timeout
+            while asyncio.get_event_loop().time() < deadline:
+                try:
+                    chunk = await asyncio.wait_for(
+                        loop.run_in_executor(None, 
+                            lambda: self._socket._sock.recv(4096)),
+                        timeout=2.0
+                    )
+                    if chunk:
+                        output += chunk.decode("utf-8", errors="replace")
+                        if sentinel in output:
+                            output = output.split(sentinel)[0].strip()
+                            # remove the echoed command string if it's there
+                            if full_cmd in output:
+                                output = output.replace(full_cmd, "", 1).strip()
+                            break
+                except asyncio.TimeoutError:
+                    continue
+            
+            return {"success": True, "output": output[:3000]}
 
 class SandboxExecutor:
     """

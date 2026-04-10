@@ -35,11 +35,22 @@ class ShellTool:
             # If command ends with & or starts with nohup, it's background — don't wait for output
             is_background = command.strip().endswith(' &') or command.strip().startswith('nohup ')
             if is_background:
-                result = await self.executor.run_command(session_id, command.strip(), timeout=10)
+                from backend.sandbox.singleton import sandbox_manager
+                shell = sandbox_manager._shells.get(session_id)
+                if shell:
+                    result = await shell.run(command.strip(), timeout=10)
+                else:
+                    result = await self.executor.run_command(session_id, command.strip(), timeout=10)
                 out = result.get('output', '').strip()
                 return {"success": True, "output": f"Background process started. {out}"}
                 
-            result = await self.executor.run_command(session_id, command, timeout=timeout)
+            from backend.sandbox.singleton import sandbox_manager
+            shell = sandbox_manager._shells.get(session_id)
+            if shell:
+                result = await shell.run(command, timeout=timeout)
+            else:
+                result = await self.executor.run_command(session_id, command, timeout=timeout)
+            
             output = result.get("output", "")
             if isinstance(output, str) and len(output) > 2000:
                 result["output"] = output[:2000] + "\n...[truncated]"

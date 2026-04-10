@@ -7,7 +7,7 @@ import time
 from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
 from backend.config import settings
-from backend.sandbox.executor import SandboxExecutor
+from backend.sandbox.executor import SandboxExecutor, PersistentShell
 from backend.sandbox.filesystem import SandboxFilesystem
 from backend.sandbox.novnc import NoVNCManager
 
@@ -41,6 +41,8 @@ class SandboxManager:
         self._queue_session_ids: List[str] = []
         self._lock = asyncio.Lock()
         self._reaper_task: Optional[asyncio.Task] = None
+        
+        self._shells: Dict[str, PersistentShell] = {}
 
         self.executor = SandboxExecutor(self)
         self.filesystem = SandboxFilesystem(self)
@@ -238,6 +240,11 @@ class SandboxManager:
 
             # Create workspace dir
             container.exec_run("chown -R ubuntu:ubuntu /home/ubuntu/workspace")
+            
+            # Start persistent shell
+            shell = PersistentShell(container)
+            await shell.start()
+            self._shells[session_id] = shell
 
             logger.info(
                 f"Container {container_name} running. "
@@ -277,6 +284,8 @@ class SandboxManager:
             container.remove(force=True)
         except Exception:
             pass
+            
+        self._shells.pop(session_id, None)
         logger.info(
             f"Destroyed container {container_name}. "
             f"Active: {len(self._sessions)}/{settings.SANDBOX_MAX_CONTAINERS}"

@@ -20,10 +20,20 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.agent_loops: Dict[str, ArchimedesCosmoAgent] = {}
+        self.buffers: Dict[str, List[Dict[str, Any]]] = {}
 
     async def connect(self, websocket: WebSocket, session_id: str):
         await websocket.accept()
         self.active_connections[session_id] = websocket
+        
+        # Flush offline buffer
+        if session_id in self.buffers:
+            for event in self.buffers[session_id]:
+                try:
+                    await websocket.send_json(event)
+                except Exception:
+                    pass
+            self.buffers[session_id].clear()
 
         # --- Manus lifecycle: create container on WS connect ---
         if sandbox_manager.active_session_count >= settings.SANDBOX_MAX_CONTAINERS:
@@ -51,17 +61,12 @@ class ConnectionManager:
         if session_id in self.active_connections:
             del self.active_connections[session_id]
 
-        # --- Manus lifecycle: destroy container on WS disconnect ---
-        await sandbox_manager.destroy_session(session_id)
+        # Do NOT destroy container immediately on disconnect for reconnect resilience.
+        # It will be reaped by SandboxManager's reaper task after inactivity timeout.
+        
+        # We also DON'T clean up agent loop here so it can continue working in the background.
 
-        # Clean up agent loop
-        if session_id in self.agent_loops:
-            # Try to gracefully clean up agent
-            agent = self.agent_loops[session_id]
-            # ArchimedesCosmoAgent doesn't have a simple is_running flag, but we can clear it
-            del self.agent_loops[session_id]
-
-        logger.info(f"WebSocket disconnected for session: {session_id}")
+        logger.info(f"WebSocket disconnected for session: {session_id}. Keeping agent and container alive.")
 
     async def send_event(self, session_id: str, event: Dict[str, Any]):
         if session_id in self.active_connections:
@@ -69,6 +74,14 @@ class ConnectionManager:
                 await self.active_connections[session_id].send_json(event)
             except Exception as e:
                 logger.error(f"Error sending event to {session_id}: {e}")
+                self._buffer_event(session_id, event)
+        else:
+            self._buffer_event(session_id, event)
+
+    def _buffer_event(self, session_id: str, event: Dict[str, Any]):
+        if session_id not in self.buffers:
+            self.buffers[session_id] = []
+        self.buffers[session_id].append(event)
 
     async def handle_message(self, session_id: str, message: str):
         """
@@ -82,6 +95,20 @@ class ConnectionManager:
         task = data.get("task")
         agent_profile_id = data.get("agent_id", "archimedes-cosmo")
         
+        if data.get("type") == "set_persona":
+            persona_desc = data.get("persona", "")
+            agent = self.agent_loops.get(session_id)
+            if agent:
+                prefix = await agent.persona_mode.build_system_prefix(
+                    persona_desc, agent.router
+                )
+                agent.history[0]["content"] = prefix + "\n\n" + agent.system_prompt
+                await self.send_event(session_id, {
+                    "type": "persona_activated", 
+                    "persona": persona_desc
+                })
+            return
+            
         if not task:
             await self.send_event(session_id, {"type": "agent_error", "message": "No task provided."})
             return
