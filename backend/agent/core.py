@@ -312,6 +312,12 @@ class ArchimedesCosmoAgent:
         self.history = [{"role": "system", "content": self.system_prompt}]
         self.history.append({"role": "user", "content": description})
         
+        # Пересинхронизировать context_manager
+        self.context_manager.history = []
+        self.context_manager.current_tokens = 0
+        for msg in self.history:
+            self.context_manager.add_message(msg["role"], msg.get("content", ""))
+        
         # Анализ задачи
         complexity = self._analyze_complexity(description)
         
