@@ -469,9 +469,14 @@ class ArchimedesCosmoAgent:
                                 continue
 
                             # --- AUTO-VERIFICATION ---
-                            description = subtask.get('description', '')
+                            original_task = ""
+                            for msg in self.history:
+                                if msg.get("role") == "user":
+                                    original_task = msg.get("content", "")
+                                    break
+
                             verification_prompt = f"""
-The original task was: {description}
+The original task was: {original_task}
 The proposed result is: {t_params.get('content')}
 Did the agent completely solve the task?
 If yes, reply ONLY with 'VERIFIED'.
