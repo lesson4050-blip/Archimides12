@@ -437,7 +437,7 @@ class ArchimedesCosmoAgent:
                                 }
                             }
 
-                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides", "expose", "plan"]
+                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides", "expose", "plan", "monitor", "trigger"]
                             t_args = {**t_params}
                             if t_name in TOOLS_NEEDING_SESSION:
                                 t_args["session_id"] = self.session_id
