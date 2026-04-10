@@ -58,3 +58,12 @@ Thumbs.db
 # Test artifacts
 temp_zip/
 benchmark_workspace/
+.pytest_cache/
+
+# Personal scripts
+create_zip.py
+create_zip.ps1
+
+# Specific DB files
+archemidas.db
+backend/archemidas.db
