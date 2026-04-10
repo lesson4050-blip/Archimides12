@@ -209,8 +209,10 @@ class ArchimedesCosmoAgent:
             # Add missing plan and expose tools
             from backend.tools.plan_tool import PlanTool
             from backend.tools.expose_tool import ExposeTool
+            from backend.agent.planner import PlanManager
             
-            self.plan_tool = PlanTool()
+            self.plan_manager = PlanManager(session_id=self.session_id or "default")
+            self.plan_tool = PlanTool(plan_manager=self.plan_manager)
             self.register_tool("plan", self.plan_tool.execute)
             
             self.expose_tool = ExposeTool(sandbox_manager.executor)
