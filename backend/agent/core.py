@@ -206,6 +206,16 @@ class ArchimedesCosmoAgent:
             self.slides_tool = SlidesTool()
             self.register_tool("slides", self.slides_tool.execute)
             
+            # Add missing plan and expose tools
+            from backend.tools.plan_tool import PlanTool
+            from backend.tools.expose_tool import ExposeTool
+            
+            self.plan_tool = PlanTool()
+            self.register_tool("plan", self.plan_tool.execute)
+            
+            self.expose_tool = ExposeTool(sandbox_manager.executor)
+            self.register_tool("expose", self.expose_tool.execute)
+            
             # TODO: Add other tools later
 
             # Core Tool Registration
@@ -427,7 +437,7 @@ class ArchimedesCosmoAgent:
                                 }
                             }
 
-                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides"]
+                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides", "expose", "plan"]
                             t_args = {**t_params}
                             if t_name in TOOLS_NEEDING_SESSION:
                                 t_args["session_id"] = self.session_id
