@@ -427,8 +427,9 @@ class ArchimedesCosmoAgent:
                                 }
                             }
 
+                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides"]
                             t_args = {**t_params}
-                            if t_name in ["file", "shell", "browser"]:
+                            if t_name in TOOLS_NEEDING_SESSION:
                                 t_args["session_id"] = self.session_id
                             
                             res = await self.tools[t_name](**t_args)
