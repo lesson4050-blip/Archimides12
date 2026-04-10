@@ -201,6 +201,11 @@ class ArchimedesCosmoAgent:
             self.trigger_tool = TriggerTool()
             self.register_tool("trigger", self.trigger_tool.execute)
             
+            # Phase 1: Slides Tool
+            from backend.tools.slides_tool import SlidesTool
+            self.slides_tool = SlidesTool()
+            self.register_tool("slides", self.slides_tool.execute)
+            
             # TODO: Add other tools later
 
             # Core Tool Registration
