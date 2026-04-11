@@ -38,7 +38,13 @@ class ShellTool:
                 from backend.sandbox.singleton import sandbox_manager
                 shell = sandbox_manager._shells.get(session_id)
                 if shell:
-                    result = await shell.run(command.strip(), timeout=10)
+                    try:
+                        result = await shell.run(command.strip(), timeout=10)
+                    except AttributeError as e:
+                        if '_sock' in str(e):
+                            result = await self.executor.run_command(session_id, command.strip(), timeout=10)
+                        else:
+                            raise
                 else:
                     result = await self.executor.run_command(session_id, command.strip(), timeout=10)
                 out = result.get('output', '').strip()
@@ -47,7 +53,14 @@ class ShellTool:
             from backend.sandbox.singleton import sandbox_manager
             shell = sandbox_manager._shells.get(session_id)
             if shell:
-                result = await shell.run(command, timeout=timeout)
+                try:
+                    result = await shell.run(command, timeout=timeout)
+                except AttributeError as e:
+                    if '_sock' in str(e):
+                        # Windows NpipeSocket fallback
+                        result = await self.executor.run_command(session_id, command, timeout=timeout)
+                    else:
+                        raise
             else:
                 result = await self.executor.run_command(session_id, command, timeout=timeout)
             

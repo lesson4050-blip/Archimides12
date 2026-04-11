@@ -2,7 +2,8 @@
 КОСМО-уровневые API маршруты для Archimedes.
 """
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Depends
+from backend.auth.dependencies import get_current_user, require_admin
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -66,7 +67,7 @@ async def health_check() -> Dict[str, Any]:
 
 
 @router.get("/agent/status", summary="Получить статус агента", response_model=AgentStatus)
-async def get_agent_status() -> AgentStatus:
+async def get_agent_status(user: dict = Depends(get_current_user)) -> AgentStatus:
     """Получить текущий статус агента."""
     uptime = (datetime.now() - agent_data["start_time"]).total_seconds()
     
@@ -81,7 +82,7 @@ async def get_agent_status() -> AgentStatus:
 
 
 @router.post("/tasks", summary="Создать новую задачу", response_model=TaskResponse)
-async def create_task(request: TaskRequest) -> TaskResponse:
+async def create_task(request: TaskRequest, user: dict = Depends(get_current_user)) -> TaskResponse:
     """Создать новую задачу для выполнения."""
     task_id = str(uuid.uuid4())
     
@@ -109,7 +110,7 @@ async def create_task(request: TaskRequest) -> TaskResponse:
 
 
 @router.get("/tasks/{task_id}", summary="Получить информацию о задаче")
-async def get_task(task_id: str) -> Dict[str, Any]:
+async def get_task(task_id: str, user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Получить информацию о конкретной задаче."""
     if task_id not in tasks_storage:
         raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -121,7 +122,8 @@ async def get_task(task_id: str) -> Dict[str, Any]:
 async def list_tasks(
     status: Optional[str] = None,
     limit: int = 100,
-    offset: int = 0
+    offset: int = 0,
+    user: dict = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Получить список всех задач."""
     tasks = list(tasks_storage.values())
@@ -141,7 +143,7 @@ async def list_tasks(
 
 
 @router.put("/tasks/{task_id}", summary="Обновить задачу")
-async def update_task(task_id: str, update: Dict[str, Any]) -> Dict[str, Any]:
+async def update_task(task_id: str, update: Dict[str, Any], user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Обновить информацию о задаче."""
     if task_id not in tasks_storage:
         raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -172,7 +174,7 @@ async def update_task(task_id: str, update: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.delete("/tasks/{task_id}", summary="Удалить задачу")
-async def delete_task(task_id: str) -> Dict[str, Any]:
+async def delete_task(task_id: str, user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Удалить задачу."""
     if task_id not in tasks_storage:
         raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -188,7 +190,7 @@ async def delete_task(task_id: str) -> Dict[str, Any]:
 
 
 @router.get("/statistics", summary="Получить статистику")
-async def get_statistics() -> Dict[str, Any]:
+async def get_statistics(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Получить статистику работы агента."""
     uptime = (datetime.now() - agent_data["start_time"]).total_seconds()
     total_tasks = agent_data["completed_tasks"] + agent_data["failed_tasks"]
@@ -210,7 +212,7 @@ async def get_statistics() -> Dict[str, Any]:
 
 
 @router.post("/execute", summary="Выполнить команду")
-async def execute_command(command: Dict[str, str]) -> Dict[str, Any]:
+async def execute_command(command: Dict[str, str], user: dict = Depends(require_admin)) -> Dict[str, Any]:
     """Выполнить команду на агенте."""
     cmd = command.get("command", "")
     
@@ -249,7 +251,7 @@ async def get_agent_info() -> Dict[str, Any]:
 
 
 @router.post("/reset", summary="Сбросить агента")
-async def reset_agent() -> Dict[str, Any]:
+async def reset_agent(user: dict = Depends(require_admin)) -> Dict[str, Any]:
     """Сбросить состояние агента."""
     global tasks_storage, agent_data
     
@@ -272,7 +274,7 @@ async def reset_agent() -> Dict[str, Any]:
 
 
 @router.get("/workspace", summary="Получить список файлов в рабочей директории")
-async def list_workspace_files() -> Dict[str, Any]:
+async def list_workspace_files(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Возвращает список всех файлов в папке workspace."""
     workspace_dir = Path("workspace")
     workspace_dir.mkdir(exist_ok=True)
@@ -312,7 +314,7 @@ async def get_sandbox_vnc(session_id: str) -> Dict[str, Any]:
 
 
 @router.get("/workspace/file", summary="Прочитать содержимое файла из workspace")
-async def read_workspace_file(path: str) -> Dict[str, Any]:
+async def read_workspace_file(path: str, user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Возвращает содержимое файла из workspace по относительному пути."""
     workspace_dir = Path("workspace")
     workspace_dir.mkdir(exist_ok=True)
@@ -365,7 +367,7 @@ async def read_workspace_file(path: str) -> Dict[str, Any]:
 
 
 @router.post("/upload", summary="Загрузить файл в workspace")
-async def upload_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Загружает файл в папку workspace фронтендом."""
     workspace_dir = Path("workspace")
     workspace_dir.mkdir(exist_ok=True)

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import pty
 import os
 import select
 from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING

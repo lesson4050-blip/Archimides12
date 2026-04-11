@@ -1,3 +1,7 @@
+# ═══════════════════════════════════════
+# Archimedes — .gitignore
+# ═══════════════════════════════════════
+
 # Python
 __pycache__/
 *.py[cod]
@@ -8,8 +12,10 @@ __pycache__/
 dist/
 build/
 .eggs/
+venv/
+.venv/
 
-# Env
+# Environment
 .env
 .env.local
 .env.*.local
@@ -21,18 +27,19 @@ chroma_db/
 
 # Logs
 *.log
-*.txt.log
-backend_log*.txt
-frontend_err*.txt
+backend_*.log
+backend_*.txt
+frontend_*.txt
 task_log*.txt
-backend_startup*.txt
-backend_err*.txt
 
-# Workspace (agent outputs — runtime only)
+# Workspace (agent runtime outputs)
 workspace/
 backend/workspace/
 
-# Node
+# Generated content
+generated_images/
+
+# Node.js
 node_modules/
 .next/
 npm-debug.log*
@@ -56,13 +63,15 @@ npm-debug.log*
 Thumbs.db
 
 # Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
 temp_zip/
 benchmark_workspace/
-.pytest_cache/
 
-# Personal scripts
-create_zip.py
-create_zip.ps1
+# Docker volumes
+postgres_data/
 
 # Specific DB files
 archemidas.db

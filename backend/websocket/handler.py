@@ -24,6 +24,22 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, session_id: str):
         await websocket.accept()
+        
+        # Optional auth: verify JWT from query param if AUTH_ENABLED
+        if settings.AUTH_ENABLED:
+            from backend.auth.jwt_handler import verify_token
+            token = websocket.query_params.get("token", "")
+            if not token:
+                await websocket.send_json({"type": "auth_error", "message": "Authentication required. Pass ?token=JWT"})
+                await websocket.close(code=4001)
+                return
+            payload = verify_token(token)
+            if not payload:
+                await websocket.send_json({"type": "auth_error", "message": "Invalid or expired token"})
+                await websocket.close(code=4001)
+                return
+            logger.info(f"WebSocket authenticated: user={payload['user_id']} session={session_id}")
+        
         self.active_connections[session_id] = websocket
         
         # Flush offline buffer
@@ -129,7 +145,9 @@ class ConnectionManager:
             async def sender(event):
                 await self.send_event(session_id, event)
 
-            asyncio.create_task(agent.process_task(task, websocket_send=sender))
+            # Extra execution parameters (mode: fast/planning)
+            mode = data.get("mode", "planning")
+            asyncio.create_task(agent.process_task(task, websocket_send=sender, mode=mode))
         else:
             logger.warning(f"No agent found for {session_id}")
 

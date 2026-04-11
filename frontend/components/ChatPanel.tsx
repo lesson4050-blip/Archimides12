@@ -32,7 +32,25 @@ const cleanMessageContent = (content: string | undefined): string => {
   return cleaned.replace(/\n{3,}/g, "\n\n").trim();
 };
 
-export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent, isComputerOpen, onToggleComputer }: { sessionId: string, isStarted: boolean, onStart: () => void, selectedAgent?: string, isComputerOpen?: boolean, onToggleComputer?: () => void }) {
+export default function ChatPanel({ 
+  sessionId, 
+  isStarted, 
+  onStart, 
+  selectedAgent, 
+  executionMode,
+  onModeChange,
+  isComputerOpen, 
+  onToggleComputer 
+}: { 
+  sessionId: string, 
+  isStarted: boolean, 
+  onStart: () => void, 
+  selectedAgent?: string, 
+  executionMode?: "fast" | "planning",
+  onModeChange?: (mode: "fast" | "planning") => void,
+  isComputerOpen?: boolean, 
+  onToggleComputer?: () => void 
+}) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isWorking, setIsWorking] = useState(false);
@@ -229,7 +247,7 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
     setInput("");
     setIsWorking(true);
     if (!isStarted) onStart();
-    socket.sendTask(task, selectedAgent);
+    socket.sendTask(task, selectedAgent, executionMode);
   };
 
   const stopTask = () => {
@@ -309,17 +327,17 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
                           </div>
                           <div className="mt-2">
                             <button
-                              onClick={() => setViewingArtifact(msg.artifactData!)}
-                              className="flex items-center gap-3 px-4 py-3 bg-[#1A1B26] border border-[#2A2B3D] rounded-xl hover:border-blue-500/40 hover:bg-[#1E1F2E] transition-all cursor-pointer group/artifact w-fit max-w-full"
+                               onClick={() => setViewingArtifact(msg.artifactData!)}
+                               className="flex items-center gap-3 px-4 py-3 bg-[#1A1B26] border border-[#2A2B3D] rounded-xl hover:border-blue-500/40 hover:bg-[#1E1F2E] transition-all cursor-pointer group/artifact w-fit max-w-full"
                             >
-                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center shrink-0">
-                                <span className="text-lg">📄</span>
-                              </div>
-                              <div className="flex flex-col items-start min-w-0">
-                                <span className="text-white text-sm font-medium truncate">{msg.artifactData.name}</span>
-                                <span className="text-gray-500 text-xs">Нажмите для просмотра</span>
-                              </div>
-                              <svg className="w-4 h-4 text-gray-500 group-hover/artifact:text-blue-400 transition-colors ml-2 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center shrink-0">
+                                 <span className="text-lg">📄</span>
+                               </div>
+                               <div className="flex flex-col items-start min-w-0">
+                                 <span className="text-white text-sm font-medium truncate">{msg.artifactData.name}</span>
+                                 <span className="text-gray-500 text-xs">Нажмите для просмотра</span>
+                               </div>
+                               <svg className="w-4 h-4 text-gray-500 group-hover/artifact:text-blue-400 transition-colors ml-2 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                             </button>
                           </div>
                         </div>
@@ -428,6 +446,22 @@ export default function ChatPanel({ sessionId, isStarted, onStart, selectedAgent
                    >
                      <GlobeIcon />
                    </button>
+
+                    {/* Mode Toggle */}
+                    <div className="flex items-center ml-2 bg-[#1A1A1A] rounded-full p-0.5 border border-[#333]">
+                      <button 
+                        onClick={() => onModeChange?.("fast")}
+                        className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold transition-all ${executionMode === "fast" ? "bg-amber-500/20 text-amber-500 shadow-sm" : "text-gray-500 hover:text-gray-400"}`}
+                      >
+                        Fast
+                      </button>
+                      <button 
+                        onClick={() => onModeChange?.("planning")}
+                        className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold transition-all ${executionMode === "planning" ? "bg-blue-500/20 text-blue-500 shadow-sm" : "text-gray-500 hover:text-gray-400"}`}
+                      >
+                        Plan
+                      </button>
+                    </div>
                 </div>
                 
                 <div className="flex items-center gap-2">

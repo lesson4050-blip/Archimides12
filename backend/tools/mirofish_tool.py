@@ -82,7 +82,10 @@ Return ONLY valid JSON, no other text.
                 logger.error(f"MiroFish parse error: {e}")
                 return {**persona, "reaction": "neutral", "would_adopt": False, "comment": "Failed to parse reaction."}
         
-        results = await asyncio.gather(*[simulate_persona(p) for p in personas])
+        results = []
+        for p in personas:
+            res = await simulate_persona(p)
+            results.append(res)
         
         # Агрегация
         positive = sum(1 for r in results if r.get("reaction") == "positive")

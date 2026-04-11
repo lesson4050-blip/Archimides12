@@ -4,41 +4,34 @@ services:
   # Основной контейнер Archimedes COSMO
   archimedes:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/sandbox.Dockerfile
     container_name: archimedes-cosmo
     hostname: archimedes-cosmo
     
-    # Порты
     ports:
       - "8000:8000"    # Backend API
       - "3000:3000"    # Frontend
-      - "11434:11434"  # Ollama (если локально)
     
-    # Переменные окружения
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=hf.co/bartowski/Qwen2.5-32B-Instruct-GGUF:Q4_K_M
-      - DATABASE_URL=sqlite+aiosqlite:///./data/archimedes.db
+      - OLLAMA_MODEL=gemma4:26b
+      - DATABASE_URL=postgresql+asyncpg://archimedes:archimedes@postgres:5432/archimedes
+      - DATABASE_URL_SQLITE=sqlite+aiosqlite:///./data/archemidas.db
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
+      - AUTH_ENABLED=false
     
-    # Тома
     volumes:
-      - ./logs:/app/logs
-      - ./data:/app/data
-      - ./workspace:/app/workspace
+      - ../workspace:/app/workspace
       - /var/run/docker.sock:/var/run/docker.sock
     
-    # Сеть
     networks:
       - archimedes-network
     
-    # Перезапуск
     restart: unless-stopped
     
-    # Здоровье
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -46,9 +39,11 @@ services:
       retries: 3
       start_period: 40s
     
-    # Зависимости
     depends_on:
-      - ollama
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
 
   # Ollama для локальных моделей
   ollama:
@@ -56,26 +51,20 @@ services:
     container_name: archimedes-ollama
     hostname: ollama
     
-    # Порты
     ports:
       - "11434:11434"
     
-    # Тома для моделей
     volumes:
       - ollama-data:/root/.ollama
     
-    # Сеть
     networks:
       - archimedes-network
     
-    # Перезапуск
     restart: unless-stopped
     
-    # Переменные окружения
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
     
-    # Здоровье
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
@@ -83,84 +72,40 @@ services:
       retries: 3
       start_period: 40s
 
-  # PostgreSQL для продвинутой БД (опционально)
+  # PostgreSQL — production database
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: archimedes-postgres
     hostname: postgres
     
-    # Порты
     ports:
       - "5432:5432"
     
-    # Переменные окружения
     environment:
-      - POSTGRES_USER=archimedes
-      - POSTGRES_PASSWORD=archimedes_secure_password
-      - POSTGRES_DB=archimedes_db
+      POSTGRES_USER: archimedes
+      POSTGRES_PASSWORD: archimedes
+      POSTGRES_DB: archimedes
     
-    # Тома
     volumes:
       - postgres-data:/var/lib/postgresql/data
     
-    # Сеть
     networks:
       - archimedes-network
     
-    # Перезапуск
     restart: unless-stopped
     
-    # Здоровье
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U archimedes"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis для кэширования (опционально)
-  redis:
-    image: redis:7-alpine
-    container_name: archimedes-redis
-    hostname: redis
-    
-    # Порты
-    ports:
-      - "6379:6379"
-    
-    # Тома
-    volumes:
-      - redis-data:/data
-    
-    # Сеть
-    networks:
-      - archimedes-network
-    
-    # Перезапуск
-    restart: unless-stopped
-    
-    # Команда
-    command: redis-server --appendonly yes
-    
-    # Здоровье
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-# Тома
 volumes:
   ollama-data:
     driver: local
   postgres-data:
     driver: local
-  redis-data:
-    driver: local
 
-# Сеть
 networks:
   archimedes-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16

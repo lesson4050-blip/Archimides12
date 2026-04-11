@@ -8,6 +8,7 @@ from backend.websocket.handler import manager
 from backend.sandbox.singleton import sandbox_manager
 from backend.db.crud import init_db
 from backend.api.routes import router as main_router
+from backend.auth.routes import router as auth_router
 
 
 # Configure logging
@@ -26,6 +27,9 @@ async def lifespan(app: FastAPI):
 
     # Start the inactivity reaper
     sandbox_manager.start_reaper()
+    
+    logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
+    logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
 
     yield
 
@@ -49,6 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(main_router)
 
 
@@ -56,6 +61,13 @@ app.include_router(main_router)
 @app.get("/")
 async def root():
     return {"message": "Archimedes API is running."}
+
+
+@app.get("/api/health")
+async def api_health():
+    """Top-level health check (без prefix /api/v1)."""
+    from datetime import datetime
+    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "version": "2.0.0-cosmo"}
 
 
 @app.websocket("/ws/{session_id}")

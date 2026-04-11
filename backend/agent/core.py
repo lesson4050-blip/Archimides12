@@ -15,6 +15,9 @@ import uuid
 
 from backend.models.model_router import ModelRouter
 from backend.agent.thought_engine import ThoughtEngine
+from backend.agent.tool_registry import ToolRegistry
+from backend.agent.orchestration.orchestrator import AgentOrchestrator
+from backend.agent.orchestration.state import AgentMode
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -107,21 +110,31 @@ class ArchimedesCosmoAgent:
         self.system_prompt = ThoughtEngine.get_system_prompt()
         self.history: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
         
-        # Регистрация расширенных инструментов
-        self._init_extended_tools()
-        
+        # Memory and context
         from backend.memory.context_manager import ContextManager
         from backend.memory.vector_store import VectorStore
+        
         self.context_manager = ContextManager(
-            max_tokens=settings.AGENT_MAX_CONTEXT_TOKENS if hasattr(settings, 'AGENT_MAX_CONTEXT_TOKENS') else 16384
+            max_tokens=settings.AGENT_MAX_CONTEXT_TOKENS if hasattr(settings, 'AGENT_MAX_CONTEXT_TOKENS') else 32768
+        )
+        self.vector_store = VectorStore(user_id=session_id or "default")
+        
+        # New: Tool Registry and Orchestrator
+        self.tool_registry = ToolRegistry()
+        self.orchestrator = AgentOrchestrator(
+            router=self.router,
+            tool_registry=self.tool_registry,
+            context_manager=self.context_manager
         )
         
-        # Синхронизировать начальную историю в context_manager
+        # Registration of extended tools
+        self._init_extended_tools()
+        
+        # Sync initial history
+        self.history: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
         for msg in self.history:
             self.context_manager.add_message(msg["role"], msg.get("content", ""))
             
-        self.vector_store = VectorStore(user_id=session_id or "default")
-        
         logger.info(f"OK: Инициализирован {self.name} (ID: {self.agent_id})")
 
     def _init_extended_tools(self):
@@ -230,55 +243,75 @@ class ArchimedesCosmoAgent:
             self.shell_tool = ShellTool(sandbox_manager.executor)
             self.register_tool("shell", self.shell_tool.execute)
             
+            # Register dummy message handler to ensure history saving
+            async def _dummy_message(**kwargs):
+                return {"success": True, "output": "Message generated."}
+            self.register_tool("message", _dummy_message)
+            
             logger.info("CORE: Все расширенные инструменты успешно загружены")
         except Exception as e:
             logger.error(f"ERROR: Ошибка при инициализации инструментов: {e}")
 
     async def process_task(self, task_description: str, websocket_send: Callable = None, **kwargs) -> ExecutionResult:
-        """Обработать задачу с полным жизненным циклом."""
+        """Обработать задачу с использованием мультиагентной оркестрации."""
         task_id = str(uuid.uuid4())
         start_time = asyncio.get_event_loop().time()
         
+        # Get execution mode (Fast vs Planning)
+        mode_str = kwargs.get("mode", "planning").lower()
+        mode = AgentMode.FAST if mode_str == "fast" else AgentMode.PLANNING
+        
         try:
-            logger.info(f"TASK: Начало обработки задачи: {task_description}")
-            self.state = AgentState.THINKING
+            logger.info(f"TASK: Начало мультиагентной обработки ({mode.value}): {task_description}")
+            self.state = AgentState.PLANNING if mode == AgentMode.PLANNING else AgentState.EXECUTING
             
             if websocket_send:
-                await websocket_send({"type": "message_info", "content": f"TASK: Принята новая задача:\n\n{task_description}"})
+                await websocket_send({
+                    "type": "message_info", 
+                    "content": f"🚀 Archimedes перешел в режим: **{mode.value.upper()}**\nЗапуск задачи: {task_description}"
+                })
             
-            # Этап 1: Анализ и планирование
-            plan = await self._create_plan(task_id, task_description, websocket_send=websocket_send, **kwargs)
-            self.tasks[task_id] = plan
+            # Delegate to Orchestrator
+            orch_result = await self.orchestrator.run_task(
+                task_description=task_description,
+                mode=mode,
+                session_id=self.session_id or "default",
+                websocket_send=websocket_send
+            )
             
-            self.state = AgentState.PLANNING
-            logger.info(f"PLAN: План создан: {len(plan.subtasks)} подзадач")
-            if websocket_send:
-                await websocket_send({"type": "message_info", "content": f"PLAN: Создан план выполнения из {len(plan.subtasks)} этапов (Стратегия: {plan.strategy})."})
+            if not orch_result.get("success"):
+                raise Exception(orch_result.get("error", "Orchestrator failed without error message"))
             
-            # Этап 2: Выполнение
-            self.state = AgentState.EXECUTING
-            output = await self._execute_plan(task_id, plan, websocket_send=websocket_send)
-            
-            # Этап 3: Синтез результата
+            self.state = AgentState.COMPLETED
             result = ExecutionResult(
                 task_id=task_id,
                 status=TaskStatus.COMPLETED,
-                output=output,
+                output=orch_result.get("output"),
                 duration=asyncio.get_event_loop().time() - start_time,
                 metadata={
-                    "subtasks": len(plan.subtasks),
-                    "strategy": plan.strategy
+                    "mode": mode.value,
+                    "plan": orch_result.get("plan")
                 }
             )
             
-            self.state = AgentState.COMPLETED
             self.results[task_id] = result
             self.execution_history.append(result)
             
             logger.info(f"DONE: Задача завершена за {result.duration:.2f}s")
+            return result
+            
+        except Exception as e:
+            logger.error(f"ERROR: Ошибка при обработке задачи: {str(e)}")
             if websocket_send:
-                formatted_output = str(output) if output else "Успешно"
-                await websocket_send({"type": "message_result", "content": f"DONE: Задача завершена за {result.duration:.2f}s.\n\nРезультат: {formatted_output}"})
+                await websocket_send({"type": "agent_error", "content": f"Критическая ошибка оркестрации: {str(e)}"})
+            
+            self.state = AgentState.ERROR
+            result = ExecutionResult(
+                task_id=task_id,
+                status=TaskStatus.FAILED,
+                error=str(e),
+                duration=asyncio.get_event_loop().time() - start_time
+            )
             return result
             
         except Exception as e:
@@ -308,15 +341,21 @@ class ArchimedesCosmoAgent:
         if websocket_send:
             await websocket_send({"type": "thought", "content": f"Разрабатываю стратегию выполнения задачи: '{description}'"})
         
-        # Добавляем задачу в историю как отправную точку
-        self.history = [{"role": "system", "content": self.system_prompt}]
+        # Добавляем новую задачу в существующую историю (сохраняем контекст)
+        # Если история пуста — инициализируем системным промтом
+        if not self.history or self.history[0].get("role") != "system":
+            self.history = [{"role": "system", "content": self.system_prompt}]
         self.history.append({"role": "user", "content": description})
         
-        # Пересинхронизировать context_manager
-        self.context_manager.history = []
-        self.context_manager.current_tokens = 0
-        for msg in self.history:
-            self.context_manager.add_message(msg["role"], msg.get("content", ""))
+        # Добавить новое сообщение в context_manager (без полного сброса)
+        self.context_manager.add_message("user", description)
+        
+        # Проверить нужна ли summarization контекста
+        try:
+            await self.context_manager.summarize_if_needed(self.router)
+            self.history = self.context_manager.get_messages()
+        except Exception as e:
+            logger.warning(f"Context summarization skipped: {e}")
         
         # Анализ задачи
         complexity = self._analyze_complexity(description)
@@ -452,9 +491,17 @@ class ArchimedesCosmoAgent:
                             
                             res = await self.tools[t_name](**t_args)
                             
+                            # Extract output for model and logs
+                            if res.get("success") is False:
+                                tool_output = f"ERROR: {res.get('error', 'Unknown error')}"
+                            else:
+                                tool_output = str(res.get("output", res.get("content", "OK")))
+                                
+                            logger.info(f"TOOL EXECUTION FINISHED: {t_name}. Result length: {len(tool_output)}")
+                            
                             # Log to history in STANDARD format using ContextManager
                             self.context_manager.add_message("assistant", thought or "", tool_calls=[std_tool_call])
-                            self.context_manager.add_message("tool", str(res.get("output", res.get("content", "OK"))), tool_call_id=call_id, name=t_name)
+                            self.context_manager.add_message("tool", tool_output, tool_call_id=call_id, name=t_name)
                             
                             # Проверить нужна ли summarization
                             await self.context_manager.summarize_if_needed(self.router)
@@ -483,7 +530,8 @@ class ArchimedesCosmoAgent:
                             )
                             if not review.get("passed") and step < max_steps - 3:
                                 fix_msg = "Please fix these issues before finishing:\n" + "\n".join(review.get("issues", []))
-                                self.history.append({"role": "system", "content": fix_msg})
+                                self.context_manager.add_message("system", fix_msg)
+                                self.history = self.context_manager.get_messages()
                                 continue
 
                             # --- AUTO-VERIFICATION ---
@@ -507,10 +555,8 @@ If no, explain what is missing in 1-2 sentences.
                             verdict = verdict_resp.get("text", "")
                             
                             if "VERIFIED" not in verdict.upper() and step < max_steps - 2:
-                                self.history.append({
-                                    "role": "system", 
-                                    "content": f"Subtask not fully completed. Missing: {verdict}. Continue working."
-                                })
+                                self.context_manager.add_message("system", f"Subtask not fully completed. Missing: {verdict}. Continue working.")
+                                self.history = self.context_manager.get_messages()
                                 continue  # Возврат в цикл LLM
                             # -------------------------
                             
@@ -598,7 +644,10 @@ If no, explain what is missing in 1-2 sentences.
 
     def register_tool(self, name: str, handler: Callable) -> None:
         """Зарегистрировать инструмент."""
+        # Backward compatibility for direct dict
         self.tools[name] = handler
+        # New: Register in the tool_registry for agents
+        self.tool_registry.register(name, handler)
         logger.info(f"TOOL: Инструмент зарегистрирован: {name}")
 
     def register_error_handler(self, error_type: str, handler: Callable) -> None:

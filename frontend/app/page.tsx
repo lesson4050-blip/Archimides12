@@ -11,6 +11,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState(() => `session-${Math.random().toString(36).substring(2, 9)}`);
   const [isStarted, setIsStarted] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState("archimedes-cosmo");
+  const [executionMode, setExecutionMode] = useState<"fast" | "planning">("planning");
 
   const [isComputerOpen, setIsComputerOpen] = useState(false);
 
@@ -49,6 +50,8 @@ export default function Home() {
              isStarted={isStarted}
              onStart={() => setIsStarted(true)} 
              selectedAgent={selectedAgent}
+             executionMode={executionMode}
+             onModeChange={setExecutionMode}
              isComputerOpen={isComputerOpen}
              onToggleComputer={() => setIsComputerOpen(true)}
            />

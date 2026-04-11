@@ -7,8 +7,8 @@ logger = logging.getLogger(__name__)
 
 class OllamaClient:
     def __init__(self):
-        # Increase timeout for large model loads (300 seconds)
-        self.client = ollama.AsyncClient(host=settings.OLLAMA_BASE_URL, timeout=300)
+        # Increase timeout for large model loads and complex generation (600 seconds)
+        self.client = ollama.AsyncClient(host=settings.OLLAMA_BASE_URL, timeout=600)
         self.model = settings.OLLAMA_MODEL
 
     async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
@@ -41,7 +41,7 @@ class OllamaClient:
                 "messages": messages,
                 "options": {
                     "num_ctx": settings.AGENT_MAX_CONTEXT_TOKENS,
-                    "num_predict": 4096
+                    "num_predict": 8192
                 }
             }
             if tools:

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+import secrets
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 
@@ -28,10 +29,29 @@ class Settings(BaseSettings):
     
     # Agent
     AGENT_MAX_ITERATIONS: int = 20
-    AGENT_MAX_CONTEXT_TOKENS: int = 16384
+    AGENT_MAX_CONTEXT_TOKENS: int = 32768
+    CONTEXT_SUMMARIZATION_THRESHOLD: int = 24000
+    CONTEXT_PRESERVE_RECENT: int = 20
+    USE_MULTI_AGENT: bool = False  # Feature flag for Phase 4
     
-    # DB
-    DATABASE_URL: str = "sqlite+aiosqlite:///./archemidas.db"
+    # Database — PostgreSQL (production) or SQLite (dev fallback)
+    DATABASE_URL: str = "postgresql+asyncpg://archimedes:archimedes@localhost:5432/archimedes"
+    DATABASE_URL_SQLITE: str = "sqlite+aiosqlite:///./archemidas.db"
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    
+    # Auth / JWT — IMPORTANT: override JWT_SECRET_KEY in .env for production!
+    JWT_SECRET_KEY: str = secrets.token_hex(32)
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRATION_HOURS: int = 24
+    AUTH_ENABLED: bool = False  # Set True to enforce auth on all endpoints
+    
+    # MCP
+    MCP_SERVER_PORT: int = 8002
+    MCP_EXTERNAL_SERVERS: Dict[str, Dict[str, str]] = {
+        "google-search": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-google-search"]},
+        "memory": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}
+    }
     
     # Frontend/WebSocket
     NEXT_PUBLIC_WS_URL: str = "ws://localhost:8000/ws"
