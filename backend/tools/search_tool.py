@@ -25,7 +25,9 @@ class SearchTool:
                 }
             }
         }
-    async def execute(self, query: str, search_depth: str = "advanced", **kwargs) -> Dict[str, Any]:
+    async def execute(self, query: str = "", search_depth: str = "advanced", **kwargs) -> Dict[str, Any]:
+        if not query:
+            return {"success": False, "error": "Search query is required."}
         api_key = settings.TAVILY_API_KEY
         if not api_key:
             return {"success": False, "error": "TAVILY_API_KEY not set in environment."}

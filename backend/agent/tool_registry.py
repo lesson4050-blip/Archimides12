@@ -16,15 +16,21 @@ class ToolRegistry:
 
     def register(self, name: str, tool_instance: Any):
         """
-        Simplified registration for tool objects. 
+        Simplified registration for tool objects or methods. 
         Creates a basic definition if none exists.
         """
         # Try to get definition from tool if it has a way to provide it
         definition = None
-        if hasattr(tool_instance, "get_definition"):
-            definition = tool_instance.get_definition()
-        elif hasattr(tool_instance, "definition"):
-            definition = tool_instance.definition
+        
+        # Check if tool_instance is a bound method (e.g., self.search_tool.execute)
+        actual_instance = tool_instance
+        if hasattr(tool_instance, "__self__"):
+            actual_instance = tool_instance.__self__
+            
+        if hasattr(actual_instance, "get_definition"):
+            definition = actual_instance.get_definition()
+        elif hasattr(actual_instance, "definition"):
+            definition = actual_instance.definition
         
         if definition:
             # Ensure it has the OpenAI/Groq/Gemini standard 'type' field
@@ -57,7 +63,7 @@ class ToolRegistry:
             }
         
         # Use 'execute' method as the callback if it exists
-        callback = tool_instance.execute if hasattr(tool_instance, "execute") else tool_instance
+        callback = actual_instance.execute if hasattr(actual_instance, "execute") else tool_instance
         
         self.tools[name] = callback
         self.tool_definitions.append(definition)
@@ -78,7 +84,8 @@ class ToolRegistry:
             if session_id:
                 params["session_id"] = session_id
                 
-            # We assume all tool functions are async
+            # Check if it's an MCP tool (it will have a specific structure or we check the definition)
+            # For simplicity, we assume we've mapped it correctly in registration
             result = await self.tools[name](**params)
             return result
         except Exception as e:
@@ -87,3 +94,10 @@ class ToolRegistry:
                 "success": False,
                 "error": str(e)
             }
+
+    def register_mcp_tool(self, definition: Dict[str, Any], callback: Callable):
+        """Register a tool that comes from an external MCP server."""
+        name = definition["function"]["name"]
+        self.tools[name] = callback
+        self.tool_definitions.append(definition)
+        logger.info(f"Registered MCP tool: {name}")

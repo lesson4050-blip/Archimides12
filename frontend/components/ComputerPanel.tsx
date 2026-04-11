@@ -5,7 +5,7 @@ import { Terminal, Code2, Monitor, ChevronLeft, ChevronRight, PlaySquare, X, Ref
 import Editor from "@monaco-editor/react";
 import { AgentEvent } from "@/lib/websocket";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface FileTab {
   path: string;

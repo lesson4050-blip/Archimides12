@@ -25,8 +25,8 @@ export class ArchimedesSocket {
   constructor(sessionId: string, onMessage: (event: AgentEvent) => void) {
     this.sessionId = sessionId;
     this.onMessage = onMessage;
-    // Use the environment variable or default to localhost:8001
-    this.baseUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001/ws";
+    // Use the environment variable or default to localhost:8000
+    this.baseUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws";
   }
 
   connect() {

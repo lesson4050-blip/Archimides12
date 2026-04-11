@@ -30,8 +30,9 @@ class MiroFishTool:
             "function": {
                 "name": "mirofish",
                 "description": (
-                    "Simulate public reaction to an idea or product. "
+                    "Simulate public reaction to a HYPOTHETICAL idea, product, or scenario. "
                     "Generates diverse personas and their honest reactions. "
+                    "Use this for 'What if' scenarios or testing new concepts. "
                     "Returns sentiment, key objections, adoption probability."
                 ),
                 "parameters": {
@@ -46,8 +47,10 @@ class MiroFishTool:
             }
         }
 
-    async def execute(self, hypothesis: str, context: str = "",
+    async def execute(self, hypothesis: str = "", context: str = "",
                       num_personas: int = 6, **kwargs) -> Dict[str, Any]:
+        if not hypothesis:
+            return {"success": False, "error": "Hypothesis is required for MiroFish simulation."}
         personas = PERSONA_TEMPLATES[:num_personas]
         
         # Параллельно симулируем реакцию каждого персонажа

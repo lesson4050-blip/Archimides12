@@ -17,7 +17,7 @@ interface ArtifactViewerProps {
   onClose: () => void;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function getLanguageFromFilename(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase() || "";

@@ -127,6 +127,11 @@ class ArchimedesCosmoAgent:
             context_manager=self.context_manager
         )
         
+        # MCP Integration: Initialize and connect external servers
+        from backend.mcp.client import ArchimedesMCPClient
+        self.mcp_client = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
+        asyncio.create_task(self._init_mcp())
+
         # Registration of extended tools
         self._init_extended_tools()
         
@@ -231,6 +236,11 @@ class ArchimedesCosmoAgent:
             self.expose_tool = ExposeTool(sandbox_manager.executor)
             self.register_tool("expose", self.expose_tool.execute)
             
+            # MCP: Agentic connection tool
+            from backend.tools.mcp_tool import MCPTool
+            self.mcp_tool = MCPTool(self.mcp_client, sync_callback=self.sync_mcp_tools)
+            self.register_tool("mcp_connect", self.mcp_tool.execute)
+            
             # TODO: Add other tools later
 
             # Core Tool Registration
@@ -251,6 +261,52 @@ class ArchimedesCosmoAgent:
             logger.info("CORE: Все расширенные инструменты успешно загружены")
         except Exception as e:
             logger.error(f"ERROR: Ошибка при инициализации инструментов: {e}")
+
+    async def _init_mcp(self):
+        """Initialize MCP connections and register discovered tools."""
+        try:
+            await self.mcp_client.connect_all()
+            # Wait a few seconds for discovery to finish (MVP approach)
+            await asyncio.sleep(5)
+            
+            mcp_tools = await self.mcp_client.discover_tools()
+            for tool_def in mcp_tools:
+                # Use a specific callback that routes to call_external_tool
+                server_name = tool_def["function"]["_mcp_server"]
+                tool_name = tool_def["function"]["_mcp_tool_name"]
+                
+                async def mcp_callback(s=server_name, t=tool_name, **params):
+                    return await self.mcp_client.call_external_tool(s, t, params)
+                
+                self.tool_registry.register_mcp_tool(tool_def, mcp_callback)
+            
+            if mcp_tools:
+                logger.info(f"CORE: Connected to MCP and registered {len(mcp_tools)} tools")
+        except Exception as e:
+            logger.error(f"ERROR: Failed to initialize MCP: {e}")
+
+    async def sync_mcp_tools(self):
+        """Re-scan MCP client for new tools and register them."""
+        try:
+            mcp_tools = await self.mcp_client.discover_tools()
+            registered_count = 0
+            for tool_def in mcp_tools:
+                name = tool_def["function"]["name"]
+                if name not in self.tool_registry.tools:
+                    # Use a specific callback that routes to call_external_tool
+                    server_name = tool_def["function"]["_mcp_server"]
+                    tool_name = tool_def["function"]["_mcp_tool_name"]
+                    
+                    async def mcp_callback(s=server_name, t=tool_name, **params):
+                        return await self.mcp_client.call_external_tool(s, t, params)
+                    
+                    self.tool_registry.register_mcp_tool(tool_def, mcp_callback)
+                    registered_count += 1
+            
+            if registered_count > 0:
+                logger.info(f"CORE: Synced MCP and registered {registered_count} NEW tools")
+        except Exception as e:
+            logger.error(f"ERROR: Failed to sync MCP tools: {e}")
 
     async def process_task(self, task_description: str, websocket_send: Callable = None, **kwargs) -> ExecutionResult:
         """Обработать задачу с использованием мультиагентной оркестрации."""
@@ -282,11 +338,16 @@ class ArchimedesCosmoAgent:
             if not orch_result.get("success"):
                 raise Exception(orch_result.get("error", "Orchestrator failed without error message"))
             
+            # Send final result to user
+            final_output = orch_result.get("output", "Задача выполнена.")
+            if websocket_send and final_output:
+                await websocket_send({"type": "message_result", "content": str(final_output)})
+            
             self.state = AgentState.COMPLETED
             result = ExecutionResult(
                 task_id=task_id,
                 status=TaskStatus.COMPLETED,
-                output=orch_result.get("output"),
+                output=final_output,
                 duration=asyncio.get_event_loop().time() - start_time,
                 metadata={
                     "mode": mode.value,

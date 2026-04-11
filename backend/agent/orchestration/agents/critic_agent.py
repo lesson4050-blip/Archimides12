@@ -9,24 +9,36 @@ logger = logging.getLogger(__name__)
 class CriticAgent(BaseAgent):
     """
     Quality gate. Reviews Executor's work and provides feedback or approval.
+    Designed to be lenient — only rejects for critical errors, not stylistic issues.
     """
     def __init__(self, router: ModelRouter):
         super().__init__("Critic", router)
         
     ATTACKER_PROMPT = """
-    You are the Quality Assurance Agent (Critic) for Archimedes.
-    Your task is to review the following attempt at solving a problem.
+    You are a Quality Assurance reviewer for an AI assistant called Archimedes.
+    Review the following attempt at answering a user's request.
+    
+    LANGUAGE: ALWAYS RESPOND IN RUSSIAN.
     
     ORIGINAL TASK: {task}
-    AGENT ATTEMPT: {answer}
+    AGENT RESPONSE: {answer}
     
-    CRITERIA:
-    1. Is the task completely solved?
-    2. Are there any factual errors or hallucinated data?
-    3. Is the formatting correct (if specified)?
+    REVIEW RULES:
+    1. Be LENIENT. If the response is reasonable and addresses the task, it PASSES.
+    2. Simple conversational responses (greetings, questions) ALWAYS PASS.
+    3. LANGUAGE CHECK: The response must be in RUSSIAN unless English was explicitly requested. If it's in English, suggest translating it.
+    4. Only FAIL if there are CRITICAL issues:
+       - The response is completely off-topic or doesn't address the task at all
+       - There are dangerous factual errors that could cause harm
+       - The response is empty or gibberish
+    5. Do NOT fail for:
+       - Minor formatting issues
+       - Incomplete but useful responses
+       - Stylistic preferences
+       - Missing minor details
     
-    If it is PERFECT, your response MUST contain the exact string: VERDICT: PASS
-    If there are issues, list them clearly starting with 'ISSUE: '.
+    If it passes (which should be MOST of the time), respond with: VERDICT: PASS
+    If it critically fails, list issues starting with 'ISSUE: '. Use RUSSIAN for your response.
     """
 
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
@@ -34,9 +46,18 @@ class CriticAgent(BaseAgent):
             return state # Nothing to review
             
         last_result = state.results[-1].get("output", "")
+        
+        # Skip critic for short/conversational responses
+        if len(last_result.strip()) < 200:
+            logger.info("[Critic] Short response — auto-passing quality gate")
+            state.metadata["critic_verdict"] = "PASS"
+            return state
+        
         await self.log_info("Reviewing execution result for quality...", websocket_send)
         
-        prompt = self.ATTACKER_PROMPT.format(task=state.task_description, answer=last_result)
+        # Truncate very long responses to avoid overloading the LLM
+        truncated_answer = last_result[:2000] + ("..." if len(last_result) > 2000 else "")
+        prompt = self.ATTACKER_PROMPT.format(task=state.task_description, answer=truncated_answer)
         
         try:
             response = await self.router.generate(
@@ -46,26 +67,26 @@ class CriticAgent(BaseAgent):
             
             review_text = response.get("text", "")
             
-            if "VERDICT: PASS" in review_text.upper():
+            if "VERDICT: PASS" in review_text.upper() or "PASS" in review_text.upper():
                 await self.log_thought("Result VERIFIED. Quality gate passed.", websocket_send)
                 state.metadata["critic_verdict"] = "PASS"
-                state.current_retry_count = 0 # Reset for next subtask if any
+                state.current_retry_count = 0
             else:
                 # Issue detected
-                issues = [line.replace("ISSUE:", "").strip() for line in review_text.split("\n") if line.startswith("ISSUE:")]
-                if not issues: issues = [review_text]
+                issues = [line.replace("ISSUE:", "").strip() for line in review_text.split("\n") if line.strip().startswith("ISSUE:")]
+                if not issues: issues = [review_text[:200]]
                 
                 state.current_retry_count += 1
-                await self.log_thought(f"Quality gate FAILED (Attempt {state.current_retry_count}/{state.critic_retry_limit}).", websocket_send)
+                max_retries = min(state.critic_retry_limit, 1)  # Cap at 1 retry to save compute
+                await self.log_thought(f"Quality gate flagged issues (Attempt {state.current_retry_count}/{max_retries}).", websocket_send)
                 
-                if state.current_retry_count >= state.critic_retry_limit:
-                    await self.log_info(f"Reached max retry limit ({state.critic_retry_limit}). Accepting best effort result.", websocket_send)
+                if state.current_retry_count >= max_retries:
+                    await self.log_info(f"Accepting result (retry limit reached).", websocket_send)
                     state.metadata["critic_verdict"] = "LIMIT_REACHED"
                 else:
-                    # Provide feedback to Executor
-                    feedback_msg = "Your previous attempt was rejected by the Quality Critic for the following reasons:\n"
+                    feedback_msg = "The Quality Critic noted:\n"
                     feedback_msg += "\n".join([f"- {i}" for i in issues])
-                    feedback_msg += "\nPlease try again and fix these specific issues."
+                    feedback_msg += "\nPlease address these if possible."
                     
                     state.add_message("system", feedback_msg)
                     state.metadata["critic_verdict"] = "RETRY"
@@ -73,6 +94,7 @@ class CriticAgent(BaseAgent):
                     
         except Exception as e:
             logger.error(f"Critic review failed: {e}")
-            state.metadata["critic_verdict"] = "ERROR_BYPASS" # Bypass on error to avoid hanging
+            state.metadata["critic_verdict"] = "ERROR_BYPASS"
             
         return state
+

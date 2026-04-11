@@ -1,3 +1,4 @@
+from typing import Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 import secrets
@@ -23,7 +24,7 @@ class Settings(BaseSettings):
     # Sandbox
     SANDBOX_IMAGE: str = "cosmo-sandbox:latest"
     SANDBOX_MAX_CONTAINERS: int = 3
-    SANDBOX_INACTIVITY_TIMEOUT: int = 1800  # 30 minutes
+    SANDBOX_INACTIVITY_TIMEOUT: int = 3600  # 1 hour
     SANDBOX_SHELL_TIMEOUT: int = 60
     SANDBOX_SHELL_MAX_TIMEOUT: int = 300
     
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     AGENT_MAX_CONTEXT_TOKENS: int = 32768
     CONTEXT_SUMMARIZATION_THRESHOLD: int = 24000
     CONTEXT_PRESERVE_RECENT: int = 20
-    USE_MULTI_AGENT: bool = False  # Feature flag for Phase 4
+    USE_MULTI_AGENT: bool = True  # Feature flag for Phase 4
     
     # Database — PostgreSQL (production) or SQLite (dev fallback)
     DATABASE_URL: str = "postgresql+asyncpg://archimedes:archimedes@localhost:5432/archimedes"
@@ -48,7 +49,7 @@ class Settings(BaseSettings):
     
     # MCP
     MCP_SERVER_PORT: int = 8002
-    MCP_EXTERNAL_SERVERS: Dict[str, Dict[str, str]] = {
+    MCP_EXTERNAL_SERVERS: Dict[str, Any] = {
         "google-search": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-google-search"]},
         "memory": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}
     }

@@ -16,6 +16,29 @@ class ExecutorAgent(BaseAgent):
     """
     The main execution agent that invokes tools and solves subtasks or entire tasks.
     """
+    
+    ORCHESTRATION_LANGUAGE = "RUSSIAN"
+    
+    SYSTEM_PROMPT = """
+    You are the Executor Agent for Archimedes, a high-performance autonomous assistant.
+    Your goal is to complete the current SUBTASK with precision and efficiency.
+    
+    SUBTASK: {subtask}
+    PLAN CONTEXT: {plan}
+    
+    CORE DIRECTIVES:
+    1. LANGUAGE: ALWAYS RESPOND IN RUSSIAN. All thoughts and outputs must be in Russian.
+    2. ACTION FIRST: If you have a tool that matches the subtask (e.g., 'mirofish' for simulations, 'search' for info), USE IT IMMEDIATELY. 
+    3. MINIMAL RESEARCH: Do not waste time researching the "meaning" of hypothetical or simulated tasks. If the user asks for a simulation or "What if", jump straight to the 'mirofish' tool.
+    4. TOOL SPECIFICS:
+       - 'search': Use when you lack specific facts or recent data.
+       - 'mirofish': Use for ALL simulations, public reactions, and hypothetical scenarios.
+       - 'shell/file': Use for technical execution and file management.
+    5. THOUGHTS: Keep your reasoning concise. Focus on *what* you are doing next in RUSSIAN.
+    
+    If the subtask can be answered directly without tools (e.g., simple explanation), provide the answer in plain text in RUSSIAN.
+    """
+
     def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager):
         super().__init__("Executor", router)
         self.tool_registry = tool_registry
@@ -34,8 +57,6 @@ class ExecutorAgent(BaseAgent):
                  current_target = state.task_description
             else:
                 phases = state.current_plan.get("phases", [])
-                # For simplicity, we assume linear progression through phases and subtasks
-                # This could be more complex in a real multi-agent system
                 current_target = f"Subtask: {state.task_description}" # Default fallback
                 found = False
                 total_steps = 0
@@ -52,15 +73,27 @@ class ExecutorAgent(BaseAgent):
 
         # Loop for tool execution
         for step in range(self.max_steps):
-            # Sync context manager with shared history
-            # (In a real system, we'd only sync once per process call)
-            
             # Preparation for LLM call
             messages = self.context_manager.get_messages()
-            # If history is empty, add system prompt and target
+            
+            # If history is empty or doesn't have the system prompt, prepare it
+            if not any(m["role"] == "system" for m in messages):
+                formatted_prompt = self.SYSTEM_PROMPT.format(
+                    subtask=current_target,
+                    plan=str(state.current_plan) if state.current_plan else "No formal plan."
+                )
+                self.context_manager.add_message("system", formatted_prompt)
+                messages = self.context_manager.get_messages()
+
             if not any(m["role"] == "user" for m in messages):
                 self.context_manager.add_message("user", current_target)
                 messages = self.context_manager.get_messages()
+
+            # Proactive session heartbeat: prevent inactivity reaping during long generations
+            try:
+                self.tool_registry.sandbox_manager.touch_session(state.session_id)
+            except Exception:
+                pass
 
             # Model iteration
             response = await self.router.generate(
@@ -106,17 +139,10 @@ class ExecutorAgent(BaseAgent):
                 self.context_manager.add_message("assistant", thought or "", tool_calls=[std_tool_call])
                 self.context_manager.add_message("tool", output, tool_call_id=call_id, name=t_name)
                 
-                # Check for final result tool
-                if t_name == "message" and t_params.get("type") == "result":
-                    state.results.append({"step": state.current_step_index, "output": t_params.get("content", "")})
-                    # Sync back to shared state
-                    state.history = self.context_manager.get_messages()
-                    return state
-
                 # Update shared state history
                 state.history = self.context_manager.get_messages()
                 
-                # UI artifact support (simplified)
+                # UI artifact support
                 if t_name == "file" and t_params.get("action") == "write" and success:
                     if websocket_send:
                         await websocket_send({
@@ -128,9 +154,12 @@ class ExecutorAgent(BaseAgent):
                 
                 # Periodically summarize if needed
                 await self.context_manager.summarize_if_needed(self.router)
-            else:
-                # No more tool calls, subtask finished
-                res_text = response.get("text", "Done.")
+                # No more tool calls, subtask finished — send result to user
+                res_text = response.get("text", "Готово.")
+                
+                # Double check language for res_text (simplified)
+                if websocket_send and res_text:
+                    await websocket_send({"type": "message_result", "content": res_text})
                 state.results.append({"step": state.current_step_index, "output": res_text})
                 state.history = self.context_manager.get_messages()
                 return state

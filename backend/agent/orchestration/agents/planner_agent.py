@@ -23,7 +23,9 @@ class PlannerAgent(BaseAgent):
         Your goal is to take a user task and decompose it into a sequence of actionable phases.
         
         OUTPUT FORMAT:
-        You must output ONLY a valid JSON object with the following structure:
+        You must output ONLY a valid JSON object.
+        LANGUAGE: All descriptions and text MUST BE IN RUSSIAN.
+        JSON Structure:
         {
             "strategy": "sequential" | "parallel",
             "phases": [
@@ -43,7 +45,8 @@ class PlannerAgent(BaseAgent):
         - slides: specifically for presentation generation.
         - verify: specifically for final quality checks.
         
-        Be concise but thorough. Focus on logic and dependencies.
+        Be concise but thorough. Focus on logic and dependencies. 
+        IMPORTANT: Use RUSSIAN language for all descriptions.
         """
         
         messages = [
@@ -59,15 +62,30 @@ class PlannerAgent(BaseAgent):
             
             # Extract JSON from response
             text = response.get("text", "")
-            # Simple JSON extraction logic (improve if needed with regex)
-            json_start = text.find("{")
-            json_end = text.rfind("}") + 1
-            if json_start != -1 and json_end != -1:
-                plan_json = json.loads(text[json_start:json_end])
+            
+            # More robust JSON extraction
+            import re
+            json_match = re.search(r"(\{.*\})", text, re.DOTALL)
+            plan_json = None
+            
+            if json_match:
+                json_str = json_match.group(1).strip()
+                try:
+                    plan_json = json.loads(json_str)
+                except json.JSONDecodeError:
+                    # Try cleaning common LLM artifacts (like trailing commas or excessive whitespace)
+                    try:
+                        # Clean trailing commas before closing braces/brackets
+                        clean_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+                        plan_json = json.loads(clean_str)
+                    except:
+                        pass
+            
+            if plan_json:
                 state.current_plan = plan_json
                 await self.log_thought(f"Created plan with {len(plan_json.get('phases', []))} phases.", websocket_send)
             else:
-                raise ValueError("Model failed to output valid JSON plan.")
+                raise ValueError(f"Model failed to output valid JSON plan. Raw text: {text[:200]}...")
                 
         except Exception as e:
             logger.error(f"Planning failed: {e}")
