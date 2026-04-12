@@ -24,6 +24,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     sessions = relationship("Session", back_populates="user")
+    settings = relationship("UserSettings", back_populates="user", uselist=False)
+    usage_records = relationship("UsageRecord", back_populates="user")
 
 
 class Session(Base):
@@ -72,3 +74,46 @@ class Artifact(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     session = relationship("Session", back_populates="artifacts")
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+    user_id = Column(String(50), ForeignKey("users.id"), primary_key=True)
+    
+    # Settings Screenshot 2
+    language = Column(String(50), default="English")
+    theme = Column(String(20), default="dark")  # light, dark, system
+    product_updates = Column(Boolean, default=True)
+    task_emails = Column(Boolean, default=True)
+    
+    # Personalization Screenshot 9
+    nickname = Column(String(100), nullable=True)
+    occupation = Column(String(255), nullable=True)
+    bio = Column(Text, nullable=True)
+    custom_instructions = Column(Text, nullable=True)
+    
+    # Account & Usage
+    credits_remaining = Column(Integer, default=300)
+    browser_persistence = Column(Boolean, default=True)
+    
+    # Mail Manus Screenshot 5
+    manus_email = Column(String(255), nullable=True)
+    workflow_email = Column(String(255), nullable=True)
+    
+    # Integrations Config (Storage for keys/tokens)
+    integrations_json = Column(JSON, default=dict)
+    skills_json = Column(JSON, default=dict)
+    connectors_json = Column(JSON, default=dict)
+    
+    user = relationship("User", back_populates="settings")
+
+
+class UsageRecord(Base):
+    __tablename__ = "usage_records"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(50), ForeignKey("users.id"))
+    details = Column(String(255))
+    credits_change = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User", back_populates="usage_records")

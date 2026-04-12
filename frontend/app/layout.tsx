@@ -7,7 +7,12 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Archimedes",
   description: "Autonomous AI Agent",
+  icons: {
+    icon: "/logo-transparent.png",
+  },
 };
+
+import ThemeInitializer from "@/components/ThemeInitializer";
 
 export default function RootLayout({
   children,
@@ -16,7 +21,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <ThemeInitializer />
+        {children}
+      </body>
     </html>
   );
 }

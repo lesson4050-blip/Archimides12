@@ -24,6 +24,9 @@ class ScheduleTool:
 
         if APSCHEDULER_AVAILABLE:
             self._scheduler = AsyncIOScheduler()
+
+    def start(self):
+        if self._scheduler and not self._scheduler.running:
             self._scheduler.start()
             logger.info("ScheduleTool: APScheduler started.")
 

@@ -6,7 +6,7 @@ Automatically detects available database and configures connection pooling.
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import select, update
-from backend.db.models import Base, Session, Task, Message, Artifact
+from backend.db.models import Base, Session, Task, Message, Artifact, User
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,21 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables initialized.")
+
+    # Auto-create dev-user if AUTH_ENABLED is False (dev bypass mode)
+    if not settings.AUTH_ENABLED:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.id == "dev-user"))
+            if not result.scalar_one_or_none():
+                dev_user = User(
+                    id="dev-user",
+                    email="dev@cosmo.ai",
+                    hashed_password="builtin_bypass", # Not checked in bypass mode
+                    role="admin"
+                )
+                db.add(dev_user)
+                await db.commit()
+                logger.info("Created default 'dev-user' for development.")
 
 
 async def create_session(session_id: str):

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { X } from 'lucide-react';
 
 interface Task {
   task_id: string;
@@ -19,7 +20,11 @@ interface AgentStatus {
   uptime: number;
 }
 
-const AgentDashboard: React.FC = () => {
+interface DashboardProps {
+  onClose: () => void;
+}
+
+const AgentDashboard: React.FC<DashboardProps> = ({ onClose }) => {
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTaskDescription, setNewTaskDescription] = useState('');
@@ -123,16 +128,28 @@ const AgentDashboard: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#0f172a', color: '#e2e8f0', minHeight: '100vh' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, padding: '20px', backgroundColor: '#0f172a', color: '#e2e8f0', overflowY: 'auto' }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Заголовок */}
-        <div style={{ marginBottom: '30px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: '0 0 10px 0' }}>
-            ⊕ Archimedes COSMO Dashboard
-          </h1>
-          <p style={{ color: '#94a3b8', margin: '0' }}>
-            Автономный ИИ-агент enterprise-уровня
-          </p>
+        <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ color: '#3b82f6' }}>⊕</span> Archimedes COSMO Dashboard
+            </h1>
+            <p style={{ color: '#94a3b8', margin: '0' }}>
+              Автономный ИИ-агент enterprise-уровня
+            </p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="hover:bg-[#1e293b] text-[#94a3b8] hover:text-white transition-colors"
+            style={{ 
+              background: 'transparent', border: '1px solid #334155', cursor: 'pointer',
+              padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >
+            <X size={24} />
+          </button>
         </div>
 
         {/* Статус агента */}

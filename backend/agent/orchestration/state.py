@@ -17,6 +17,7 @@ class OrchestrationState:
     session_id: str
     task_description: str
     mode: AgentMode = AgentMode.PLANNING
+    task_hint: str = "default"
     
     # State tracking
     history: List[Dict[str, Any]] = field(default_factory=list)

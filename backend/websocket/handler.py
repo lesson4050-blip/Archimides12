@@ -135,7 +135,24 @@ class ConnectionManager:
             profile = get_profile(agent_profile_id)
             agent.name = profile["name"]
             
-            logger.info(f"Starting COSMO agent '{agent.name}' for {session_id} with task: {task}")
+            # Process UI flags for extra prompt injection
+            use_web_search = data.get("use_web_search", False)
+            use_globe = data.get("use_globe", False)
+            
+            base_prompt = profile.get("system_prompt", agent.system_prompt)
+            extra_instructions = ""
+            
+            if use_web_search:
+                extra_instructions += "\n\nCRITICAL DIRECTIVE: The user has explicitly enabled Web Search. You MUST use web search tools to find current, up-to-date information before concluding your research."
+                
+            if use_globe:
+                extra_instructions += "\n\nCRITICAL DIRECTIVE: The user has explicitly enabled Internet/Globe context. You are encouraged to use the browser tool and navigate through live web pages if deeper contextual surfing is required."
+                
+            agent.system_prompt = base_prompt + extra_instructions
+            if len(agent.history) > 0 and agent.history[0]["role"] == "system":
+                agent.history[0]["content"] = agent.system_prompt
+            
+            logger.info(f"Starting COSMO agent '{agent.name}' for {session_id} with task: {task} | WebSearch: {use_web_search} | Globe: {use_globe}")
             
             # Re-send novnc_ready because the frontend ComputerPanel only mounts after the first task
             novnc_url = sandbox_manager.get_novnc_url(session_id)
@@ -146,8 +163,15 @@ class ConnectionManager:
                 await self.send_event(session_id, event)
 
             # Extra execution parameters (mode: fast/planning)
-            mode = data.get("mode", "planning")
-            asyncio.create_task(agent.process_task(task, websocket_send=sender, mode=mode))
+            mode_req = data.get("mode", "planning")
+            task_hint = data.get("task_hint", "default")
+            
+            asyncio.create_task(agent.process_task(
+                task, 
+                websocket_send=sender, 
+                mode=mode_req, 
+                task_hint=task_hint
+            ))
         else:
             logger.warning(f"No agent found for {session_id}")
 

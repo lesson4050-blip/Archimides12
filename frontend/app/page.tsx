@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 import ComputerPanel from "@/components/ComputerPanel";
+import AgentDashboard from "@/components/AgentDashboard";
 import { AgentEvent } from "@/lib/websocket";
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
   const [isStarted, setIsStarted] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState("archimedes-cosmo");
   const [executionMode, setExecutionMode] = useState<"fast" | "planning">("planning");
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
 
   const [isComputerOpen, setIsComputerOpen] = useState(false);
 
@@ -37,7 +39,13 @@ export default function Home() {
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-[#0A0A0A] text-white">
       {/* Sidebar Component */}
-      <Sidebar onNewTask={handleNewTask} onAgentSelect={setSelectedAgent} selectedAgent={selectedAgent} />
+      <Sidebar 
+        onNewTask={handleNewTask} 
+        onAgentSelect={setSelectedAgent} 
+        selectedAgent={selectedAgent} 
+        onDashboardOpen={() => setIsDashboardOpen(true)}
+        onToggleComputer={() => setIsComputerOpen(!isComputerOpen)}
+      />
       
       {/* Main Area Layout */}
       <div className="flex-1 flex overflow-hidden h-full">
@@ -64,6 +72,11 @@ export default function Home() {
            </div>
          )}
       </div>
+
+      {/* Full Screen Agent Dashboard Overlay */}
+      {isDashboardOpen && (
+        <AgentDashboard onClose={() => setIsDashboardOpen(false)} />
+      )}
     </main>
   );
 }

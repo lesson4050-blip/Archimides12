@@ -9,6 +9,7 @@ from backend.sandbox.singleton import sandbox_manager
 from backend.db.crud import init_db
 from backend.api.routes import router as main_router
 from backend.auth.routes import router as auth_router
+from backend.api.settings_routes import router as settings_router
 
 
 # Configure logging
@@ -27,6 +28,10 @@ async def lifespan(app: FastAPI):
 
     # Start the inactivity reaper
     sandbox_manager.start_reaper()
+    
+    # Start the scheduler
+    from backend.tools.scheduler_singleton import get_scheduler
+    get_scheduler().start()
     
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
@@ -47,7 +52,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,6 +60,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(main_router)
+app.include_router(settings_router)
 
 
 

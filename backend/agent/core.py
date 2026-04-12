@@ -332,7 +332,8 @@ class ArchimedesCosmoAgent:
                 task_description=task_description,
                 mode=mode,
                 session_id=self.session_id or "default",
-                websocket_send=websocket_send
+                websocket_send=websocket_send,
+                task_hint=kwargs.get("task_hint", "default")
             )
             
             if not orch_result.get("success"):

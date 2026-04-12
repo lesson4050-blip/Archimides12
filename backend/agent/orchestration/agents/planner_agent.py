@@ -47,10 +47,27 @@ class PlannerAgent(BaseAgent):
         
         Be concise but thorough. Focus on logic and dependencies. 
         IMPORTANT: Use RUSSIAN language for all descriptions.
+        
+        STEERING DIRECTIVES:
+        - Mode: {task_hint}
+        {hint_instructions}
         """
         
+        hint_instructions = ""
+        if state.task_hint == "search":
+            hint_instructions = "- MISSION: Deep research. Include multiple search steps, source cross-referencing, and a comprehensive summary phase."
+        elif state.task_hint == "plan":
+            hint_instructions = "- MISSION: Presentation. Include steps for outline creation, content generation per slide, and visual formatting."
+        elif state.task_hint == "execute":
+            hint_instructions = "- MISSION: Technical implementation. Focus on direct tool usage (shell, file) and verification."
+        
+        formatted_prompt = system_prompt.format(
+            task_hint=state.task_hint,
+            hint_instructions=hint_instructions
+        )
+        
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": formatted_prompt},
             {"role": "user", "content": f"Task: {state.task_description}"}
         ]
         

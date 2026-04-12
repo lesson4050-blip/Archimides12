@@ -7,30 +7,41 @@ import SettingsModal from "./SettingsModal";
 import HistoryDrawer from "./HistoryDrawer";
 import LibraryDrawer from "./LibraryDrawer";
 import AgentModal from "./AgentModal";
+import SearchModal from "./SearchModal";
+import ProjectModal from "./ProjectModal";
 
 interface SidebarProps {
   onNewTask: () => void;
   onAgentSelect?: (agentId: string) => void;
   selectedAgent?: string;
+  onDashboardOpen?: () => void;
+  onToggleComputer?: () => void;
 }
 
-export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent }: SidebarProps) {
+export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDashboardOpen, onToggleComputer }: SidebarProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
 
   return (
     <>
     <div className="w-[260px] h-full bg-[#121212] flex flex-col text-white text-sm border-r border-[#222]">
       {/* Header / Logo */}
-      <div className="p-5 flex items-center justify-between">
-        <div className="flex items-center gap-3 group cursor-pointer">
-          <div className="w-8 h-8 flex items-center justify-center overflow-hidden shrink-0 transition-transform group-hover:scale-110">
-            <Image src="/logo-optimized.png" alt="Archimedes Logo" width={32} height={32} className="object-contain" />
+      <div className="px-4 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-0 group cursor-pointer -ml-2">
+          <div className="relative h-[44px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105 group-hover:-translate-y-0.5">
+            <div className="absolute inset-0 bg-blue-500/10 blur-xl group-hover:bg-blue-500/30 transition-colors"></div>
+            <img 
+               src="/logo-transparent.png" 
+               alt="Archimedes Spiral Logo" 
+               className="h-full w-auto object-contain relative z-10 drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] transition-transform"
+            />
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-white via-white to-gray-500 bg-clip-text text-transparent" style={{ fontFamily: "'Inter', sans-serif" }}>
+          <div className="flex flex-col ml-[-6px]">
+            <span className="font-bold text-[19px] tracking-tight bg-gradient-to-r from-white via-white to-gray-500 bg-clip-text text-transparent" style={{ fontFamily: "'Inter', sans-serif" }}>
               ARCHIMEDES
             </span>
             <span className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-bold -mt-0.5">
@@ -38,7 +49,7 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent }: Sid
             </span>
           </div>
         </div>
-        <button className="text-gray-500 hover:text-white transition-colors">
+        <button onClick={onToggleComputer} className="text-gray-500 hover:text-white transition-colors">
            <MonitorSmartphone size={20} />
         </button>
       </div>
@@ -64,7 +75,10 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent }: Sid
           <span className="text-[10px] text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded font-medium">Новый</span>
         </button>
 
-        <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left">
+        <button 
+          onClick={() => setIsSearchOpen(true)}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left"
+        >
           <Search size={16} className="text-gray-400" />
           <span>Поиск</span>
         </button>
@@ -82,9 +96,9 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent }: Sid
       <div className="px-3 pt-6 pb-2">
         <div className="flex items-center justify-between text-xs text-gray-500 font-medium px-3 pb-2">
           <span>Проекты</span>
-          <button className="hover:text-gray-300 transition-colors"><Plus size={14} /></button>
+          <button onClick={() => setIsProjectModalOpen(true)} className="hover:text-gray-300 transition-colors"><Plus size={14} /></button>
         </div>
-        <button className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left text-gray-300">
+        <button onClick={() => setIsProjectModalOpen(true)} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left text-gray-300">
           <Plus size={16} className="text-gray-400" />
           <span>New project</span>
         </button>
@@ -126,12 +140,9 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent }: Sid
           <button onClick={() => setIsSettingsOpen(true)} className="text-gray-400 hover:text-white transition-colors">
             <Settings size={18} />
           </button>
-          <button className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={onDashboardOpen} className="text-gray-400 hover:text-white transition-colors">
             <LayoutGrid size={18} />
           </button>
-        </div>
-        <div className="text-xs text-gray-500 flex items-center gap-1 font-medium">
-          from <span className="text-gray-300 font-bold">Google Deepmind</span>
         </div>
       </div>
     </div>
@@ -148,6 +159,8 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent }: Sid
       }}
       currentSelected={selectedAgent}
     />
+    <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+    <ProjectModal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} />
     </>
   );
 }

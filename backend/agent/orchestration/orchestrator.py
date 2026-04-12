@@ -46,13 +46,15 @@ class AgentOrchestrator:
                        task_description: str, 
                        mode: AgentMode = AgentMode.PLANNING,
                        session_id: str = "default",
-                       websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
+                       websocket_send: Optional[Callable] = None,
+                       task_hint: str = "default") -> Dict[str, Any]:
         
         # Initialize state
         state = OrchestrationState(
             session_id=session_id,
             task_description=task_description,
-            mode=mode
+            mode=mode,
+            task_hint=task_hint
         )
         
         # Add initial greeting/task to history
