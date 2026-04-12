@@ -372,25 +372,12 @@ class ArchimedesCosmoAgent:
             if websocket_send:
                 await websocket_send({"type": "agent_error", "content": f"Критическая ошибка оркестрации: {str(e)}"})
             
-            self.state = AgentState.ERROR
-            result = ExecutionResult(
-                task_id=task_id,
-                status=TaskStatus.FAILED,
-                error=str(e),
-                duration=asyncio.get_running_loop().time() - start_time
-            )
-            return result
-            
-        except Exception as e:
-            logger.error(f"ERROR: Ошибка при обработке задачи: {str(e)}")
-            if websocket_send:
-                await websocket_send({"type": "agent_error", "content": f"ERROR: Возникла ошибка: {str(e)}"})
-            
             # Попытка восстановления
             if self.max_retries > 0:
                 self.state = AgentState.RECOVERING
                 return await self._handle_error_with_recovery(task_id, str(e), task_description)
             
+            self.state = AgentState.ERROR
             result = ExecutionResult(
                 task_id=task_id,
                 status=TaskStatus.FAILED,
@@ -398,7 +385,6 @@ class ArchimedesCosmoAgent:
                 duration=asyncio.get_running_loop().time() - start_time
             )
             
-            self.state = AgentState.ERROR
             self.results[task_id] = result
             self.execution_history.append(result)
             return result

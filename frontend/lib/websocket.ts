@@ -21,6 +21,7 @@ export class ArchimedesSocket {
   private sessionId: string;
   private onMessage: (event: AgentEvent) => void;
   private baseUrl: string;
+  private shouldReconnect: boolean = true;
 
   constructor(sessionId: string, onMessage: (event: AgentEvent) => void) {
     this.sessionId = sessionId;
@@ -45,10 +46,13 @@ export class ArchimedesSocket {
       };
 
       this.socket.onclose = () => {
-        console.log("WebSocket connection closed. Retrying in 3s...");
-        setTimeout(() => {
-          if (this.socket) this.connect();
-        }, 3000);
+        console.log("WebSocket connection closed.");
+        if (this.shouldReconnect) {
+          console.log("Retrying in 3s...");
+          setTimeout(() => {
+            this.connect();
+          }, 3000);
+        }
       };
 
       this.socket.onerror = (err) => {
@@ -60,8 +64,8 @@ export class ArchimedesSocket {
   }
 
   disconnect() {
+    this.shouldReconnect = false;
     if (this.socket) {
-      this.socket.onclose = null; // Prevent auto-reconnect
       this.socket.close();
       this.socket = null;
     }

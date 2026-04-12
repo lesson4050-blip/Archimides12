@@ -1,7 +1,8 @@
-import asyncio
 import logging
 from typing import Dict, Any, Optional
 from backend.sandbox.executor import SandboxExecutor
+
+logger = logging.getLogger(__name__)
 
 class BrowserTool:
     """

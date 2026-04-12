@@ -53,8 +53,16 @@ class VideoTool:
                 safe_output = shlex.quote(output_path)
                 cmd = f"ffmpeg -i {safe_input} {safe_output} -y"
             elif action == "trim":
+                import re
+                time_pattern = re.compile(r'^\d{2}:\d{2}:\d{2}(\.\d+)?$')
                 start = kwargs.get("start_time", "00:00:00")
                 duration = kwargs.get("duration", "00:00:10")
+                
+                if not time_pattern.match(start):
+                    return {"success": False, "error": "Invalid start_time format. Use HH:MM:SS"}
+                if not time_pattern.match(duration):
+                    return {"success": False, "error": "Invalid duration format. Use HH:MM:SS"}
+                
                 safe_input = shlex.quote(input_path)
                 safe_output = shlex.quote(output_path)
                 cmd = f"ffmpeg -i {safe_input} -ss {start} -t {duration} -c copy {safe_output} -y"
