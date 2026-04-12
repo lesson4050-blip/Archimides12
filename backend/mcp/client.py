@@ -2,12 +2,6 @@ import logging
 import asyncio
 import sys
 from typing import Dict, List, Any, Optional
-from mcp.client.session import ClientSession
-from mcp.client.stdio import stdio_client
-from mcp.client.sse import sse_client
-
-logger = logging.getLogger(__name__)
-
 from mcp import StdioServerParameters
 from mcp.client.session import ClientSession
 from mcp.client.stdio import stdio_client
@@ -25,6 +19,7 @@ class ArchimedesMCPClient:
         self.sessions: Dict[str, ClientSession] = {}
         self.exit_stack: Dict[str, anyio.abc.AsyncResource] = {}
         self.external_tools: List[Dict[str, Any]] = []
+        self._stop_events: Dict[str, asyncio.Event] = {}
 
     async def connect_all(self):
         """Initialize connections to all configured external servers."""
@@ -68,13 +63,23 @@ class ArchimedesMCPClient:
                         self.external_tools.append(tool_def)
                         logger.info(f"MCP Client: Discovered tool '{tool.name}' on server '{name}'")
                     
-                    # Keep session alive (basic implementation for now)
-                    while name in self.sessions:
-                        await asyncio.sleep(1)
+                    # Fix 13: Replace busy-wait with Event
+                    stop_event = asyncio.Event()
+                    self._stop_events[name] = stop_event
+                    await stop_event.wait()
                         
         except Exception as e:
             logger.error(f"MCP Server '{name}' session error: {e}")
             self.sessions.pop(name, None)
+            self._stop_events.pop(name, None)
+
+    async def disconnect_server(self, name: str):
+        """Disconnect and cleanup a single MCP server."""
+        if name in self._stop_events:
+            self._stop_events[name].set()
+            self.sessions.pop(name, None)
+            self._stop_events.pop(name, None)
+            logger.info(f"MCP Client: Disconnected server '{name}'")
 
     async def discover_tools(self) -> List[Dict[str, Any]]:
         """Fetch all available tools from all connected servers."""
@@ -87,7 +92,7 @@ class ArchimedesMCPClient:
             try:
                 result = await session.call_tool(tool_name, arguments=params)
                 # MCP results can have multiple pieces of content
-                output = "\\n".join([c.text for c in result.content if hasattr(c, "text")])
+                output = "\n".join([c.text for c in result.content if hasattr(c, "text")])
                 return {"success": True, "output": output}
             except Exception as e:
                 return {"success": False, "error": str(e)}

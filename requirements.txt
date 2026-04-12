@@ -23,7 +23,7 @@ google-genai
 ollama
 chromadb
 python-pptx
-PyPDF2
+pypdf
 pdf2image
 PyGithub
 gTTS

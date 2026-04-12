@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import subprocess
+import shlex
 from typing import Dict, Any, List, Optional
 try:
     import gspread
@@ -48,16 +49,23 @@ class VideoTool:
             output_path = kwargs.get("output_path", "output_video.mp4")
             
             if action == "convert":
-                cmd = f"ffmpeg -i {input_path} {output_path} -y"
+                safe_input = shlex.quote(input_path)
+                safe_output = shlex.quote(output_path)
+                cmd = f"ffmpeg -i {safe_input} {safe_output} -y"
             elif action == "trim":
                 start = kwargs.get("start_time", "00:00:00")
                 duration = kwargs.get("duration", "00:00:10")
-                cmd = f"ffmpeg -i {input_path} -ss {start} -t {duration} -c copy {output_path} -y"
+                safe_input = shlex.quote(input_path)
+                safe_output = shlex.quote(output_path)
+                cmd = f"ffmpeg -i {safe_input} -ss {start} -t {duration} -c copy {safe_output} -y"
             elif action == "extract_audio":
                 output_path = kwargs.get("output_path", "audio.mp3")
-                cmd = f"ffmpeg -i {input_path} -q:a 0 -map a {output_path} -y"
+                safe_input = shlex.quote(input_path)
+                safe_output = shlex.quote(output_path)
+                cmd = f"ffmpeg -i {safe_input} -q:a 0 -map a {safe_output} -y"
             elif action == "info":
-                cmd = f"ffprobe -v error -show_format -show_streams {input_path}"
+                safe_input = shlex.quote(input_path)
+                cmd = f"ffprobe -v error -show_format -show_streams {safe_input}"
             else:
                 return {"success": False, "error": f"Неизвестное действие: {action}"}
             
@@ -163,60 +171,3 @@ class SheetsTool:
             logger.error(f"Ошибка SheetsTool: {e}")
             return {"success": False, "error": str(e)}
 
-class ScheduleTool:
-    """
-    Инструмент для планирования задач (cron).
-    Использует APScheduler для выполнения задач по расписанию.
-    """
-    def __init__(self):
-        self.scheduler = AsyncIOScheduler() if SCHEDULER_AVAILABLE else None
-        if self.scheduler:
-            self.scheduler.start()
-
-    def get_definition(self) -> Dict[str, Any]:
-        return {
-            "name": "schedule",
-            "description": "Планирование задач (cron, интервалы).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {"type": "string", "enum": ["add", "list", "remove"]},
-                    "job_id": {"type": "string", "description": "Уникальный ID задачи"},
-                    "cron": {"type": "string", "description": "Cron выражение (* * * * *)"},
-                    "interval": {"type": "integer", "description": "Интервал в секундах"},
-                    "command": {"type": "string", "description": "Команда для выполнения"}
-                },
-                "required": ["action"]
-            }
-        }
-
-    async def execute(self, action: str, **kwargs) -> Dict[str, Any]:
-        if not SCHEDULER_AVAILABLE:
-            return {"success": False, "error": "Библиотека APScheduler не установлена."}
-            
-        try:
-            if action == "add":
-                job_id = kwargs.get("job_id")
-                cron = kwargs.get("cron")
-                cmd = kwargs.get("command")
-                
-                async def job_func():
-                    logger.info(f"Выполнение запланированной задачи {job_id}: {cmd}")
-                    # Здесь может быть вызов другого инструмента или shell команды
-                    os.system(cmd)
-                
-                if cron:
-                    self.scheduler.add_job(job_func, 'cron', second=cron, id=job_id)
-                else:
-                    interval = kwargs.get("interval", 60)
-                    self.scheduler.add_job(job_func, 'interval', seconds=interval, id=job_id)
-                
-                return {"success": True, "job_id": job_id}
-            elif action == "list":
-                jobs = [{"id": j.id, "next_run": str(j.next_run_time)} for j in self.scheduler.get_jobs()]
-                return {"success": True, "jobs": jobs}
-            else:
-                return {"success": False, "error": f"Неизвестное действие: {action}"}
-        except Exception as e:
-            logger.error(f"Ошибка ScheduleTool: {e}")
-            return {"success": False, "error": str(e)}

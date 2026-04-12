@@ -50,6 +50,7 @@ class ConnectionManager:
                 except Exception:
                     pass
             self.buffers[session_id].clear()
+            del self.buffers[session_id]
 
         # --- Manus lifecycle: create container on WS connect ---
         if sandbox_manager.active_session_count >= settings.SANDBOX_MAX_CONTAINERS:
@@ -70,12 +71,16 @@ class ConnectionManager:
 
         if session_id not in self.agent_loops:
             self.agent_loops[session_id] = ArchimedesCosmoAgent(name="Archimedes COSMO", session_id=session_id)
+            asyncio.create_task(self.agent_loops[session_id].initialize())
 
         logger.info(f"WebSocket connected for session: {session_id}")
 
     async def disconnect(self, session_id: str):
         if session_id in self.active_connections:
             del self.active_connections[session_id]
+        
+        if session_id in self.buffers:
+            del self.buffers[session_id]
 
         # Do NOT destroy container immediately on disconnect for reconnect resilience.
         # It will be reaped by SandboxManager's reaper task after inactivity timeout.

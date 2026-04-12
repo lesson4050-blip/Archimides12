@@ -14,6 +14,9 @@ except ImportError:
     logger.warning("APScheduler not installed. Run: pip install apscheduler")
 
 
+import os
+import json
+
 class ScheduleTool:
     """
     Schedules tasks for periodic execution using APScheduler.
@@ -21,14 +24,58 @@ class ScheduleTool:
     def __init__(self):
         self._scheduler = None
         self._jobs: List[Dict[str, Any]] = []
+        self._persistence_file = "scheduler_jobs.json"
 
         if APSCHEDULER_AVAILABLE:
             self._scheduler = AsyncIOScheduler()
+            self._load_jobs()
+
+    def _save_jobs(self):
+        """Save current jobs to a JSON file."""
+        try:
+            with open(self._persistence_file, "w") as f:
+                json.dump(self._jobs, f)
+            logger.info(f"ScheduleTool: Jobs saved to {self._persistence_file}")
+        except Exception as e:
+            logger.error(f"ScheduleTool: Failed to save jobs: {e}")
+
+    def _load_jobs(self):
+        """Load jobs from a JSON file and re-register them."""
+        if not os.path.exists(self._persistence_file):
+            return
+
+        try:
+            with open(self._persistence_file, "r") as f:
+                self._jobs = json.load(f)
+            logger.info(f"ScheduleTool: Loaded {len(self._jobs)} jobs from {self._persistence_file}")
+            
+            # Note: We don't re-register yet because scheduler needs to be started
+            # Registration will happen if we start the scheduler or on demand
+        except Exception as e:
+            logger.error(f"ScheduleTool: Failed to load jobs: {e}")
 
     def start(self):
         if self._scheduler and not self._scheduler.running:
             self._scheduler.start()
             logger.info("ScheduleTool: APScheduler started.")
+            
+            # Re-register loaded jobs
+            for job in self._jobs:
+                try:
+                    if job.get("cron"):
+                        trigger = CronTrigger.from_crontab(job["cron"])
+                    elif job.get("interval_seconds"):
+                        trigger = IntervalTrigger(seconds=job["interval_seconds"])
+                    else:
+                        continue
+                        
+                    def job_fn(desc=job.get('task', '')):
+                        logger.info(f"Scheduled job triggered: {desc}")
+
+                    self._scheduler.add_job(job_fn, trigger=trigger, id=job["id"])
+                    logger.info(f"ScheduleTool: Re-registered job {job['id']}")
+                except Exception as e:
+                    logger.error(f"ScheduleTool: Failed to re-register job {job['id']}: {e}")
 
     async def execute(self, action: str, cron: Optional[str] = None,
                       interval_seconds: Optional[int] = None,
@@ -59,7 +106,14 @@ class ScheduleTool:
                     logger.info(f"Scheduled job triggered: {task_description or job_id}")
 
                 self._scheduler.add_job(job_fn, trigger=trigger, id=job_id)
-                self._jobs.append({"id": job_id, "trigger": trigger_desc, "task": task_description})
+                self._jobs.append({
+                    "id": job_id, 
+                    "trigger": trigger_desc, 
+                    "task": task_description,
+                    "cron": cron,
+                    "interval_seconds": interval_seconds
+                })
+                self._save_jobs()
 
                 return {
                     "success": True,
@@ -84,6 +138,7 @@ class ScheduleTool:
             try:
                 self._scheduler.remove_job(job_id)
                 self._jobs = [j for j in self._jobs if j["id"] != job_id]
+                self._save_jobs()
                 return {"success": True, "output": f"Job '{job_id}' removed."}
             except Exception as e:
                 return {"success": False, "error": str(e)}

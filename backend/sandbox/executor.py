@@ -49,8 +49,8 @@ class PersistentShell:
                 lambda: self._socket._sock.send(full_cmd.encode()))
             
             output = ""
-            deadline = asyncio.get_event_loop().time() + timeout
-            while asyncio.get_event_loop().time() < deadline:
+            deadline = asyncio.get_running_loop().time() + timeout
+            while asyncio.get_running_loop().time() < deadline:
                 try:
                     chunk = await asyncio.wait_for(
                         loop.run_in_executor(None, 

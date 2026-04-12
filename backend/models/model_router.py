@@ -29,12 +29,13 @@ class ModelRouter:
             self.gemini = None
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
-        # PRESET: Ollama First for reasoning, then Cloud failover
+        # PRESET: Route based on task_hint
         if task_hint in self.OLLAMA_FIRST_TASKS:
             order = [self.ollama, self.groq, self.gemini]
+        elif task_hint in {"search", "browse", "realtime"}:
+            order = [self.groq, self.gemini, self.ollama]
         else:
-            # For tools like browser/search, Groq/Gemini are often better but Ollama is stable
-            order = [self.ollama, self.groq, self.gemini]
+            order = [self.groq, self.ollama, self.gemini]
 
         # Filter out None clients (missing API keys)
         order = [c for c in order if c is not None]
@@ -57,8 +58,10 @@ class ModelRouter:
     async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
         if task_hint in self.OLLAMA_FIRST_TASKS:
             order = [self.ollama, self.groq, self.gemini]
+        elif task_hint in {"search", "browse", "realtime"}:
+            order = [self.groq, self.gemini, self.ollama]
         else:
-            order = [self.ollama, self.groq, self.gemini]
+            order = [self.groq, self.ollama, self.gemini]
             
         order = [c for c in order if c is not None]
 

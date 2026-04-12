@@ -298,7 +298,7 @@ async def list_workspace_files(user: dict = Depends(get_current_user)) -> Dict[s
     }
 
 @router.get("/sandbox/{session_id}/vnc", summary="Получить URL-адрес VNC для сессии")
-async def get_sandbox_vnc(session_id: str) -> Dict[str, Any]:
+async def get_sandbox_vnc(session_id: str, user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Возвращает URL-адрес VNC для указанной сессии."""
     from backend.sandbox.singleton import sandbox_manager
     

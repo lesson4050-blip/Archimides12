@@ -2,7 +2,7 @@ import os
 import logging
 from typing import Dict, Any, List, Optional
 try:
-    import PyPDF2
+    import pypdf
     from pdf2image import convert_from_path
     PDF_AVAILABLE = True
 except ImportError:
@@ -38,7 +38,7 @@ class PDFTool:
 
     async def execute(self, action: str, **kwargs) -> Dict[str, Any]:
         if not PDF_AVAILABLE:
-            return {"success": False, "error": "Библиотеки PyPDF2 или pdf2image не установлены. Установите их с помощью 'pip install PyPDF2 pdf2image'"}
+            return {"success": False, "error": "Библиотеки pypdf или pdf2image не установлены. Установите их с помощью 'pip install pypdf pdf2image'"}
             
         try:
             path = kwargs.get("path")
@@ -49,9 +49,10 @@ class PDFTool:
                 
                 text = ""
                 with open(path, 'rb') as f:
-                    reader = PyPDF2.PdfReader(f)
+                    reader = pypdf.PdfReader(f)
                     for page in reader.pages:
-                        text += page.extract_text() + "\n"
+                        text += page.extract_text() or ""
+                        text += "\n"
                 
                 return {"success": True, "content": text, "pages": len(reader.pages)}
                 
@@ -76,7 +77,7 @@ class PDFTool:
                     return {"success": False, "error": f"Файл не найден: {path}"}
                 
                 with open(path, 'rb') as f:
-                    reader = PyPDF2.PdfReader(f)
+                    reader = pypdf.PdfReader(f)
                     info = reader.metadata
                     return {
                         "success": True, 

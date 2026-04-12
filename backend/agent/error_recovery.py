@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 import logging
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class ErrorRecovery:
             "tool": tool_name,
             "params": params,
             "error": error,
-            "timestamp": None # or datetime
+            "timestamp": datetime.datetime.utcnow().isoformat()
         })
 
     def should_retry(self, tool_name: str, params: Dict[str, Any]) -> bool:

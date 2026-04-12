@@ -55,8 +55,8 @@ class ExposeTool:
 
             # Read log file for up to 15 seconds to capture the public URL
             url = None
-            deadline = asyncio.get_event_loop().time() + 15
-            while asyncio.get_event_loop().time() < deadline:
+            deadline = asyncio.get_running_loop().time() + 15
+            while asyncio.get_running_loop().time() < deadline:
                 cat_res = await self.executor.run_command(session_id, f"cat /tmp/tunnel_{port}.log")
                 if cat_res.get("success"):
                     line_str = cat_res.get("output", "")

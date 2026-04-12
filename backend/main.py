@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Archimedes Backend starting up...")
+    
+    if not settings.JWT_SECRET_KEY:
+        import secrets
+        settings.JWT_SECRET_KEY = secrets.token_hex(32)
+        logger.warning("IMPORTANT: JWT_SECRET_KEY is not set in .env! Using a temporary key for this session. Existing tokens will be invalidated on server restart.")
+    
     await init_db()
 
     # Clean up stale containers from previous runs

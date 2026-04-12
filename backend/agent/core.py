@@ -130,26 +130,31 @@ class ArchimedesCosmoAgent:
         # MCP Integration: Initialize and connect external servers
         from backend.mcp.client import ArchimedesMCPClient
         self.mcp_client = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
-        asyncio.create_task(self._init_mcp())
+        # asyncio.create_task(self._init_mcp())  # Moved to initialize()
 
         # Registration of extended tools
         self._init_extended_tools()
         
         # Sync initial history
-        self.history: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
+        # self.history: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]  # REMOVED: defined twice
         for msg in self.history:
             self.context_manager.add_message(msg["role"], msg.get("content", ""))
             
         logger.info(f"OK: Инициализирован {self.name} (ID: {self.agent_id})")
+
+    async def initialize(self):
+        """Async initialization for the agent."""
+        await self._init_mcp()
 
     def _init_extended_tools(self):
         """Инициализация и регистрация всех доступных инструментов."""
         try:
             from .tools.pdf_tool import PDFTool
             from .tools.image_gen_tool import ImageGenTool
-            from .tools.github_tool import GithubTool
+            # from .tools.github_tool import GithubTool # TODO: create backend/agent/tools/github_tool.py
             from .tools.email_tool import EmailTool
-            from .tools.utility_tools import VideoTool, AudioTool, SheetsTool, ScheduleTool
+            from .tools.utility_tools import VideoTool, AudioTool, SheetsTool
+            from backend.tools.schedule_tool import ScheduleTool
             
             # Core tools from backend.tools
             from backend.tools.file_tool import FileTool
@@ -168,8 +173,8 @@ class ArchimedesCosmoAgent:
             self.image_gen_tool = ImageGenTool()
             self.register_tool("image_gen", self.image_gen_tool.execute)
             
-            self.github_tool = GithubTool()
-            self.register_tool("github", self.github_tool.execute)
+            # self.github_tool = GithubTool()
+            # self.register_tool("github", self.github_tool.execute)
             
             self.email_tool = EmailTool()
             self.register_tool("email", self.email_tool.execute)
@@ -311,7 +316,7 @@ class ArchimedesCosmoAgent:
     async def process_task(self, task_description: str, websocket_send: Callable = None, **kwargs) -> ExecutionResult:
         """Обработать задачу с использованием мультиагентной оркестрации."""
         task_id = str(uuid.uuid4())
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
         
         # Get execution mode (Fast vs Planning)
         mode_str = kwargs.get("mode", "planning").lower()
@@ -349,7 +354,7 @@ class ArchimedesCosmoAgent:
                 task_id=task_id,
                 status=TaskStatus.COMPLETED,
                 output=final_output,
-                duration=asyncio.get_event_loop().time() - start_time,
+                duration=asyncio.get_running_loop().time() - start_time,
                 metadata={
                     "mode": mode.value,
                     "plan": orch_result.get("plan")
@@ -372,7 +377,7 @@ class ArchimedesCosmoAgent:
                 task_id=task_id,
                 status=TaskStatus.FAILED,
                 error=str(e),
-                duration=asyncio.get_event_loop().time() - start_time
+                duration=asyncio.get_running_loop().time() - start_time
             )
             return result
             
@@ -390,7 +395,7 @@ class ArchimedesCosmoAgent:
                 task_id=task_id,
                 status=TaskStatus.FAILED,
                 error=str(e),
-                duration=asyncio.get_event_loop().time() - start_time
+                duration=asyncio.get_running_loop().time() - start_time
             )
             
             self.state = AgentState.ERROR

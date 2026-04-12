@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 10
     
     # Auth / JWT — IMPORTANT: override JWT_SECRET_KEY in .env for production!
-    JWT_SECRET_KEY: str = secrets.token_hex(32)
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     AUTH_ENABLED: bool = False  # Set True to enforce auth on all endpoints

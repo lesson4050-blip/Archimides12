@@ -133,8 +133,13 @@ const AgentDashboard: React.FC<DashboardProps> = ({ onClose }) => {
         {/* Заголовок */}
         <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ color: '#3b82f6' }}>⊕</span> Archimedes COSMO Dashboard
+            <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <img 
+                src="/logo-transparent.png" 
+                alt="Logo" 
+                style={{ height: '44px', width: 'auto', filter: 'drop-shadow(0 0 12px rgba(59, 130, 246, 0.4))' }} 
+              />
+              Archimedes COSMO Dashboard
             </h1>
             <p style={{ color: '#94a3b8', margin: '0' }}>
               Автономный ИИ-агент enterprise-уровня
