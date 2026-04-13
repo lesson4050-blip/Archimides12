@@ -7,15 +7,18 @@ from backend.memory.context_manager import ContextManager
 
 class MockModelRouter:
     async def generate(self, messages, **kwargs):
-        content = str(messages[-1]["content"])
-        if "Task:" in content:
-            # Planner response
+        # Distinguish by role/instructions in last system message
+        system_msgs = [m for m in messages if m.get("role") == "system"]
+        last_system = system_msgs[-1].get("content", "") if system_msgs else ""
+        
+        if "Planner Agent" in last_system:
             return {"text": '{"strategy": "sequential", "phases": [{"title": "Test", "subtasks": [{"type": "execute", "description": "Do something"}]}]}'}
-        elif "Do something" in content:
-            # Executor response
-            return {"text": "Step completed successfully", "tool_call": {"name": "message", "params": {"type": "result", "content": "Final Result"}}}
-        elif "AGENT ATTEMPT" in content:
-            # Critic response
+        elif "Executor Agent" in last_system:
+            # If we've already seen a tool result for 'message', return a final confirmation
+            if any(m.get("role") == "tool" and m.get("name") == "message" for m in messages):
+                return {"text": "Final Result"}
+            return {"text": "Executing...", "tool_call": {"name": "message", "params": {"type": "result", "content": "Final Result"}}}
+        elif "Critic" in last_system or "AGENT ATTEMPT" in last_system:
             return {"text": "VERDICT: PASS"}
         return {"text": "Generic response"}
 
@@ -24,8 +27,9 @@ async def test_orchestrator_planning_mode():
     """Verify the full Planner -> Executor -> Critic lifecycle."""
     router = MockModelRouter()
     registry = ToolRegistry()
-    # Register dummy message tool
-    registry.register("message", lambda **kwargs: {"success": True})
+    async def dummy_message(**kwargs):
+        return {"success": True}
+    registry.register("message", dummy_message)
     
     cm = ContextManager(max_tokens=1000)
     orch = AgentOrchestrator(router, registry, cm)
@@ -46,7 +50,9 @@ async def test_orchestrator_fast_mode():
     """Verify the direct execution lifecycle (no planning)."""
     router = MockModelRouter()
     registry = ToolRegistry()
-    registry.register("message", lambda **kwargs: {"success": True})
+    async def dummy_message(**kwargs):
+        return {"success": True}
+    registry.register("message", dummy_message)
     
     cm = ContextManager(max_tokens=1000)
     orch = AgentOrchestrator(router, registry, cm)

@@ -18,21 +18,21 @@ class ArchimedesMCPServer:
         self._register_tools()
 
     def _register_tools(self):
-        """Map native tools to MCP tools."""
         for defn in self.tool_registry.get_all_tool_definitions():
             func_name = defn["function"]["name"]
             func_desc = defn["function"]["description"]
-            
-            # Create a wrapper for MCP
-            # In a real scenario, we'd need to inspect types more closely
-            @self.mcp.tool(name=func_name, description=func_desc)
-            async def mcp_wrapper(**kwargs) -> str:
-                # Local session_id for MCP isolation if needed
-                session_id = kwargs.pop("session_id", "mcp-external")
-                result = await self.tool_registry.execute_tool(func_name, kwargs, session_id=session_id)
-                if result.get("success"):
-                    return str(result.get("output", result.get("content", "OK")))
-                return f"Error: {result.get('error', 'Unknown error')}"
+            self._make_mcp_tool(func_name, func_desc)
+
+    def _make_mcp_tool(self, func_name: str, func_desc: str):
+        @self.mcp.tool(name=func_name, description=func_desc)
+        async def mcp_wrapper(**kwargs) -> str:
+            session_id = kwargs.pop("session_id", "mcp-external")
+            result = await self.tool_registry.execute_tool(
+                func_name, kwargs, session_id=session_id
+            )
+            if result.get("success"):
+                return str(result.get("output", result.get("content", "OK")))
+            return f"Error: {result.get('error', 'Unknown error')}"
 
     def run(self, host: str = "0.0.0.0", port: int = 8002):
         """Run the MCP server (typically stdio or sse)."""

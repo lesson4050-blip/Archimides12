@@ -142,8 +142,7 @@ echo "   cd /app/frontend && npm run dev"
 echo ""
 
 # Запустить демонстрацию агента
-echo "🤖 Запуск демонстрации агента..."
-python3 /app/agent_realtime_demo.py
+echo "✅ Archimedes is ready. Backend running on port 8000."
 echo ""
 
 echo "======================================"

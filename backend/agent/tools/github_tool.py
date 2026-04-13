@@ -17,22 +17,25 @@ class GithubTool:
 
     def get_definition(self) -> Dict[str, Any]:
         return {
-            "name": "github",
-            "description": "Интеграция с GitHub: работа с репозиториями, файлами и поиском.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["get_repo", "search_repos", "get_file", "list_files", "create_repo"],
-                        "description": "Действие для выполнения"
+            "type": "function",
+            "function": {
+                "name": "github",
+                "description": "Интеграция с GitHub: работа с репозиториями, файлами и поиском.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["get_repo", "search_repos", "get_file", "list_files", "create_repo"],
+                            "description": "Действие для выполнения"
+                        },
+                        "repo_name": {"type": "string", "description": "Полное имя репозитория (owner/repo)"},
+                        "path": {"type": "string", "description": "Путь к файлу в репозитории"},
+                        "query": {"type": "string", "description": "Поисковый запрос"},
+                        "token": {"type": "string", "description": "GitHub Access Token (опционально)"}
                     },
-                    "repo_name": {"type": "string", "description": "Полное имя репозитория (owner/repo)"},
-                    "path": {"type": "string", "description": "Путь к файлу в репозитории"},
-                    "query": {"type": "string", "description": "Поисковый запрос"},
-                    "token": {"type": "string", "description": "GitHub Access Token (опционально)"}
-                },
-                "required": ["action"]
+                    "required": ["action"]
+                }
             }
         }
 

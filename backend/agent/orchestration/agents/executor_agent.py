@@ -95,7 +95,8 @@ class ExecutorAgent(BaseAgent):
                 messages = self.context_manager.get_messages()
 
             try:
-                self.tool_registry.sandbox_manager.touch_session(state.session_id)
+                from backend.sandbox.singleton import sandbox_manager
+                sandbox_manager.touch_session(state.session_id)
             except Exception:
                 pass
 

@@ -61,36 +61,25 @@ class ScheduleTool:
             logger.info("ScheduleTool: APScheduler started.")
 
     def _reregister_jobs(self):
-        """Re-register persisted jobs with APScheduler after startup."""
         reregistered = 0
         for job in self._jobs:
             try:
                 trigger_desc = job.get("trigger", "")
                 job_id = job.get("id")
-                
                 def job_fn(desc=job.get("task", job_id)):
                     logger.info(f"Scheduled job triggered: {desc}")
-                
                 if trigger_desc.startswith("cron:"):
-                    cron_expr = trigger_desc.replace("cron:", "").strip()
+                    cron_expr = trigger_desc.replace("cron: ", "").strip()
                     trigger = CronTrigger.from_crontab(cron_expr)
                 elif trigger_desc.startswith("every"):
                     seconds = int(''.join(filter(str.isdigit, trigger_desc)))
                     trigger = IntervalTrigger(seconds=seconds)
                 else:
-                    # Fallback to direct field check if trigger_desc parsing fails
-                    if job.get("cron"):
-                        trigger = CronTrigger.from_crontab(job["cron"])
-                    elif job.get("interval_seconds"):
-                        trigger = IntervalTrigger(seconds=job["interval_seconds"])
-                    else:
-                        continue
-                    
+                    continue
                 self._scheduler.add_job(job_fn, trigger=trigger, id=job_id)
                 reregistered += 1
             except Exception as e:
-                logger.warning(f"ScheduleTool: Could not re-register job {job.get('id')}: {e}")
-        
+                logger.warning(f"Could not re-register job {job.get('id')}: {e}")
         if reregistered:
             logger.info(f"ScheduleTool: Re-registered {reregistered} persisted jobs.")
 

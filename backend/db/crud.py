@@ -43,10 +43,26 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def init_db():
-    """Initialize database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables initialized.")
+    """Initialize database tables with robust fallback."""
+    global engine, AsyncSessionLocal
+    
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables initialized.")
+    except Exception as e:
+        if settings.DATABASE_URL.startswith("postgresql"):
+            logger.warning(f"PostgreSQL connection failed ({e}), falling back to SQLite")
+            # Re-initialize engine and sessionmaker with SQLite
+            engine = create_async_engine(settings.DATABASE_URL_SQLITE, echo=False)
+            AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+            
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info(f"Database tables initialized using SQLite fallback ({settings.DATABASE_URL_SQLITE}).")
+        else:
+            logger.error(f"Critical database initialization error: {e}")
+            raise
 
     # Auto-create dev-user if AUTH_ENABLED is False (dev bypass mode)
     if not settings.AUTH_ENABLED:

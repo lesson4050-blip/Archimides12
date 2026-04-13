@@ -26,18 +26,18 @@ class PlannerAgent(BaseAgent):
         You must output ONLY a valid JSON object.
         LANGUAGE: All descriptions and text MUST BE IN RUSSIAN.
         JSON Structure:
-        {
+        {{
             "strategy": "sequential" | "parallel",
             "phases": [
-                {
+                {{
                     "title": "Phase title",
                     "subtasks": [
-                        {"type": "execute", "description": "Description of subtask", "params": {}},
+                        {{"type": "execute", "description": "Description of subtask", "params": {{}}}},
                         ...
                     ]
-                }
+                }}
             ]
-        }
+        }}
         
         SUBTASK TYPES:
         - execute: General task execution (research, coding, analysis).

@@ -151,7 +151,7 @@ class ArchimedesCosmoAgent:
         try:
             from .tools.pdf_tool import PDFTool
             from .tools.image_gen_tool import ImageGenTool
-            # from .tools.github_tool import GithubTool # TODO: create backend/agent/tools/github_tool.py
+            from .tools.github_tool import GithubTool
             from .tools.email_tool import EmailTool
             from .tools.utility_tools import VideoTool, AudioTool, SheetsTool
             from backend.tools.schedule_tool import ScheduleTool
@@ -173,8 +173,8 @@ class ArchimedesCosmoAgent:
             self.image_gen_tool = ImageGenTool()
             self.register_tool("image_gen", self.image_gen_tool.execute)
             
-            # self.github_tool = GithubTool()
-            # self.register_tool("github", self.github_tool.execute)
+            self.github_tool = GithubTool()
+            self.register_tool("github", self.github_tool.execute)
             
             self.email_tool = EmailTool()
             self.register_tool("email", self.email_tool.execute)
