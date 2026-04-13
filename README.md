@@ -20,6 +20,19 @@ Full-stack agentic platform with Docker sandbox, real-time browser control, Chro
 | **🧪 Self-Review** | Adversarial quality gate on agent outputs before delivery |
 | **🗄️ PostgreSQL** | Production database with SQLite dev fallback |
 | **📐 32K Context** | tiktoken-accurate sliding window with safe tool-chain preservation |
+| **🚀 R2-R3 Fixes** | 31 critical bugs resolved across agent core, tools, and infrastructure |
+
+---
+
+## 🛠️ Recent Changes (Round 2 & 3)
+
+- **31 Bugs Fixed**: Completed a comprehensive three-round cleanup of critical issues across the entire codebase.
+- **Orchestration Stability**: Fixed Planner-Executor-Critic loop logic and resolved `KeyError` in `PlannerAgent`.
+- **Security & Validation**: Sanitized tool inputs and consolidated `process_task` error handling into a single recovery block.
+- **Tool Enhancements**: Enabled `GithubTool`, fixed its definition format, and re-implemented job re-registration for `ScheduleTool`.
+- **Context Intelligence**: Improved sliding window summarization logic and verified token reduction through automated tests.
+- **Infrastructure Cleanup**: Removed deprecated calls from `Dockerfile` and upgraded core dependencies (e.g., `pypdf`, `APScheduler`).
+- **Testing 100% Pass**: updated and fixed the full test suite to use robust async-compatible mocks.
 
 ---
 
