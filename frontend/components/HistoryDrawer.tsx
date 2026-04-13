@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { X, Search, Clock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface Task {
   task_id: string;
   description: string;
@@ -30,7 +32,7 @@ export default function HistoryDrawer({ isOpen, onClose }: HistoryDrawerProps) {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/v1/tasks");
+      const res = await fetch(`${API_BASE}/api/v1/tasks`);
       const data = await res.json();
       if (data.tasks) {
         setTasks(data.tasks.sort((a: Task, b: Task) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));

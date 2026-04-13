@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { X, Library, FileText, Download, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface WorkspaceFile {
   name: string;
   path: string;
@@ -29,7 +31,7 @@ export default function LibraryDrawer({ isOpen, onClose }: LibraryDrawerProps) {
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/v1/workspace");
+      const res = await fetch(`${API_BASE}/api/v1/workspace`);
       const data = await res.json();
       if (data.files) {
         setFiles(data.files.sort((a: WorkspaceFile, b: WorkspaceFile) => new Date(b.modified).getTime() - new Date(a.modified).getTime()));

@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 class MonitorTool:
     """24/7 мониторинг URL с автоматическим запуском задач при изменении."""
     
-    _monitors: Dict[str, Dict] = {}
-    _tasks: Dict[str, asyncio.Task] = {}
+    def __init__(self):
+        self._monitors: Dict[str, Dict] = {}
+        self._tasks: Dict[str, asyncio.Task] = {}
     
     def get_definition(self) -> Dict[str, Any]:
         return {

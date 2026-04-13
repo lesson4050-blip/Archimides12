@@ -1,7 +1,6 @@
 from typing import Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
-import secrets
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 

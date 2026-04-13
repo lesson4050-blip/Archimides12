@@ -19,6 +19,8 @@ import VoiceVisualizer from "./VoiceVisualizer";
 import SettingsModal from "./SettingsModal";
 import { AGENT_MODES } from "@/lib/modes";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface Message {
   role: "user" | "assistant" | "system";
   type: "text" | "info" | "ask" | "result" | "plan" | "artifact";
@@ -160,7 +162,7 @@ export default function ChatPanel({
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/upload", {
+      const res = await fetch(`${API_BASE}/api/v1/upload`, {
         method: "POST",
         body: formData,
       });

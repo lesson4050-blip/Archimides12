@@ -377,8 +377,12 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
         
     file_location = workspace_dir / file.filename
     try:
+        MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+        contents = await file.read()
+        if len(contents) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="File too large. Maximum allowed size is 50MB.")
         with open(file_location, "wb+") as file_object:
-            file_object.write(await file.read())
+            file_object.write(contents)
             
         logger.info(f"📤 Загружен файл: {file.filename}")
         

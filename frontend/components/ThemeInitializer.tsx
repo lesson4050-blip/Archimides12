@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function ThemeInitializer() {
   useEffect(() => {
     const applyTheme = (theme: string) => {
@@ -22,7 +24,7 @@ export default function ThemeInitializer() {
 
     const fetchAndApply = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/v1/settings");
+        const res = await fetch(`${API_BASE}/api/v1/settings`);
         if (res.ok) {
           const data = await res.json();
           if (data.theme) applyTheme(data.theme);

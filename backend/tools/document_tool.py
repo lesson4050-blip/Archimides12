@@ -10,6 +10,9 @@ class DocumentTool:
     """Индексирование и RAG-поиск по документам через ChromaDB."""
     base_dir = "backend/memory"
 
+    def __init__(self):
+        self._stores: Dict[str, VectorStore] = {}
+
     def get_definition(self) -> Dict[str, Any]:
         return {
             "type": "function",
@@ -33,7 +36,10 @@ class DocumentTool:
                       question: str = None, doc_id: str = None,
                       session_id: str = None, **kwargs) -> Dict[str, Any]:
         
-        vs = VectorStore(user_id=session_id or "default")
+        uid = session_id or "default"
+        if uid not in self._stores:
+            self._stores[uid] = VectorStore(user_id=uid)
+        vs = self._stores[uid]
         
         if action == "index":
             if not path:

@@ -84,7 +84,10 @@ class ShellTool:
             pid = kwargs.get("pid")
             if not pid:
                 return {"success": False, "error": "PID is required for 'kill' action."}
-            return await self.executor.run_command(session_id, f"kill -9 {pid}")
+            import re
+            if not re.match(r'^\d+$', str(pid)):
+                return {"success": False, "error": "Invalid PID. Must be a number."}
+            return await self.executor.run_command(session_id, f"kill -9 {int(pid)}")
             
         else:
             return {"success": False, "error": f"Unknown action: {action}"}

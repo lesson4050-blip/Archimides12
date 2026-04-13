@@ -7,7 +7,8 @@ logger = logging.getLogger(__name__)
 class TriggerTool:
     """Установка отложенных задач или условных триггеров на основе времени."""
     
-    _triggers: Dict[str, asyncio.Task] = {}
+    def __init__(self):
+        self._triggers: Dict[str, asyncio.Task] = {}
 
     def get_definition(self) -> Dict[str, Any]:
         return {

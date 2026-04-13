@@ -10,6 +10,8 @@ import {
   Layout, Cpu, Cloud, Database
 } from "lucide-react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,7 +39,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/settings");
+      const res = await fetch(`${API_BASE}/api/v1/settings`);
       if (!res.ok) throw new Error("Backend offline");
       const data = await res.json();
       setSettings(data);
@@ -60,7 +62,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const fetchUsage = async () => {
      try {
-       const res = await fetch("http://localhost:8000/api/v1/settings/usage");
+       const res = await fetch(`${API_BASE}/api/v1/settings/usage`);
        const data = await res.json();
        setUsageRecords(data);
      } catch (err) {
@@ -75,7 +77,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setSettings(newSettings);
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/settings", {
+      const res = await fetch(`${API_BASE}/api/v1/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates)
@@ -713,7 +715,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                            onClick={async () => {
                               const path = prompt("Enter folder path:");
                               if (path) {
-                                 const res = await fetch("http://localhost:8000/api/v1/settings/folders", {
+                                 const res = await fetch(`${API_BASE}/api/v1/settings/folders`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ path })
@@ -752,7 +754,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                <button 
                                  onClick={async () => {
                                     if(confirm("Confirm cleanup? This cannot be undone.")) {
-                                       await fetch("http://localhost:8000/api/v1/settings/cleanup", { method: "POST" });
+                                       await fetch(`${API_BASE}/api/v1/settings/cleanup`, { method: "POST" });
                                        alert("Cloud browser is now fresh.");
                                     }
                                  }}

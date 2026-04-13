@@ -289,8 +289,10 @@ async def suite_agent_loop() -> str:
         log(f"  ⏳ Preparing sandbox session {session_id}...")
         try:
             await sandbox_manager.destroy_session(session_id)
-        except:
-            pass
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Diagnostic check failed: {e}")
         await sandbox_manager.create_session(session_id)
         
         agent = AgentLoop(session_id=session_id)
