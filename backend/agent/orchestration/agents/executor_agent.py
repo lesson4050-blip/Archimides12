@@ -184,6 +184,39 @@ class ExecutorAgent(BaseAgent):
                     await websocket_send({"type": "message_result", "content": res_text})
                 
                 state.results.append({"step": state.current_step_index, "output": res_text or "Done."})
+                
+                # Save key learnings to Memory Bank
+                if res_text and len(res_text) > 100:
+                    try:
+                        from backend.memory.memory_bank import save_fact
+                        from backend.models.model_router import ModelRouter
+
+                        # Ask the model to extract key facts from this result
+                        extract_prompt = (
+                            f"Extract 1-2 key facts or rules learned from this task "
+                            f"result. Be very concise, max 100 chars each. "
+                            f"Output as JSON array of strings: "
+                            f'["fact1", "fact2"]\n\nResult: {res_text[:500]}'
+                        )
+                        extract_resp = await self.router.generate(
+                            messages=[{"role": "user", "content": extract_prompt}],
+                            task_hint="think"
+                        )
+                        from backend.utils.json_repair import repair_and_parse
+                        facts_raw = extract_resp.get("text", "")
+                        facts, _ = repair_and_parse(facts_raw)
+                        if isinstance(facts, list):
+                            for fact in facts[:2]:
+                                if isinstance(fact, str) and len(fact) > 5:
+                                    save_fact(
+                                        fact=fact,
+                                        session_id=state.session_id,
+                                        category="task_result",
+                                        importance=2
+                                    )
+                    except Exception as e:
+                        logger.warning(f"Memory Bank write failed (non-critical): {e}")
+
                 state.history = self.context_manager.get_messages()
                 return state
         

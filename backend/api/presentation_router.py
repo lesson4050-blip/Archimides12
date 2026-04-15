@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.presentation.schemas import TaskStatus
-from backend.presentation.pipeline import PresentationPipeline, TASKS_STORE
+from backend.presentation.pipeline import PresentationPipeline, save_task_state, get_task_state
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ async def generate_presentation(request: GenerateRequest, background_tasks: Back
         progress=0.0
     )
     
-    TASKS_STORE[task_id] = task_status
+    save_task_state(task_status)
     
     # Schedule the background task (does NOT block the event loop)
     background_tasks.add_task(
@@ -51,7 +51,7 @@ async def get_task_status(task_id: str):
     """
     Returns the current progress and status of a generation task.
     """
-    task_status = TASKS_STORE.get(task_id)
+    task_status = get_task_state(task_id)
     if not task_status:
         raise HTTPException(status_code=404, detail="Task not found")
         

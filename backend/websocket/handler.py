@@ -112,7 +112,17 @@ class ConnectionManager:
         sandbox_manager.touch_session(session_id)
 
         logger.info(f"Received WebSocket message for {session_id}: {message}")
-        data = json.loads(message)
+        from backend.utils.json_repair import repair_and_parse
+        data, err = repair_and_parse(message)
+        if data is None:
+            logger.error(f"WebSocket: invalid JSON from client: {err}")
+            await self.send_event(session_id, {
+                "type": "agent_error",
+                "message": "Invalid message format."
+            })
+            return
+        if not isinstance(data, dict):
+            data = {}
         task = data.get("task")
         agent_profile_id = data.get("agent_id", "archimedes-cosmo")
         

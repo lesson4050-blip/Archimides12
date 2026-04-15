@@ -98,16 +98,43 @@ class GeminiClient:
                 # Extract content
                 tool_call = None
                 text_content = ""
-                
-                if response.candidates and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.text:
-                            text_content += part.text
-                        if part.function_call:
-                            tool_call = {
-                                "name": part.function_call.name,
-                                "params": dict(part.function_call.args) if part.function_call.args else {}
+
+                if response.candidates:
+                    candidate = response.candidates[0]
+                    for part in candidate.content.parts:
+                        if hasattr(part, "function_call") and part.function_call:
+                            fc = part.function_call
+                            from backend.utils.tool_schemas import validate_tool_call
+                            from backend.utils.json_repair import repair_and_parse
+
+                            # args can be a dict or a broken string
+                            raw_args = fc.args
+                            if isinstance(raw_args, str):
+                                parsed_args, _ = repair_and_parse(raw_args)
+                                raw_args = parsed_args or {}
+
+                            raw_tc = {
+                                "name": fc.name,
+                                "params": raw_args if isinstance(raw_args, dict) else {}
                             }
+                            validated = validate_tool_call(raw_tc)
+                            if validated:
+                                tool_call = validated.model_dump()
+
+                        elif hasattr(part, "text") and part.text:
+                            text_content += part.text
+
+                # Also try to parse tool call from text (Gemini sometimes does this)
+                if tool_call is None and text_content.strip():
+                    from backend.utils.json_repair import repair_and_parse
+                    from backend.utils.tool_schemas import validate_tool_call
+                    parsed, _ = repair_and_parse(text_content)
+                    if parsed and isinstance(parsed, dict):
+                        if "tool_call" in parsed:
+                            validated = validate_tool_call(parsed["tool_call"])
+                            if validated:
+                                tool_call = validated.model_dump()
+                                text_content = ""
 
                 return {
                     "model_used": "gemini",

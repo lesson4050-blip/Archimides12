@@ -79,10 +79,12 @@ Return ONLY valid JSON, no other text.
                 if text.startswith("```"): text = text[3:]
                 if text.endswith("```"): text = text[:-3]
                 
-                data = json.loads(text.strip())
+                from backend.utils.json_repair import repair_and_parse
+                data, err = repair_and_parse(text.strip())
+                if data is None:
+                    logger.error(f"MiroFish: failed to parse persona response: {err}")
+                    return {**persona, "reaction": "neutral", "would_adopt": False, "comment": "Parse error.", "main_objection": None}
                 return {**persona, **data}
-            except Exception as e:
-                logger.error(f"MiroFish parse error: {e}")
                 return {**persona, "reaction": "neutral", "would_adopt": False, "comment": "Failed to parse reaction."}
         
         results = []
