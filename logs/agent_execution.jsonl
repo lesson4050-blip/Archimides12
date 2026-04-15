@@ -1,0 +1,5 @@
+{"ts": "2026-04-15T09:31:51.767234+00:00", "session": "test-session", "type": "plan_created", "task": "Test my flow", "strategy": "sequential", "phases": 1}
+{"ts": "2026-04-15T09:31:51.837047+00:00", "session": "test-session", "type": "tool_call", "tool": "message", "params": {"type": "result", "content": "Final Result", "session_id": "test-session"}, "success": true, "error": null, "output_len": 0}
+{"ts": "2026-04-15T09:31:51.837047+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}
+{"ts": "2026-04-15T09:31:51.842870+00:00", "session": "test-session", "type": "tool_call", "tool": "message", "params": {"type": "result", "content": "Final Result", "session_id": "test-session"}, "success": true, "error": null, "output_len": 0}
+{"ts": "2026-04-15T09:31:51.843401+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}

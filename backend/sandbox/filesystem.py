@@ -27,8 +27,10 @@ class SandboxFilesystem:
             # Use cat via exec_run to read
             # Alternatively use container.get_archive if binary, 
             # but for text file tool cat is simpler.
+            import shlex
+            safe_path = shlex.quote(path)
             loop = asyncio.get_running_loop()
-            exec_res = await loop.run_in_executor(None, lambda: container.exec_run(f"cat {path}", user="ubuntu"))
+            exec_res = await loop.run_in_executor(None, lambda: container.exec_run(f"cat {safe_path}", user="ubuntu"))
             
             if exec_res.exit_code == 0:
                 return {
@@ -85,8 +87,10 @@ class SandboxFilesystem:
             return {"success": False, "error": "Sandbox container not available."}
             
         try:
+            import shlex
+            safe_path = shlex.quote(path)
             loop = asyncio.get_running_loop()
-            exec_res = await loop.run_in_executor(None, lambda: container.exec_run(f"ls -F {path}", user="ubuntu", workdir="/home/ubuntu/workspace"))
+            exec_res = await loop.run_in_executor(None, lambda: container.exec_run(f"ls -F {safe_path}", user="ubuntu", workdir="/home/ubuntu/workspace"))
             if exec_res.exit_code == 0:
                 return {
                     "success": True,

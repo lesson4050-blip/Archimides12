@@ -18,6 +18,15 @@ class PersistentShell:
         self._socket = None
         self._lock = asyncio.Lock()
 
+    def stop(self):
+        """Close the socket and discard the shell session securely."""
+        if self._socket and hasattr(self._socket, '_sock'):
+            try:
+                self._socket._sock.close()
+            except Exception:
+                pass
+        self._socket = None
+
     async def start(self):
         loop = asyncio.get_running_loop()
         self._exec_id = await loop.run_in_executor(None, lambda: 
@@ -64,11 +73,16 @@ class PersistentShell:
                             # remove the echoed command string if it's there
                             if full_cmd in output:
                                 output = output.replace(full_cmd, "", 1).strip()
-                            break
+                            
+                            return {"success": True, "output": output[:3000]}
                 except asyncio.TimeoutError:
                     continue
+                except Exception as e:
+                    logger.error(f"Exception during shell recv: {e}")
+                    break
             
-            return {"success": True, "output": output[:3000]}
+            logger.warning(f"Shell command timed out after {timeout} seconds.")
+            return {"success": False, "error": f"Timeout: command execution incomplete."}
 
 class SandboxExecutor:
     """

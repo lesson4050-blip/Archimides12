@@ -49,9 +49,19 @@ python3 /home/ubuntu/workspace/browser_server.py &
 x11vnc -display :1 -nopw -forever -shared -rfbport 5900 -bg
 /usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen {port}
 """
-        # Write script to container
-        write_script_cmd = f"cat << 'EOF' > /home/ubuntu/start_ui.sh\n{startup_script}\nEOF\nchmod +x /home/ubuntu/start_ui.sh"
-        await self.executor.run_command(session_id, write_script_cmd)
+        # Securely write script directly via put_archive
+        tar_script_stream = io.BytesIO()
+        with tarfile.open(fileobj=tar_script_stream, mode='w') as tar:
+            script_bytes = startup_script.encode('utf-8')
+            tar_add_info = tarfile.TarInfo(name="start_ui.sh")
+            tar_add_info.size = len(script_bytes)
+            # Make the file fully executable
+            tar_add_info.mode = 0o755  
+            tar.addfile(tar_add_info, io.BytesIO(script_bytes))
+        tar_script_stream.seek(0)
+        
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: container.put_archive("/home/ubuntu", tar_script_stream))
 
         # Run the script in DETACHED mode so processes persist
         await self.executor.run_command(session_id, "/home/ubuntu/start_ui.sh", detach=True)

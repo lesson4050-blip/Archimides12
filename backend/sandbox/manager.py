@@ -204,32 +204,34 @@ class SandboxManager:
 
         container_name = f"archimedes-session-{session_id}"
 
-        # Ensure image exists
+        # Ensure image exists safely using run_in_executor
         try:
-            client.images.get(settings.SANDBOX_IMAGE)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, lambda: client.images.get(settings.SANDBOX_IMAGE))
         except docker.errors.ImageNotFound:
             logger.info(f"Pulling image {settings.SANDBOX_IMAGE}...")
-            client.images.pull(settings.SANDBOX_IMAGE)
+            await loop.run_in_executor(None, lambda: client.images.pull(settings.SANDBOX_IMAGE))
 
         logger.info(f"Creating container {container_name} for session {session_id}")
         try:
-            container = client.containers.run(
-                settings.SANDBOX_IMAGE,
-                name=container_name,
-                hostname=f"sandbox-{session_id}",
-                mem_limit="2g",
-                cpu_quota=100000,  # 1 CPU
-                environment={"SESSION_ID": session_id},
-                volumes={
-                    # Mount host workspace to container
-                    os.path.abspath("./workspace"): {"bind": "/home/ubuntu/workspace", "mode": "rw"},
-                    # Optional vnc data (only for non-win32 or if volume exists)
-                    **({"vnc-data": {"bind": "/home/ubuntu/vnc", "mode": "rw"}} if sys.platform != "win32" else {})
-                },
-                ports={"6080/tcp": None},
-                detach=True,
-                tty=True,
-            )
+            def _create_container_sync():
+                return client.containers.run(
+                    settings.SANDBOX_IMAGE,
+                    name=container_name,
+                    hostname=f"sandbox-{session_id}",
+                    mem_limit="2g",
+                    cpu_quota=100000,  # 1 CPU
+                    environment={"SESSION_ID": session_id},
+                    volumes={
+                        os.path.abspath("./workspace"): {"bind": "/home/ubuntu/workspace", "mode": "rw"},
+                        **({"vnc-data": {"bind": "/home/ubuntu/vnc", "mode": "rw"}} if sys.platform != "win32" else {})
+                    },
+                    ports={"6080/tcp": None},
+                    detach=True,
+                    tty=True,
+                )
+            
+            container = await loop.run_in_executor(None, _create_container_sync)
             self._sessions[session_id] = SessionInfo(
                 container=container,
                 session_id=session_id,
@@ -276,16 +278,24 @@ class SandboxManager:
     def _stop_and_remove(self, container: Any, session_id: str):
         """Stop and remove a Docker container."""
         container_name = f"archimedes-session-{session_id}"
+        
+        loop = asyncio.get_running_loop()
+        
+        # Stop persistent shell cleanly to avoid socket leaks
+        shell = self._shells.pop(session_id, None)
+        if shell:
+            shell.stop()
+            
         try:
-            container.stop(timeout=10)
+            # We use run_in_executor here to avoid blocking shutdown tasks
+            loop.run_in_executor(None, lambda: container.stop(timeout=10))
         except Exception:
             pass
         try:
-            container.remove(force=True)
+            loop.run_in_executor(None, lambda: container.remove(force=True))
         except Exception:
             pass
             
-        self._shells.pop(session_id, None)
         logger.info(
             f"Destroyed container {container_name}. "
             f"Active: {len(self._sessions)}/{settings.SANDBOX_MAX_CONTAINERS}"

@@ -128,8 +128,11 @@ async def _fetch_photo_base64(keywords: str, executor, session_id: str) -> Optio
     url = f"https://source.unsplash.com/1280x720/?{query}"
 
     # Скачать через curl внутри контейнера (там есть интернет)
-    tmp_path = f"/tmp/slide_photo_{abs(hash(keywords))}.jpg"
-    cmd = f'curl -sL --max-time 15 -o {tmp_path} "{url}" && echo "OK" || echo "FAIL"'
+    import uuid
+    import shlex
+    tmp_path = f"/tmp/slide_photo_{uuid.uuid4().hex[:8]}.jpg"
+    safe_url = shlex.quote(url)
+    cmd = f'curl -sL --max-time 15 -o {tmp_path} {safe_url} && echo "OK" || echo "FAIL"'
     result = await executor.run_command(session_id, cmd, timeout=20)
 
     if not result.get("success"):
@@ -171,8 +174,11 @@ async def _generate_ai_image_base64(prompt: str, executor, session_id: str) -> O
     encoded = urllib.parse.quote(prompt)
     url = f"https://image.pollinations.ai/prompt/{encoded}?width=1280&height=720&model=flux&nologo=true"
 
-    tmp_path = f"/tmp/ai_slide_{abs(hash(prompt)) % 999999}.png"
-    cmd = f'curl -sL --max-time 30 -o {tmp_path} "{url}" && echo "OK" || echo "FAIL"'
+    import uuid
+    import shlex
+    tmp_path = f"/tmp/ai_slide_{uuid.uuid4().hex[:8]}.png"
+    safe_url = shlex.quote(url)
+    cmd = f'curl -sL --max-time 30 -o {tmp_path} {safe_url} && echo "OK" || echo "FAIL"'
     result = await executor.run_command(session_id, cmd, timeout=35)
 
     if not result.get("success"):

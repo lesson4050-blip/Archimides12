@@ -87,19 +87,19 @@ class AgentOrchestrator:
                 await websocket_send({"type": "message_result", "content": result_text})
             
             state.results.append({"step": 0, "output": result_text})
-            return self._get_final_response(state)
+            return await self._get_final_response(state, websocket_send)
         except Exception as e:
             logger.error(f"Conversational response failed: {e}")
             fallback = "Привет! Я Archimedes — ваш AI-ассистент. Чем могу помочь?"
             if websocket_send:
                 await websocket_send({"type": "message_result", "content": fallback})
             state.results.append({"step": 0, "output": fallback})
-            return self._get_final_response(state)
+            return await self._get_final_response(state, websocket_send)
 
     async def _run_fast_mode(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         logger.info(f"[{state.session_id}] Orchestrator entering FAST mode")
         state = await self.executor.process(state, websocket_send)
-        return self._get_final_response(state)
+        return await self._get_final_response(state, websocket_send)
 
     async def _run_planning_mode(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         logger.info(f"[{state.session_id}] Orchestrator entering PLANNING mode")
@@ -139,15 +139,38 @@ class AgentOrchestrator:
                     # Unexpected state, break to avoid infinite loop
                     break
                     
-        return self._get_final_response(state)
+        return await self._get_final_response(state, websocket_send)
 
-    def _get_final_response(self, state: OrchestrationState) -> Dict[str, Any]:
+    async def _get_final_response(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         """Synthesize final output from results."""
         if not state.results:
             return {"success": False, "error": "No results generated."}
         
-        # Final result is typically the last one
-        final_output = state.results[-1].get("output", "Done.")
+        # Fast mode: Just return the last result
+        if state.mode == AgentMode.FAST or len(state.results) == 1:
+            final_output = state.results[-1].get("output", "Done.")
+        else:
+            # Planning mode: Synthesize all steps into a cohesive response
+            if websocket_send:
+                await websocket_send({"type": "info", "content": "Синтезирую итоговый ответ..."})
+            
+            summary_prompt = f"На основе результатов всех выполненных подзадач сформируй итоговый ответ пользователю на его изначальный запрос.\n\n"
+            summary_prompt += f"ИЗНАЧАЛЬНЫЙ ЗАПРОС: {state.task_description}\n\n"
+            for res in state.results:
+                summary_prompt += f"Шаг {res.get('step')}: {res.get('output')}\n"
+            
+            try:
+                response = await self.router.generate(
+                    messages=[{"role": "user", "content": summary_prompt}],
+                    task_hint="think"
+                )
+                final_output = response.get("text", state.results[-1].get("output", "Done."))
+                if websocket_send:
+                    await websocket_send({"type": "message_result", "content": final_output})
+            except Exception as e:
+                logger.error(f"Failed to synthesize final response: {e}")
+                final_output = state.results[-1].get("output", "Done.")
+
         return {
             "success": True,
             "output": final_output,

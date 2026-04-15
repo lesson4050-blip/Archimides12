@@ -67,7 +67,11 @@ class CriticAgent(BaseAgent):
             
             review_text = response.get("text", "")
             
-            if "VERDICT: PASS" in review_text.upper() or "PASS" in review_text.upper():
+            import re
+            is_pass = bool(re.search(r"VERDICT:\s*PASS", review_text, re.IGNORECASE))
+            has_issues = bool(re.search(r"ISSUE:", review_text, re.IGNORECASE))
+            
+            if is_pass and not has_issues:
                 await self.log_thought("Result VERIFIED. Quality gate passed.", websocket_send)
                 state.metadata["critic_verdict"] = "PASS"
                 state.current_retry_count = 0

@@ -13,8 +13,27 @@ from backend.presentation.services.renderer import renderer_service
 
 logger = logging.getLogger(__name__)
 
-# Simple in-memory task store for demonstration
-TASKS_STORE: Dict[str, TaskStatus] = {}
+import sqlite3
+import json
+
+def _get_pipeline_db():
+    os.makedirs("data", exist_ok=True)
+    conn = sqlite3.connect("data/pipeline.db", isolation_level=None)
+    conn.execute("CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, data TEXT)")
+    return conn
+
+def save_task_state(task: TaskStatus):
+    conn = _get_pipeline_db()
+    conn.execute("INSERT OR REPLACE INTO tasks VALUES (?, ?)", (task.task_id, task.model_dump_json()))
+    conn.close()
+
+def get_task_state(task_id: str) -> Optional[TaskStatus]:
+    conn = _get_pipeline_db()
+    row = conn.execute("SELECT data FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    conn.close()
+    if row:
+        return TaskStatus.model_validate_json(row[0])
+    return None
 
 class PresentationPipeline:
     """
@@ -29,17 +48,19 @@ class PresentationPipeline:
         """
         Background task executor.
         """
-        task_status = TASKS_STORE.get(task_id)
+        task_status = get_task_state(task_id)
         if not task_status:
             return
 
         try:
             task_status.status = "processing"
             task_status.progress = 0.1
+            save_task_state(task_status)
             
             logger.info(f"[Task {task_id}] Planning presentation...")
             plan = await self.planner.generate_plan(prompt)
             task_status.progress = 0.3
+            save_task_state(task_status)
 
             logger.info(f"[Task {task_id}] Generating content and resolving assets...")
             rendered_slides = []
@@ -71,9 +92,11 @@ class PresentationPipeline:
                 
                 # Update progress incrementally
                 task_status.progress = 0.3 + (0.4 * ((index + 1) / total_slides))
+                save_task_state(task_status)
 
             logger.info(f"[Task {task_id}] Rendering PDF via Playwright...")
             task_status.status = "rendering"
+            save_task_state(task_status)
             
             # Step 5: Render PDF
             output_path = await renderer_service.render_pdf(
@@ -85,18 +108,21 @@ class PresentationPipeline:
             task_status.status = "done"
             task_status.progress = 1.0
             task_status.result_url = output_path
+            save_task_state(task_status)
             logger.info(f"[Task {task_id}] Completed successfully. Output: {output_path}")
 
         except Exception as e:
             logger.error(f"[Task {task_id}] Pipeline failed: {e}")
             task_status.status = "failed"
             task_status.error = str(e)
+            save_task_state(task_status)
             
     async def generate(self, prompt: str, theme: str, output_path: str = None) -> TaskStatus:
         """
         Synchronous-style call specifically for tests, wraps background task into await.
         """
         task_id = "test_task_sync"
-        TASKS_STORE[task_id] = TaskStatus(task_id=task_id, status="pending")
+        save_task_state(TaskStatus(task_id=task_id, status="pending"))
         await self.generate_background(task_id, prompt, theme, output_path)
-        return type('Obj', (object,), {'pdf_path': TASKS_STORE[task_id].result_url})()
+        final_state = get_task_state(task_id)
+        return type('Obj', (object,), {'pdf_path': final_state.result_url if final_state else None})()
