@@ -76,3 +76,6 @@ postgres_data/
 # Specific DB files
 archemidas.db
 backend/archemidas.db
+
+# Artifacts
+output/

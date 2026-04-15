@@ -10,6 +10,7 @@ from backend.db.crud import init_db
 from backend.api.routes import router as main_router
 from backend.auth.routes import router as auth_router
 from backend.api.settings_routes import router as settings_router
+from backend.api.presentation_router import router as presentation_router
 
 
 # Configure logging
@@ -42,6 +43,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
 
+    # Playwright binary check
+    import subprocess
+    try:
+        result = subprocess.run(["python", "-m", "playwright", "help"], capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.warning("Playwright may not be installed. Presentation rendering limits will apply.")
+    except Exception:
+        logger.warning("Playwright check failed. Run `pip install playwright` and `playwright install` to enable PDF generation.")
+
     yield
 
     # Shutdown
@@ -67,6 +77,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(main_router)
 app.include_router(settings_router)
+app.include_router(presentation_router, prefix="/api/v1")
 
 
 
