@@ -78,31 +78,67 @@ class PlannerAgent(BaseAgent):
             )
             
             # Extract JSON from response
+            from backend.utils.json_repair import repair_and_parse
+            from backend.utils.tool_schemas import PlanSchema
+
             text = response.get("text", "")
-            
-            # More robust JSON extraction
-            import re
-            json_match = re.search(r"(\{.*\})", text, re.DOTALL)
             plan_json = None
-            
-            if json_match:
-                json_str = json_match.group(1).strip()
-                try:
-                    plan_json = json.loads(json_str)
-                except json.JSONDecodeError:
-                    # Try cleaning common LLM artifacts (like trailing commas or excessive whitespace)
+            parse_attempts = 0
+            max_parse_attempts = 3
+
+            while parse_attempts < max_parse_attempts and plan_json is None:
+                parsed, err = repair_and_parse(text)
+
+                if parsed and isinstance(parsed, dict):
+                    # Validate with Pydantic
                     try:
-                        # Clean trailing commas before closing braces/brackets
-                        clean_str = re.sub(r',\s*([\]}])', r'\1', json_str)
-                        plan_json = json.loads(clean_str)
-                    except:
-                        pass
-            
-            if plan_json:
+                        validated_plan = PlanSchema(**parsed)
+                        plan_json = validated_plan.model_dump()
+                    except Exception as ve:
+                        logger.warning(
+                            f"Plan schema validation failed: {ve}. "
+                            f"Attempt {parse_attempts+1}"
+                        )
+                        plan_json = None
+
+                if plan_json is None and parse_attempts < max_parse_attempts - 1:
+                    # Ask model to fix its output
+                    fix_messages = messages + [
+                        {"role": "assistant", "content": text},
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your response was not valid JSON. "
+                                "Output ONLY the JSON object with "
+                                '"strategy" and "phases" keys. '
+                                "No explanation, no markdown, pure JSON."
+                            )
+                        }
+                    ]
+                    fix_response = await self.router.generate(
+                        messages=fix_messages, task_hint="think"
+                    )
+                    text = fix_response.get("text", "")
+
+                parse_attempts += 1
+
+            if plan_json and plan_json.get("phases"):
                 state.current_plan = plan_json
-                await self.log_thought(f"Created plan with {len(plan_json.get('phases', []))} phases.", websocket_send)
+                from backend.utils.structured_logger import log_plan
+                log_plan(
+                    state.session_id,
+                    plan_json,
+                    state.task_description
+                )
+                await self.log_thought(
+                    f"Plan created: {len(plan_json.get('phases',[]))} phases.",
+                    websocket_send
+                )
             else:
-                raise ValueError(f"Model failed to output valid JSON plan. Raw text: {text[:200]}...")
+                raise ValueError(
+                    f"Could not get valid JSON plan after "
+                    f"{max_parse_attempts} attempts."
+                )
                 
         except Exception as e:
             logger.error(f"Planning failed: {e}")

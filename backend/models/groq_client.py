@@ -60,12 +60,33 @@ class GroqClient:
                 tool_call = None
                 if message.tool_calls:
                     tc = message.tool_calls[0]
-                    import json
-                    tool_call = {
+                    from backend.utils.tool_schemas import validate_tool_call
+                    from backend.utils.json_repair import repair_and_parse
+                    raw_args = tc.function.arguments
+                    # Try native parse first, then repair
+                    try:
+                        parsed_args = json.loads(raw_args)
+                    except Exception:
+                        parsed_args, _ = repair_and_parse(raw_args)
+                        parsed_args = parsed_args or {}
+                    raw_tc = {
                         "name": tc.function.name,
-                        "params": json.loads(tc.function.arguments)
+                        "params": parsed_args
                     }
-                
+                    validated = validate_tool_call(raw_tc)
+                    tool_call = validated.model_dump() if validated else None
+
+                # Also check text content for embedded tool calls
+                # (some Groq models put tool calls in text)
+                if tool_call is None and message.content:
+                    from backend.utils.json_repair import repair_and_parse
+                    from backend.utils.tool_schemas import validate_tool_call
+                    parsed, _ = repair_and_parse(message.content)
+                    if parsed and isinstance(parsed, dict):
+                        if "tool_call" in parsed:
+                            validated = validate_tool_call(parsed["tool_call"])
+                            if validated:
+                                tool_call = validated.model_dump()                
                 return {
                     "model_used": "groq",
                     "thought": thought,
@@ -156,7 +177,17 @@ class GroqClient:
                             "params": json.loads(tc["arguments"])
                         }
                     except Exception as e:
-                        logger.warning(f"Failed to parse streamed tool args: {e}")
+                        logger.warning(
+                            f"Failed to parse streamed tool args: {e}. "
+                            f"Trying JSON repair..."
+                        )
+                        from backend.utils.json_repair import repair_and_parse
+                        repaired, _ = repair_and_parse(tc["arguments"])
+                        if repaired and isinstance(repaired, dict):
+                            result["tool_call"] = {
+                                "name": tc["name"],
+                                "params": repaired
+                            }
                 
                 # Extract thought if present in <thought> tags
                 if "<thought>" in full_text and "</thought>" in full_text:

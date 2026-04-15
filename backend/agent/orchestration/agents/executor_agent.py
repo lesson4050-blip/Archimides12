@@ -34,7 +34,7 @@ class ExecutorAgent(BaseAgent):
        {hint_instructions}
     4. ACTION: If tools are needed, use them immediately. Don't over-explain if a tool can do the job.
     
-    When you have completed the subtask, provide a polite and clear summary of your work in RUSSIAN.
+    When you have completed the subtask, provide a polite and clear summary of your work in RUSSIAN.{memory_context}
     """
 
     def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager):
@@ -78,14 +78,25 @@ class ExecutorAgent(BaseAgent):
 
         # Loop for tool execution
         for step in range(self.max_steps):
-            messages = self.context_manager.get_messages()
+            messages = self.context_manager.get_messages_with_cache()
             
             if not any(m["role"] == "system" for m in messages):
+                # Inject relevant memory bank context
+                from backend.memory.memory_bank import get_relevant_facts
+                memory_facts = get_relevant_facts(limit=3)
+                memory_context = ""
+                if memory_facts:
+                    memory_context = (
+                        "\n\nRELEVANT MEMORY FROM PAST SESSIONS:\n"
+                        + "\n".join(f"• {f}" for f in memory_facts)
+                    )
+
                 formatted_prompt = self.SYSTEM_PROMPT.format(
                     subtask=current_target,
                     plan=str(state.current_plan) if state.current_plan else "No formal plan.",
                     task_hint=state.task_hint,
-                    hint_instructions=hint_instructions
+                    hint_instructions=hint_instructions,
+                    memory_context=memory_context
                 )
                 self.context_manager.add_message("system", formatted_prompt)
                 messages = self.context_manager.get_messages()
@@ -123,6 +134,15 @@ class ExecutorAgent(BaseAgent):
                 }
                 
                 tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
+                
+                from backend.utils.structured_logger import log_model_response
+                log_model_response(
+                    state.session_id,
+                    response.get("model_used", "unknown"),
+                    had_tool_call=True,
+                    tokens=response.get("tokens_used", 0)
+                )
+
                 success = tool_res.get("success", True)
                 output = str(tool_res.get("output", tool_res.get("content", "OK")))
                 if not success:
@@ -147,6 +167,16 @@ class ExecutorAgent(BaseAgent):
             else:
                 # No tool call — this is the final answer for this subtask
                 res_text = response.get("text", "")
+                
+                # If model returned nothing useful after first step, nudge it
+                if not res_text and step > 0 and step < self.max_steps - 1:
+                    self.context_manager.add_message(
+                        "user",
+                        "Continue with the task. Use a tool or provide "
+                        "the final answer."
+                    )
+                    continue
+
                 if not res_text and step == 0:
                     res_text = "Я выполнил эту часть задачи." # Safety fallback
                 

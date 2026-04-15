@@ -72,28 +72,77 @@ class ToolRegistry:
     def get_all_tool_definitions(self) -> List[Dict[str, Any]]:
         return self.tool_definitions
 
-    async def execute_tool(self, name: str, params: Dict[str, Any], session_id: Optional[str] = None) -> Dict[str, Any]:
+    async def execute_tool(
+        self,
+        name: str,
+        params: Dict[str, Any],
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        from backend.utils.tool_schemas import (
+            validate_tool_call, fuzzy_match_tool_name
+        )
+        from backend.utils.structured_logger import log_tool_call
+
+        # Fuzzy match tool name
+        available = list(self.tools.keys())
         if name not in self.tools:
-            return {
-                "success": False,
-                "error": f"Tool '{name}' not found."
-            }
-        
+            matched = fuzzy_match_tool_name(name, available)
+            if matched:
+                logger.info(
+                    f"Fuzzy matched tool '{name}' -> '{matched}'"
+                )
+                name = matched
+            else:
+                err = {
+                    "success": False,
+                    "error": (
+                        f"Tool '{name}' not found. "
+                        f"Available: {available}"
+                    )
+                }
+                log_tool_call(session_id or "?", name, params, err)
+                return err
+
+        # Validate params
+        validated = validate_tool_call({"name": name, "params": params})
+        if validated:
+            params = validated.params
+
         try:
-            # If tool expects session_id, inject it
             if session_id:
                 params["session_id"] = session_id
-                
-            # Check if it's an MCP tool (it will have a specific structure or we check the definition)
-            # For simplicity, we assume we've mapped it correctly in registration
+
             result = await self.tools[name](**params)
+
+            if not isinstance(result, dict):
+                result = {"success": True, "output": str(result)}
+
+            log_tool_call(session_id or "?", name, params, result)
             return result
+
+        except TypeError as e:
+            # Wrong params — try calling with only session_id
+            logger.warning(
+                f"Tool '{name}' TypeError: {e}. "
+                f"Trying with minimal params."
+            )
+            try:
+                minimal_params = {}
+                if session_id:
+                    minimal_params["session_id"] = session_id
+                result = await self.tools[name](**minimal_params)
+                log_tool_call(session_id or "?", name, params, result)
+                return result
+            except Exception as e2:
+                err = {"success": False, "error": str(e2)}
+                log_tool_call(session_id or "?", name, params, err)
+                return err
+
         except Exception as e:
             logger.error(f"Error executing tool '{name}': {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            err = {"success": False, "error": str(e)}
+            log_tool_call(session_id or "?", name, params, err)
+            return err
 
     def register_mcp_tool(self, definition: Dict[str, Any], callback: Callable):
         """Register a tool that comes from an external MCP server."""
