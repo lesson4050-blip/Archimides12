@@ -57,11 +57,9 @@ class BrowserTool:
                     read_cmd = f"cat {res_file} && rm {res_file}"
                     res_out = await self.executor.run_command(session_id, read_cmd)
                     if res_out.get("success"):
-                        try:
-                            from backend.utils.json_repair import repair_and_parse
-                            parsed, _ = repair_and_parse(res_out.get("output", "{}"))
-                            return parsed or {"success": False, "error": "Browser response parse failed"}
-                            pass
+                        from backend.utils.json_repair import repair_and_parse
+                        parsed, _ = repair_and_parse(res_out.get("output", "{}"))
+                        return parsed or {"success": False, "error": "Browser response parse failed"}
                 await asyncio.sleep(0.5)
                 
             return {"success": False, "error": "Browser action timed out or server not responding."}

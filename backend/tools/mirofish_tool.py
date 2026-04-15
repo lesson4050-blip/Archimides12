@@ -85,6 +85,8 @@ Return ONLY valid JSON, no other text.
                     logger.error(f"MiroFish: failed to parse persona response: {err}")
                     return {**persona, "reaction": "neutral", "would_adopt": False, "comment": "Parse error.", "main_objection": None}
                 return {**persona, **data}
+            except Exception as e:
+                logger.error(f"MiroFish parse error fallback: {e}")
                 return {**persona, "reaction": "neutral", "would_adopt": False, "comment": "Failed to parse reaction."}
         
         results = []
