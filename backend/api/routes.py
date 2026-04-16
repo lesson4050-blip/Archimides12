@@ -81,6 +81,30 @@ async def get_agent_status(user: dict = Depends(get_current_user)) -> AgentStatu
     )
 
 
+@router.get("/mcp/status", summary="Get MCP server status")
+async def get_mcp_status(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
+    """Returns status of all connected MCP servers."""
+    try:
+        from backend.sandbox.singleton import sandbox_manager
+        # Get the agent for any active session
+        from backend.websocket.handler import manager as ws_manager
+        
+        if ws_manager.agent_loops:
+            agent = list(ws_manager.agent_loops.values())[0]
+            if hasattr(agent, 'mcp_client'):
+                status = agent.mcp_client.get_status()
+                health = await agent.mcp_client.health_check_all()
+                return {
+                    "status": "ok",
+                    "servers": status,
+                    "health": health
+                }
+    except Exception as e:
+        logger.warning(f"MCP status error: {e}")
+    
+    return {"status": "ok", "servers": {}, "health": {}}
+
+
 @router.post("/tasks", summary="Создать новую задачу", response_model=TaskResponse)
 async def create_task(request: TaskRequest, user: dict = Depends(get_current_user)) -> TaskResponse:
     """Создать новую задачу для выполнения."""

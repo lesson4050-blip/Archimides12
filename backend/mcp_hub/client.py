@@ -98,6 +98,66 @@ class ArchimedesMCPClient:
                 return {"success": False, "error": str(e)}
         return {"success": False, "error": f"Server '{server_name}' not connected."}
 
+    async def health_check_all(self) -> Dict[str, bool]:
+        """
+        Check which servers are alive.
+        Returns dict: {server_name: is_alive}
+        """
+        status = {}
+        for name, session in list(self.sessions.items()):
+            try:
+                # Ping server with empty tool list request
+                await asyncio.wait_for(session.list_tools(), timeout=3.0)
+                status[name] = True
+            except Exception:
+                logger.warning(f"MCP Server '{name}' health check FAILED. Reconnecting...")
+                status[name] = False
+                # Reconnect
+                asyncio.create_task(self._reconnect_server(name))
+        return status
+
+    async def _reconnect_server(self, name: str):
+        """Attempt to reconnect a failed server."""
+        config = self.servers_config.get(name)
+        if not config:
+            return
+        
+        # Clean up old state
+        self.sessions.pop(name, None)
+        if name in self._stop_events:
+            self._stop_events[name].clear()
+        
+        # Wait before reconnecting
+        await asyncio.sleep(5)
+        
+        from mcp import StdioServerParameters
+        params = StdioServerParameters(
+            command=self._normalize_command(config["command"]),
+            args=config.get("args", []),
+            env=config.get("env")
+        )
+        logger.info(f"MCP Client: Reconnecting to '{name}'...")
+        asyncio.create_task(self._connect_server(name, params))
+
+    async def wait_for_connection(self, name: str, timeout: float = 15.0) -> bool:
+        """Wait until a specific server is connected. Returns True if connected."""
+        start = asyncio.get_event_loop().time()
+        while asyncio.get_event_loop().time() - start < timeout:
+            if name in self.sessions:
+                return True
+            await asyncio.sleep(0.5)
+        return False
+
+    def is_connected(self, name: str) -> bool:
+        return name in self.sessions
+    
+    def get_status(self) -> Dict[str, Any]:
+        return {
+            "connected_servers": list(self.sessions.keys()),
+            "total_tools": len(self.external_tools),
+            "configured_servers": list(self.servers_config.keys())
+        }
+
     def _normalize_command(self, command: str) -> str:
         """Handle Windows-specific command resolution (e.g., npx -> npx.cmd)."""
         if sys.platform == "win32":

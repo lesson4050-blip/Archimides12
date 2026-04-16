@@ -64,9 +64,18 @@ class MCPTool:
             # Start connection task
             asyncio.create_task(self.mcp_client._connect_server(server_name, server_params))
             
-            # Wait for discovery
-            await asyncio.sleep(5)
-            
+            # Wait for actual connection (up to 15 seconds)
+            connected = await self.mcp_client.wait_for_connection(
+                server_name, timeout=15.0
+            )
+            if not connected:
+                return {
+                    "success": False,
+                    "error": (
+                        f"MCP server '{server_name}' failed to connect "
+                        f"within 15 seconds. Check if '{command}' is installed."
+                    )
+                }
             # Sync tools in the registry
             if self.sync_callback:
                 await self.sync_callback()

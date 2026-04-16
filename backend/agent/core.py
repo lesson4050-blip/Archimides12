@@ -254,6 +254,10 @@ class ArchimedesCosmoAgent:
             self.search_tool = SearchTool()
             self.register_tool("search", self.search_tool.execute)
 
+            from backend.tools.web_tool import WebTool
+            self.web_tool = WebTool()
+            self.register_tool("web_read", self.web_tool.execute)
+
             self.shell_tool = ShellTool(sandbox_manager.executor)
             self.register_tool("shell", self.shell_tool.execute)
             
