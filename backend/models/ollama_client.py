@@ -79,8 +79,29 @@ NEVER mix tool JSON with explanation text.
                 ),
                 "num_predict": 4096,
                 "temperature": 0.1,
+                "num_gpu": 999,
+                "num_thread": 8,
+                "keep_alive": "10m",
+                "low_vram": False,
             }
         }
+        
+        if tools and len(tools) > 0:
+            tool_schema = {
+                "type": "object",
+                "properties": {
+                    "tool_call": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "params": {"type": "object"}
+                        },
+                        "required": ["name", "params"]
+                    }
+                }
+            }
+            chat_kwargs["format"] = tool_schema
+
         # Only pass native tools if Ollama supports them for this model
         # We use text injection as primary method for reliability
         return await self.client.chat(**chat_kwargs)
@@ -225,18 +246,41 @@ NEVER mix tool JSON with explanation text.
             f"{last_error}"
         )
 
-    async def generate_stream(
-        self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        on_token=None
-    ) -> Dict[str, Any]:
-        # For streaming, fall back to non-streaming for tool calls
-        # to ensure JSON integrity
-        result = await self.generate_with_tools(messages, tools)
-        if on_token and result.get("text"):
-            await on_token({
-                "type": "token",
-                "content": result["text"]
-            })
-        return result
+    async def generate_stream(self, messages, tools=None, on_token=None):
+        if tools:
+            # Can't stream with tools reliably — use non-stream
+            return await self.generate_with_tools(messages, tools)
+
+        # True streaming for non-tool responses
+        messages = [msg.copy() for msg in messages]
+        try:
+            stream = await self.client.chat(
+                model=self.model,
+                messages=messages,
+                stream=True,
+                options={
+                    "num_ctx": min(settings.AGENT_MAX_CONTEXT_TOKENS, 8192),
+                    "num_predict": 2048,
+                    "temperature": 0.7,
+                    "num_gpu": 999,
+                    "keep_alive": "10m",
+                }
+            )
+            full_text = ""
+            async for chunk in stream:
+                token = chunk.message.content or ""
+                if token:
+                    full_text += token
+                    if on_token:
+                        await on_token({"type": "token", "content": token})
+
+            return {
+                "model_used": "ollama",
+                "thought": "",
+                "tool_call": None,
+                "text": full_text,
+                "tokens_used": 0
+            }
+        except Exception as e:
+            logger.error(f"Ollama stream error: {e}")
+            return await self.generate_with_tools(messages, None)

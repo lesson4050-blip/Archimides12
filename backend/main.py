@@ -39,6 +39,26 @@ async def lifespan(app: FastAPI):
     # Clean up stale containers from previous runs
     sandbox_manager.cleanup_stale_containers()
 
+    # Preload Ollama model to eliminate cold start
+    async def _preload_model():
+        try:
+            import ollama
+            import asyncio
+            client = ollama.AsyncClient(
+                host=settings.OLLAMA_BASE_URL, timeout=120
+            )
+            await client.chat(
+                model=settings.OLLAMA_MODEL,
+                messages=[{"role": "user", "content": "ping"}],
+                options={"num_predict": 1, "keep_alive": "30m"}
+            )
+            logger.info(f"Model {settings.OLLAMA_MODEL} preloaded")
+        except Exception as e:
+            logger.warning(f"Model preload failed (non-critical): {e}")
+
+    import asyncio
+    asyncio.create_task(_preload_model())
+
     # Start the inactivity reaper
     sandbox_manager.start_reaper()
     

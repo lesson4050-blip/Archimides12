@@ -77,18 +77,39 @@ class ExecutorAgent(BaseAgent):
 
         # Loop for tool execution
         for step in range(self.max_steps):
+            # Loop detection
+            if not hasattr(state, '_recent_tool_calls'):
+                state._recent_tool_calls = []
+            if len(state._recent_tool_calls) >= 3:
+                last3 = state._recent_tool_calls[-3:]
+                if len(set(last3)) == 1:
+                    self.context_manager.add_message("user",
+                        "SYSTEM: You are repeating the same action. "
+                        "Try a completely different approach or call "
+                        "message(type='result') with what you have.")
+                    state._recent_tool_calls = []
+
             messages = self.context_manager.get_messages_with_cache()
             
             if not any(m["role"] == "system" for m in messages):
                 # Inject relevant memory bank context
                 from backend.memory.memory_bank import get_relevant_facts
+                from backend.memory.knowledge_graph import format_graph_context
+
                 memory_facts = get_relevant_facts(limit=3)
+                # Extract key terms from task for graph query
+                task_words = current_target.split()[:3]
+                key_term = " ".join(task_words) if task_words else ""
+                graph_ctx = format_graph_context(key_term, depth=2) if key_term else ""
+
                 memory_context = ""
                 if memory_facts:
-                    memory_context = (
-                        "\n\nRELEVANT MEMORY FROM PAST SESSIONS:\n"
+                    memory_context += (
+                        "\n\nMEMORY BANK:\n"
                         + "\n".join(f"• {f}" for f in memory_facts)
                     )
+                if graph_ctx:
+                    memory_context += f"\n\n{graph_ctx}"
 
                 formatted_prompt = self.SYSTEM_PROMPT.format(
                     subtask=current_target,
@@ -124,6 +145,8 @@ class ExecutorAgent(BaseAgent):
             if tool_call:
                 t_name = tool_call["name"]
                 t_params = tool_call["params"]
+                state._recent_tool_calls.append(str(t_name) + str(t_params))
+
                 
                 call_id = f"call_{str(uuid.uuid4())[:8]}"
                 std_tool_call = {
@@ -146,10 +169,45 @@ class ExecutorAgent(BaseAgent):
                 output = str(tool_res.get("output", tool_res.get("content", "OK")))
                 if not success:
                     output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
+                    if "not found" in output.lower() or "missing" in output.lower():
+                        # Try auto-tooling
+                        try:
+                            from backend.mcp_hub.auto_tooling import find_and_connect_tool
+                            from backend.sandbox.singleton import sandbox_manager
+
+                            available = list(self.tool_registry.tools.keys())
+                            new_tool = await find_and_connect_tool(
+                                task_description=state.task_description,
+                                available_tools=available,
+                                mcp_client=getattr(self.tool_registry, 'mcp_client', None), 
+                                executor=sandbox_manager.executor,
+                                session_id=state.session_id,
+                                router=self.router
+                            )
+                            if new_tool:
+                                await self.log_info(
+                                    f"🔌 Auto-connected tool: {new_tool}", websocket_send
+                                )
+                                output += f"\n(Auto-tooling installed: {new_tool}. Try again!)"
+                        except Exception as e:
+                            logger.warning(f"Auto-tooling attempt failed: {e}")
 
                 self.context_manager.add_message("assistant", thought or "", tool_calls=[std_tool_call])
                 self.context_manager.add_message("tool", output, tool_call_id=call_id, name=t_name)
                 state.history = self.context_manager.get_messages()
+                
+                # Extract knowledge from tool results
+                if success and len(output) > 100:
+                    import asyncio
+                    from backend.memory.knowledge_graph import extract_and_store_knowledge
+                    asyncio.create_task(
+                        extract_and_store_knowledge(
+                            output[:500],
+                            state.session_id,
+                            self.router
+                        )
+                    )
+                    
                 
                 if t_name == "file" and t_params.get("action") == "write" and success:
                     if websocket_send:

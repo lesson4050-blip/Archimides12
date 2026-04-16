@@ -35,7 +35,7 @@ async def test_orchestrator_planning_mode():
     orch = AgentOrchestrator(router, registry, cm)
     
     result = await orch.run_task(
-        task_description="Test my flow",
+        task_description="analyze my test flow thoroughly",
         mode=AgentMode.PLANNING,
         session_id="test-session"
     )

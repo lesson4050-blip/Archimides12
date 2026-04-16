@@ -28,6 +28,26 @@ def is_conversational(text: str) -> bool:
                 return True
     return False
 
+COMPLEX_KEYWORDS = [
+    "create", "build", "write code", "implement", "analyze",
+    "research", "find all", "compare", "generate report",
+    "make a presentation", "deploy", "setup", "configure",
+    "create website", "scrape", "automate",
+    "создай", "напиши код", "проанализируй", "исследуй",
+    "сделай сайт", "автоматизируй", "скрапь", "разработай",
+]
+
+def classify_task(text: str) -> str:
+    text_lower = text.lower().strip()
+    if len(text_lower) < 20:
+        return "simple"
+    if any(kw in text_lower for kw in COMPLEX_KEYWORDS):
+        return "complex"
+    if len(text_lower) < 80:
+        return "medium"
+    return "complex"
+
+
 class AgentOrchestrator:
     """
     Coordinates the multi-agent flow: Planner -> Executor -> Critic.
@@ -41,6 +61,8 @@ class AgentOrchestrator:
         self.planner = PlannerAgent(router)
         self.executor = ExecutorAgent(router, tool_registry, context_manager)
         self.critic = CriticAgent(router)
+        from backend.agent.orchestration.swarm import MicroAgentSwarm
+        self.swarm = MicroAgentSwarm(router)
         
     async def run_task(self, 
                        task_description: str, 
@@ -64,6 +86,11 @@ class AgentOrchestrator:
         if is_conversational(task_description):
             logger.info(f"[{session_id}] Detected conversational message, using direct response")
             return await self._run_conversational(state, websocket_send)
+        
+        complexity = classify_task(task_description)
+        if complexity == "simple" and mode != AgentMode.FAST:
+            logger.info(f"[{session_id}] Simple task → fast mode")
+            return await self._run_fast_mode(state, websocket_send)
         
         if mode == AgentMode.FAST:
             return await self._run_fast_mode(state, websocket_send)
@@ -116,11 +143,24 @@ class AgentOrchestrator:
             
             # Subtask loop (includes critic retries)
             while True:
+                current_target = subtask.get("description", state.task_description)
                 # EXECUTE
-                state = await self.executor.process(state, websocket_send)
-                
-                # CRITIQUE (only if configured to review, or default to review everything in planning mode)
-                state = await self.critic.process(state, websocket_send)
+                # Use swarm for complex subtasks
+                if state.task_hint in ("execute", "search") or len(all_subtasks) > 2:
+                    swarm_result = await self.swarm.run(
+                        task=current_target,
+                        task_hint=state.task_hint,
+                        websocket_send=websocket_send
+                    )
+                    state.results.append({
+                        "step": i,
+                        "output": swarm_result
+                    })
+                    # Still run critic on swarm output
+                    state = await self.critic.process(state, websocket_send)
+                else:
+                    state = await self.executor.process(state, websocket_send)
+                    state = await self.critic.process(state, websocket_send)
                 
                 verdict = state.metadata.get("critic_verdict")
                 

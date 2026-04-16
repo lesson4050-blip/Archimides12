@@ -108,6 +108,21 @@ class ConnectionManager:
         """
         Main entry point for user messages via WebSocket.
         """
+        import time
+        if not hasattr(self, '_rate_buckets'):
+            self._rate_buckets: Dict[str, list] = {}
+        now = time.time()
+        bucket = [t for t in self._rate_buckets.get(session_id, [])
+                  if now - t < 60]
+        if len(bucket) >= 15:
+            await self.send_event(session_id, {
+                "type": "agent_error",
+                "message": "Rate limit: 15 tasks/minute. Please wait."
+            })
+            return
+        bucket.append(now)
+        self._rate_buckets[session_id] = bucket
+
         # Touch session on every message to reset inactivity timer
         sandbox_manager.touch_session(session_id)
 

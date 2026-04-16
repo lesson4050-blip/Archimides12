@@ -36,6 +36,10 @@ class SearchTool:
                         "max_results": {
                             "type": "integer",
                             "description": "Max results to return (default 8)"
+                        },
+                        "multi_hop": {
+                            "type": "boolean",
+                            "description": "Enable iterative multi-hop search for deep research"
                         }
                     },
                     "required": ["query"]
@@ -48,10 +52,19 @@ class SearchTool:
         query: str = "",
         search_depth: str = "basic",
         max_results: int = 8,
+        multi_hop: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         if not query:
             return {"success": False, "error": "query is required"}
+
+        if multi_hop:
+            result_text = await self._multi_hop_search(query)
+            return {
+                "success": True, 
+                "output": result_text,
+                "note": "Multi-hop search completed."
+            }
 
         # Try Tavily first
         if settings.TAVILY_API_KEY:
@@ -67,6 +80,43 @@ class SearchTool:
             return result
 
         return {"success": False, "error": "All search engines failed"}
+
+    async def _multi_hop_search(self, initial_query: str, max_hops: int = 3) -> str:
+        all_results = []
+        current_query = initial_query
+        
+        from backend.models.model_router import ModelRouter
+        router = ModelRouter()
+        
+        for hop in range(max_hops):
+            # Execute single search
+            res = None
+            if settings.TAVILY_API_KEY:
+                res = await self._search_tavily(current_query, "basic", 5)
+            if not res or not res.get("success"):
+                res = await self._search_duckduckgo(current_query, 5)
+
+            text = res.get("output", "") if res else ""
+            all_results.append(f"--- Search [{hop+1}/{max_hops}] '{current_query}' ---\n{text}")
+            
+            # Ask LLM if we have enough info
+            analysis_prompt = f"""
+Goal: {initial_query}
+Found so far: { text[:2000] }
+If the goal is fully answered by the findings, output 'DONE'.
+If we need more info (e.g. data is missing or incomplete), output a single new search query string.
+Do not output any reasoning, just 'DONE' or the new query.
+"""
+            analysis = await router.generate(
+                messages=[{"role": "user", "content": analysis_prompt}],
+                task_hint="think"
+            )
+            ans = analysis.get("text", "").strip()
+            if "DONE" in ans.upper() or not ans:
+                break
+            current_query = ans
+            
+        return "\n\n".join(all_results)
 
     async def _search_tavily(
         self, query: str, depth: str, max_results: int

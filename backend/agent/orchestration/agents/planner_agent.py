@@ -3,6 +3,23 @@ from typing import Optional, Callable
 from backend.agent.orchestration.agents.base import BaseAgent
 from backend.agent.orchestration.state import OrchestrationState
 from backend.models.model_router import ModelRouter
+from backend.agent.llm_router import llm_router, OutputMode
+from pydantic import BaseModel
+from typing import List, Dict, Any
+
+class _SubTask(BaseModel):
+    type: str = "execute"
+    description: str
+    params: Dict[str, Any] = {}
+
+class _Phase(BaseModel):
+    title: str
+    subtasks: List[_SubTask] = []
+
+class _PlanResponse(BaseModel):
+    strategy: str = "sequential"
+    phases: List[_Phase] = []
+
 
 logger = logging.getLogger(__name__)
 
@@ -71,86 +88,37 @@ class PlannerAgent(BaseAgent):
         ]
         
         try:
-            response = await self.router.generate(
+            plan_obj = await llm_router.call(
                 messages=messages,
-                task_hint="think"
+                mode=OutputMode.STRICT_JSON,
+                response_model=_PlanResponse,
+                task_hint="think",
+                max_retries=3
+            )
+            plan_json = plan_obj.model_dump()
+            state.current_plan = plan_json
+            
+            from backend.utils.structured_logger import log_plan
+            log_plan(
+                state.session_id,
+                plan_json,
+                state.task_description
             )
             
-            # Extract JSON from response
-            from backend.utils.json_repair import repair_and_parse
-            from backend.utils.tool_schemas import PlanSchema
-
-            text = response.get("text", "")
-            plan_json = None
-            parse_attempts = 0
-            max_parse_attempts = 3
-
-            while parse_attempts < max_parse_attempts and plan_json is None:
-                parsed, err = repair_and_parse(text)
-
-                if parsed and isinstance(parsed, dict):
-                    # Validate with Pydantic
-                    try:
-                        validated_plan = PlanSchema(**parsed)
-                        plan_json = validated_plan.model_dump()
-                    except Exception as ve:
-                        logger.warning(
-                            f"Plan schema validation failed: {ve}. "
-                            f"Attempt {parse_attempts+1}"
-                        )
-                        plan_json = None
-
-                if plan_json is None and parse_attempts < max_parse_attempts - 1:
-                    # Ask model to fix its output
-                    fix_messages = messages + [
-                        {"role": "assistant", "content": text},
-                        {
-                            "role": "user",
-                            "content": (
-                                "Your response was not valid JSON. "
-                                "Output ONLY the JSON object with "
-                                '"strategy" and "phases" keys. '
-                                "No explanation, no markdown, pure JSON."
-                            )
-                        }
-                    ]
-                    fix_response = await self.router.generate(
-                        messages=fix_messages, task_hint="think"
-                    )
-                    text = fix_response.get("text", "")
-
-                parse_attempts += 1
-
-            if plan_json and plan_json.get("phases"):
-                state.current_plan = plan_json
-                from backend.utils.structured_logger import log_plan
-                log_plan(
-                    state.session_id,
-                    plan_json,
-                    state.task_description
-                )
-                await self.log_thought(
-                    f"Plan created: {len(plan_json.get('phases',[]))} phases.",
-                    websocket_send
-                )
-            else:
-                raise ValueError(
-                    f"Could not get valid JSON plan after "
-                    f"{max_parse_attempts} attempts."
-                )
-                
+            await self.log_thought(
+                f"Plan: {len(plan_json.get('phases',[]))} phases "
+                f"(grammar-constrained JSON)",
+                websocket_send
+            )
         except Exception as e:
-            logger.error(f"Planning failed: {e}")
+            logger.error(f"Planning failed even with grammar constraint: {e}")
             await self.log_info(f"Warning: Falling back to single-phase plan due to error: {e}", websocket_send)
-            # Fallback plan
             state.current_plan = {
                 "strategy": "sequential",
-                "phases": [
-                    {
-                        "title": "Action Phase",
-                        "subtasks": [{"type": "execute", "description": state.task_description, "params": {}}]
-                    }
-                ]
+                "phases": [{"title": "Action Phase", "subtasks": [
+                    {"type": "execute", "description": state.task_description,
+                     "params": {}}
+                ]}]
             }
-            
+
         return state

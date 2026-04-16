@@ -64,6 +64,10 @@ To find specific info: use browser(action="extract", query="what you need")
 To click a button/link: use browser(action="click", text="visible button text")
 To search in a search box: use browser(action="type_and_submit", selector="input[type='search']", text="query")
 To see all interactive elements: use browser(action="get_elements")
+- For complex pages (login forms, dynamic content): use
+  browser(action="vision_analyze", question="What button should I click to X?")
+- The vision analysis sees the actual rendered page, not just text
+- Use it when get_elements returns confusing results
 NEVER use search tool when you can get fresher data directly from a URL
 For research tasks: navigate → extract relevant sections → synthesize
 When a page needs authentication: navigate → get_elements → click login → type credentials → type_and_submit

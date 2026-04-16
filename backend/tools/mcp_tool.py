@@ -16,10 +16,15 @@ class MCPTool:
     def get_definition(self) -> Dict[str, Any]:
         return {
             "name": "mcp_connect",
-            "description": "Connect to a new external MCP server to expand your toolset. Example: connect to 'server-fetch' via npx.",
+            "description": "Interact with MCP servers. Use action='list_catalog' to see available servers, or action='connect' to connect a new one.",
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["connect", "list_catalog"],
+                        "description": "Action to perform"
+                    },
                     "server_name": {
                         "type": "string",
                         "description": "Short, unique name for the server (e.g., 'google-search')"
@@ -31,16 +36,31 @@ class MCPTool:
                     "args": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Arguments for the command (e.g., ['-y', '@modelcontextprotocol/server-google-search'])"
+                        "description": "Arguments for the command"
                     }
                 },
-                "required": ["server_name", "command"]
+                "required": ["action"]
             }
         }
 
-    async def execute(self, server_name: str, command: str, args: List[str] = [], **kwargs) -> Dict[str, Any]:
+    async def execute(self, action: str = "connect", server_name: str = "", command: str = "", args: List[str] = [], **kwargs) -> Dict[str, Any]:
         """Dynamically add a new MCP server and discover its tools."""
         try:
+            if action == "list_catalog":
+                from backend.mcp_hub.marketplace import MCP_CATALOG
+                return {
+                    "success": True,
+                    "catalog": list(MCP_CATALOG.keys()),
+                    "message": "To connect, use action='connect' with server_name and command from catalog."
+                }
+            
+            # For connect action, lookup in catalog if command is missing
+            if action == "connect" and not command and server_name:
+                from backend.mcp_hub.marketplace import MCP_CATALOG
+                if server_name in MCP_CATALOG:
+                    command = MCP_CATALOG[server_name]["command"]
+                    args = MCP_CATALOG[server_name].get("args", [])
+
             # Check if already connected
             if server_name in self.mcp_client.sessions:
                 return {

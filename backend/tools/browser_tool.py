@@ -47,7 +47,8 @@ class BrowserTool:
                                 "screenshot",  # Take screenshot
                                 "get_elements", # List all interactive elements
                                 "wait_for",    # Wait for element to appear
-                                "current_state" # Get URL/title/elements (no content)
+                                "current_state", # Get URL/title/elements (no content)
+                                "vision_analyze" # Analyze current page visually
                             ],
                             "description": "Browser action to perform"
                         },
@@ -121,6 +122,69 @@ class BrowserTool:
         logger.error("Browser server failed to start")
         return False
 
+    async def _analyze_with_vision(
+        self,
+        session_id: str,
+        screenshot_path: str,
+        question: str
+    ) -> str:
+        """
+        Use multimodal model to analyze browser screenshot.
+        Falls back to text-only if vision not available.
+        """
+        try:
+            # Read screenshot from container
+            read_res = await self.executor.run_command(
+                session_id,
+                f"base64 {screenshot_path} 2>/dev/null"
+            )
+            if not read_res.get("success"):
+                return ""
+
+            b64_image = read_res.get("output", "").strip()
+            if not b64_image:
+                return ""
+
+            # Try Gemini vision (free tier)
+            from backend.config import settings
+            if settings.GOOGLE_API_KEY:
+                from google import genai
+                from google.genai import types
+                client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+                response = await asyncio.to_thread(
+                    client.models.generate_content,
+                    model="gemini-2.0-flash",
+                    contents=[
+                        types.Content(parts=[
+                            types.Part(text=question),
+                            types.Part(inline_data=types.Blob(
+                                mime_type="image/png",
+                                data=b64_image
+                            ))
+                        ])
+                    ]
+                )
+                return response.text or ""
+
+            # Try Ollama with vision model if available
+            import ollama as ollama_lib
+            import base64
+            img_bytes = base64.b64decode(b64_image)
+            response = await asyncio.to_thread(
+                ollama_lib.chat,
+                model="llava:7b",  # or minicpm-v, qwen2.5-vl
+                messages=[{
+                    "role": "user",
+                    "content": question,
+                    "images": [img_bytes]
+                }]
+            )
+            return response.message.content or ""
+
+        except Exception as e:
+            logger.warning(f"Vision analysis failed: {e}")
+            return ""
+
     async def execute(
         self,
         session_id: str,
@@ -128,6 +192,32 @@ class BrowserTool:
         **kwargs
     ) -> Dict[str, Any]:
         try:
+            if action == "vision_analyze":
+                question = kwargs.get("question", "What do you see on this page?")
+                # First get screenshot
+                screenshot_result = await self.execute(
+                    session_id, "screenshot",
+                    filename="/tmp/browser_vision.png"
+                )
+                if not screenshot_result.get("success"):
+                    return {"success": False, "error": "Could not take screenshot"}
+
+                vision_text = await self._analyze_with_vision(
+                    session_id,
+                    "/tmp/browser_vision.png",
+                    question
+                )
+                # Also get DOM text as backup
+                current = await self.execute(session_id, "current_state")
+
+                return {
+                    "success": True,
+                    "vision_analysis": vision_text,
+                    "url": current.get("url", ""),
+                    "elements": current.get("elements", []),
+                    "hint": "Use vision_analysis to understand what to click next"
+                }
+
             # Ensure browser is running
             if not await self._ensure_browser_running(session_id):
                 return {

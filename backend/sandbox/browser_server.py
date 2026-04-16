@@ -150,6 +150,13 @@ async def execute_action(page: Page, data: dict) -> dict:
             truncated = _truncate_smart(cleaned)
             elements = await _get_interactive_elements(page)
             
+            # Capture screenshot for vision analysis
+            screenshot_path = "/tmp/browser_current.png"
+            try:
+                await page.screenshot(path=screenshot_path, full_page=False)
+            except Exception:
+                screenshot_path = None
+            
             return {
                 "success": True,
                 "url": page.url,
@@ -157,6 +164,7 @@ async def execute_action(page: Page, data: dict) -> dict:
                 "content": truncated,
                 "content_length": len(cleaned),
                 "elements": elements,
+                "screenshot_path": screenshot_path,
                 "hint": "Use 'click' with element text or 'extract' for specific data."
             }
 
@@ -234,11 +242,19 @@ async def execute_action(page: Page, data: dict) -> dict:
             content = await _get_main_content(page)
             cleaned = _clean_text(content)
             
+            # Capture screenshot for vision analysis
+            screenshot_path = "/tmp/browser_current.png"
+            try:
+                await page.screenshot(path=screenshot_path, full_page=False)
+            except Exception:
+                screenshot_path = None
+            
             return {
                 "success": True,
                 "url": page.url,
                 "title": title,
                 "content": _truncate_smart(cleaned),
+                "screenshot_path": screenshot_path,
                 "message": f"Clicked '{target}'"
             }
 
