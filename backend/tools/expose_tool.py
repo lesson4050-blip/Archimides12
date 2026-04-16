@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 from typing import Dict, Any
 from backend.sandbox.executor import SandboxExecutor
 

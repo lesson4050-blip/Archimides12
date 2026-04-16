@@ -10,7 +10,7 @@ Key improvements over v1:
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from backend.config import settings
 

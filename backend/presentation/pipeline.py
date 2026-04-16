@@ -1,9 +1,11 @@
 import os
 import asyncio
 import logging
+import sqlite3
+import json
 from typing import Optional, Dict
 
-from backend.presentation.schemas import TaskStatus, RenderedSlide, Theme
+from backend.presentation.schemas import TaskStatus
 from backend.presentation.agents.planner import PlannerAgent
 from backend.presentation.agents.content import ContentAgent
 from backend.presentation.engine.design import DesignEngine
@@ -13,8 +15,7 @@ from backend.presentation.services.renderer import renderer_service
 
 logger = logging.getLogger(__name__)
 
-import sqlite3
-import json
+
 
 def _get_pipeline_db():
     os.makedirs("data", exist_ok=True)

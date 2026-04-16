@@ -1,5 +1,5 @@
 export type AgentEvent = {
-  type: "thought" | "tool_call" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued";
+  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued";
   content?: string;
   text?: string;
   tool?: string;
@@ -12,8 +12,13 @@ export type AgentEvent = {
   name?: string;
   path?: string;
   language?: string;
+  // Plan updates
+  phases?: any[];
   // VNC
   url?: string;
+  // Message result attachments
+  message?: string;
+  attachments?: string[];
 };
 
 export class ArchimedesSocket {

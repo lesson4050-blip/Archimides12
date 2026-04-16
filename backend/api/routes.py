@@ -2,10 +2,10 @@
 КОСМО-уровневые API маршруты для Archimedes.
 """
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from backend.auth.dependencies import get_current_user, require_admin
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
 import os

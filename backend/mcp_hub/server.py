@@ -1,9 +1,6 @@
 import logging
-import asyncio
-from typing import Any, Dict, List
 from mcp.server.fastmcp import FastMCP
 from backend.agent.tool_registry import ToolRegistry
-from backend.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -20,9 +20,9 @@ export default function ArtifactsDrawer() {
         }));
         setArtifacts(prev => [...prev, ...newArtifacts]);
       }
-      if (event.type === "tool_result" && event.tool === "browser" && event.output.includes("Screenshot saved")) {
+      if (event.type === "tool_result" && event.tool === "browser" && event.output && event.output.includes("Screenshot saved")) {
         // Extract screenshot path -- simplified for now
-        setArtifacts(prev => [...prev, { name: "Screenshot", type: "image", path: event.output.split("saved to ")[1] }]);
+        setArtifacts(prev => [...prev, { name: "Screenshot", type: "image", path: event.output!.split("saved to ")[1] }]);
       }
     };
 

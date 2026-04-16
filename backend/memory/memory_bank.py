@@ -3,12 +3,11 @@ Memory Bank: persistent cross-session knowledge storage.
 Agents write facts, rules, and summaries here.
 On each new session, relevant memories are loaded automatically.
 """
-import json
 import logging
 import os
 import sqlite3
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("MEMORY_BANK_DB", "data/memory_bank.db")

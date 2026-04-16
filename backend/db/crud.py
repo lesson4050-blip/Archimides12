@@ -4,9 +4,9 @@ Automatically detects available database and configures connection pooling.
 """
 
 import logging
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select, update
-from backend.db.models import Base, Session, Task, Message, Artifact, User
+from backend.db.models import Base, Session, Task, Message, User
 from backend.config import settings
 
 logger = logging.getLogger(__name__)

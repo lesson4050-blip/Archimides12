@@ -1,7 +1,7 @@
 import logging
 import asyncio
 import sys
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from mcp import StdioServerParameters
 from mcp.client.session import ClientSession
 from mcp.client.stdio import stdio_client

@@ -2,7 +2,7 @@ import os
 import logging
 import requests
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 

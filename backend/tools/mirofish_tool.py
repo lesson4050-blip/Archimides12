@@ -1,5 +1,3 @@
-import asyncio
-import json
 import logging
 from typing import Dict, Any
 from backend.models.model_router import ModelRouter
@@ -75,9 +73,12 @@ Return ONLY valid JSON, no other text.
             )
             try:
                 text = resp.get("text", "{}").strip()
-                if text.startswith("```json"): text = text[7:]
-                if text.startswith("```"): text = text[3:]
-                if text.endswith("```"): text = text[:-3]
+                if text.startswith("```json"):
+                    text = text[7:]
+                if text.startswith("```"):
+                    text = text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
                 
                 from backend.utils.json_repair import repair_and_parse
                 data, err = repair_and_parse(text.strip())

@@ -13,12 +13,8 @@ SlidesTool v3 — Kimi/Gamma уровень качества.
 import asyncio
 import base64
 import io
-import json
 import logging
-import os
-import re
-import tempfile
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -971,7 +967,8 @@ class SlidesTool:
     async def _execute_fallback(self, session_id: str, title: str, slides: list, filename: str = "presentation.pptx", **kwargs) -> Dict[str, Any]:
         try:
             from pptx import Presentation
-            import io, base64
+            import io
+            import base64
 
             prs = Presentation()
             slide = prs.slides.add_slide(prs.slide_layouts[0])

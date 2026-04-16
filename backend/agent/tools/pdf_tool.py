@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 try:
     import pypdf
     from pdf2image import convert_from_path

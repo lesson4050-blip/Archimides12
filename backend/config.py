@@ -2,7 +2,7 @@ from typing import Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
-_env_path = Path(__file__).resolve().parent.parent / ".env"
+_env_path = Path(__file__).resolve().parent / ".env"
 
 class Settings(BaseSettings):
     # API Keys
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     IMAGE_CRITIQUE_MODEL: str = "gemini-2.5-flash"
     
     # Sandbox
-    SANDBOX_IMAGE: str = "cosmo-sandbox:latest"
+    SANDBOX_IMAGE: str = "archimedes-sandbox:latest"
     SANDBOX_MAX_CONTAINERS: int = 3
     SANDBOX_INACTIVITY_TIMEOUT: int = 3600  # 1 hour
     SANDBOX_SHELL_TIMEOUT: int = 60

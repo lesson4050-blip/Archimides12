@@ -28,8 +28,10 @@ async def main():
         res_file = "/tmp/browser_res.json"
         
         # Clean up old files
-        if os.path.exists(cmd_file): os.remove(cmd_file)
-        if os.path.exists(res_file): os.remove(res_file)
+        if os.path.exists(cmd_file):
+            os.remove(cmd_file)
+        if os.path.exists(res_file):
+            os.remove(res_file)
         
         logger.info("Browser window opened. Listening for commands in /tmp/browser_cmd.json")
         

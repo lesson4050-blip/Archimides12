@@ -5,7 +5,7 @@ Uses python-jose for JWT and secrets for API keys.
 
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 
 from jose import JWTError, jwt
@@ -19,8 +19,8 @@ def create_access_token(user_id: str, role: str = "user", extra: dict = None) ->
     payload = {
         "sub": user_id,
         "role": role,
-        "iat": datetime.utcnow(),
-        "exp": datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS),
+        "iat": datetime.now(tz=timezone.utc),
+        "exp": datetime.now(tz=timezone.utc) + timedelta(hours=settings.JWT_EXPIRATION_HOURS),
     }
     if extra:
         payload.update(extra)

@@ -150,7 +150,8 @@ class GroqClient:
                 
                 async for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
-                    if not delta: continue
+                    if not delta:
+                        continue
                     
                     if delta.content:
                         full_text += delta.content

@@ -1,13 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from backend.auth.dependencies import get_current_user
 from backend.db.crud import AsyncSessionLocal
-from backend.db.models import UserSettings, UsageRecord, User
+from backend.db.models import UserSettings, UsageRecord
 from backend.tools.scheduler_singleton import get_scheduler
-from sqlalchemy import select, update
+from sqlalchemy import select
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import logging
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +86,6 @@ async def get_usage(user: dict = Depends(get_current_user)):
 @router.get("/scheduler", summary="Get scheduled tasks")
 async def get_scheduled_tasks(user: dict = Depends(get_current_user)):
     scheduler = get_scheduler()
-    res = await scheduler.execute(action="list")
-    # Parse the text summary into a more structured list for the UI
     # In a real app we'd store these in the DB too
     return {"status": "success", "jobs": scheduler._jobs if hasattr(scheduler, '_jobs') else []}
 

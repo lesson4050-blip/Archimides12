@@ -14,7 +14,7 @@ export default function PlanTab({ events }: { events: AgentEvent[] }) {
     <div className="p-6 h-full overflow-y-auto custom-scrollbar">
       <div className="max-w-xl mx-auto space-y-4">
         <AnimatePresence>
-          {phases.map((phase: any, idx: number) => (
+          {(phases || []).map((phase: any, idx: number) => (
             <motion.div
               key={phase.id || idx}
               initial={{ opacity: 0, x: 20 }}
@@ -51,7 +51,7 @@ export default function PlanTab({ events }: { events: AgentEvent[] }) {
           ))}
         </AnimatePresence>
         
-        {phases.length === 0 && (
+        {(!phases || phases.length === 0) && (
           <div className="h-full flex flex-col items-center justify-center text-[#444] pt-20">
             <ClipboardList size={40} className="mb-2 opacity-20" />
             <p className="text-center px-4">Waiting for Archimedes to create a plan...</p>

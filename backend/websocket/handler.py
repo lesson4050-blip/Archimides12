@@ -1,8 +1,7 @@
-import json
 import logging
 import asyncio
 from typing import Dict, List, Any
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 from backend.agent.core import ArchimedesCosmoAgent
 from backend.agent.agent_profiles import get_profile
 from backend.sandbox.singleton import sandbox_manager

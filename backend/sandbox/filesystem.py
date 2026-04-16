@@ -3,7 +3,7 @@ import logging
 import io
 import tarfile
 import asyncio
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.sandbox.manager import SandboxManager

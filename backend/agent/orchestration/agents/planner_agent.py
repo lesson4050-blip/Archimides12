@@ -1,6 +1,5 @@
-import json
 import logging
-from typing import Optional, Callable, List, Dict, Any
+from typing import Optional, Callable
 from backend.agent.orchestration.agents.base import BaseAgent
 from backend.agent.orchestration.state import OrchestrationState
 from backend.models.model_router import ModelRouter
@@ -15,7 +14,7 @@ class PlannerAgent(BaseAgent):
         super().__init__("Planner", router)
 
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
-        await self.log_info(f"Analyzing task and creating execution plan...", websocket_send)
+        await self.log_info("Analyzing task and creating execution plan...", websocket_send)
         
         # System prompt for planning
         system_prompt = """

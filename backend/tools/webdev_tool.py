@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from backend.sandbox.executor import SandboxExecutor
 from backend.sandbox.filesystem import SandboxFilesystem
 

@@ -1,9 +1,8 @@
 import os
 import logging
 import asyncio
-import subprocess
 import shlex
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials

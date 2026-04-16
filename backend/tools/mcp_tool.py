@@ -1,7 +1,6 @@
 import logging
 import asyncio
 from typing import Dict, Any, List, Optional, Callable
-from backend.config import settings
 
 logger = logging.getLogger(__name__)
 

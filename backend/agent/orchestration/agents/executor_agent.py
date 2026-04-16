@@ -1,11 +1,10 @@
 import logging
 import uuid
 import os
-from typing import Optional, Callable, List, Dict, Any
+from typing import Optional, Callable
 from backend.agent.orchestration.agents.base import BaseAgent
 from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.models.model_router import ModelRouter
-from backend.agent.thought_engine import ThoughtEngine
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
 from backend.config import settings
@@ -47,7 +46,7 @@ class ExecutorAgent(BaseAgent):
         # Determine target task
         if state.mode == AgentMode.FAST:
             current_target = state.task_description
-            await self.log_info(f"Исполнение задачи (Быстрый режим)...", websocket_send)
+            await self.log_info("Исполнение задачи (Быстрый режим)...", websocket_send)
         else:
             if not state.current_plan:
                  current_target = state.task_description
@@ -181,7 +180,7 @@ class ExecutorAgent(BaseAgent):
                     res_text = "Я выполнил эту часть задачи." # Safety fallback
                 
                 if websocket_send and res_text:
-                    await websocket_send({"type": "message_result", "content": res_text})
+                    await websocket_send({"type": "message_info", "content": f"Результат шага: {res_text}"})
                 
                 state.results.append({"step": state.current_step_index, "output": res_text or "Done."})
                 
@@ -189,7 +188,6 @@ class ExecutorAgent(BaseAgent):
                 if res_text and len(res_text) > 100:
                     try:
                         from backend.memory.memory_bank import save_fact
-                        from backend.models.model_router import ModelRouter
 
                         # Ask the model to extract key facts from this result
                         extract_prompt = (

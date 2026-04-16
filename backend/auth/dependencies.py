@@ -100,7 +100,7 @@ async def _lookup_user_by_api_key(api_key: str) -> Optional[dict]:
         
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(User).where(User.api_key == api_key, User.is_active == True)
+                select(User).where(User.api_key == api_key, User.is_active.is_(True))
             )
             user = result.scalar_one_or_none()
             if user:

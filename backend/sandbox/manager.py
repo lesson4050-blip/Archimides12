@@ -118,24 +118,14 @@ class SandboxManager:
                 return True
 
             active_count = len(self._sessions)
-            if active_count < settings.SANDBOX_MAX_CONTAINERS:
-                # Slot available — create immediately
-                return await self._create_container(session_id)
+            if active_count >= settings.SANDBOX_MAX_CONTAINERS:
+                # Evict oldest session instead of queueing infinitely
+                oldest_sid = min(self._sessions.keys(), key=lambda k: self._sessions[k].last_activity)
+                logger.info(f"Max containers reached. Evicting oldest session {oldest_sid} to make room for {session_id}.")
+                session_to_evict = self._sessions.pop(oldest_sid)
+                await self._stop_and_remove(session_to_evict.container, oldest_sid)
 
-        # Max reached — queue this session
-        logger.info(
-            f"Max containers ({settings.SANDBOX_MAX_CONTAINERS}) reached. "
-            f"Queuing session {session_id}."
-        )
-        wait_event = asyncio.Event()
-        self._queue.append(wait_event)
-        self._queue_session_ids.append(session_id)
-
-        # Block until a slot opens (event is set by destroy_session)
-        await wait_event.wait()
-
-        # Slot freed — create container
-        async with self._lock:
+            # Create container immediately
             return await self._create_container(session_id)
 
     async def destroy_session(self, session_id: str):
@@ -146,7 +136,7 @@ class SandboxManager:
         async with self._lock:
             session = self._sessions.pop(session_id, None)
             if session:
-                self._stop_and_remove(session.container, session_id)
+                await self._stop_and_remove(session.container, session_id)
 
             # Wake next queued session
             self._wake_next_queued()
@@ -275,7 +265,7 @@ class SandboxManager:
             logger.error(f"Failed to get novnc port: {e}")
         return None
 
-    def _stop_and_remove(self, container: Any, session_id: str):
+    async def _stop_and_remove(self, container: Any, session_id: str):
         """Stop and remove a Docker container."""
         container_name = f"archimedes-session-{session_id}"
         
@@ -287,12 +277,11 @@ class SandboxManager:
             shell.stop()
             
         try:
-            # We use run_in_executor here to avoid blocking shutdown tasks
-            loop.run_in_executor(None, lambda: container.stop(timeout=10))
+            await loop.run_in_executor(None, lambda: container.stop(timeout=10))
         except Exception:
             pass
         try:
-            loop.run_in_executor(None, lambda: container.remove(force=True))
+            await loop.run_in_executor(None, lambda: container.remove(force=True))
         except Exception:
             pass
             
@@ -347,10 +336,10 @@ class SandboxManager:
     # Full Cleanup (shutdown)
     # ------------------------------------------------------------------
 
-    def cleanup(self):
+    async def cleanup(self):
         """Stop and remove ALL active session containers. Called on app shutdown."""
         for session_id, session in list(self._sessions.items()):
-            self._stop_and_remove(session.container, session_id)
+            await self._stop_and_remove(session.container, session_id)
         self._sessions.clear()
 
         # Wake any queued sessions so they don't hang forever

@@ -5,7 +5,6 @@ Auth API routes: registration, login, API key management.
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -19,7 +18,7 @@ from backend.auth.jwt_handler import (
     hash_password,
     verify_password,
 )
-from backend.auth.dependencies import get_current_user, require_admin
+from backend.auth.dependencies import get_current_user
 from backend.db.crud import AsyncSessionLocal
 from backend.db.models import User
 

@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import os
-import select
-from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.sandbox.manager import SandboxManager
@@ -82,7 +80,7 @@ class PersistentShell:
                     break
             
             logger.warning(f"Shell command timed out after {timeout} seconds.")
-            return {"success": False, "error": f"Timeout: command execution incomplete."}
+            return {"success": False, "error": "Timeout: command execution incomplete."}
 
 class SandboxExecutor:
     """

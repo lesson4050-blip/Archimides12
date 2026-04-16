@@ -23,7 +23,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Message {
   role: "user" | "assistant" | "system";
-  type: "text" | "info" | "ask" | "result" | "plan" | "artifact";
+  type: "text" | "info" | "ask" | "result" | "plan" | "artifact" | "thought" | "tool" | "tool_call";
   content: string;
   artifactData?: ArtifactData;
 }

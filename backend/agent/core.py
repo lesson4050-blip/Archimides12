@@ -4,7 +4,6 @@
 """
 
 import asyncio
-import json
 import logging
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
@@ -128,7 +127,7 @@ class ArchimedesCosmoAgent:
         )
         
         # MCP Integration: Initialize and connect external servers
-        from backend.mcp.client import ArchimedesMCPClient
+        from backend.mcp_hub.client import ArchimedesMCPClient
         self.mcp_client = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
         # asyncio.create_task(self._init_mcp())  # Moved to initialize()
 
@@ -453,7 +452,6 @@ class ArchimedesCosmoAgent:
         """Выполнить подзадачу с использованием LLM и инструментов."""
         try:
             subtask_type = subtask.get("type", "generic")
-            task_desc = subtask.get("params", {}).get("task", "")
             
             # Simple notification about action
             action_map = {
@@ -575,7 +573,7 @@ class ArchimedesCosmoAgent:
                         if t_name == "message" and t_params.get("type") == "result":
                             # --- ADVERSARIAL SELF-REVIEW ---
                             # Extract original task from history (usually index 1)
-                            original_task = self.history[1]["content"] if len(self.history) > 1 else description
+                            original_task = self.history[1]["content"] if len(self.history) > 1 else subtask.get("params", {}).get("task", "")
                             review = await self.reviewer.review(
                                 task=original_task,
                                 answer=t_params.get("content", ""),
@@ -645,7 +643,7 @@ If no, explain what is missing in 1-2 sentences.
     async def _handle_error_with_recovery(self, task_id: str, error: str, 
                                          original_task: str) -> ExecutionResult:
         """Обработать ошибку с попыткой восстановления."""
-        logger.info(f"RECOVERY: Попытка восстановления после ошибки...")
+        logger.info("RECOVERY: Попытка восстановления после ошибки...")
         
         for attempt in range(self.max_retries):
             try:

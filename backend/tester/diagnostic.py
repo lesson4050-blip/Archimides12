@@ -4,7 +4,6 @@ Runs all test suites and produces a Markdown report.
 """
 
 import asyncio
-import httpx
 import websockets
 import json
 import os
@@ -430,8 +429,8 @@ def write_report():
         "",
         "## Overall Summary",
         "",
-        f"| Suite | Status |",
-        f"|-------|--------|",
+        "| Suite | Status |",
+        "|-------|--------|",
     ]
     for suite_name, suite_status in SUMMARY.items():
         icon = {"PASS": "✅", "FAIL": "❌", "WARN": "⚠️"}.get(suite_status, "❓")

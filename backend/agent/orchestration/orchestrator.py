@@ -83,16 +83,11 @@ class AgentOrchestrator:
             response = await self.router.generate(messages=messages, task_hint="think")
             result_text = response.get("text", "Привет! Чем могу помочь?")
             
-            if websocket_send:
-                await websocket_send({"type": "message_result", "content": result_text})
-            
             state.results.append({"step": 0, "output": result_text})
             return await self._get_final_response(state, websocket_send)
         except Exception as e:
             logger.error(f"Conversational response failed: {e}")
             fallback = "Привет! Я Archimedes — ваш AI-ассистент. Чем могу помочь?"
-            if websocket_send:
-                await websocket_send({"type": "message_result", "content": fallback})
             state.results.append({"step": 0, "output": fallback})
             return await self._get_final_response(state, websocket_send)
 
@@ -154,7 +149,7 @@ class AgentOrchestrator:
             if websocket_send:
                 await websocket_send({"type": "info", "content": "Синтезирую итоговый ответ..."})
             
-            summary_prompt = f"На основе результатов всех выполненных подзадач сформируй итоговый ответ пользователю на его изначальный запрос.\n\n"
+            summary_prompt = "На основе результатов всех выполненных подзадач сформируй итоговый ответ пользователю на его изначальный запрос.\n\n"
             summary_prompt += f"ИЗНАЧАЛЬНЫЙ ЗАПРОС: {state.task_description}\n\n"
             for res in state.results:
                 summary_prompt += f"Шаг {res.get('step')}: {res.get('output')}\n"
@@ -165,8 +160,6 @@ class AgentOrchestrator:
                     task_hint="think"
                 )
                 final_output = response.get("text", state.results[-1].get("output", "Done."))
-                if websocket_send:
-                    await websocket_send({"type": "message_result", "content": final_output})
             except Exception as e:
                 logger.error(f"Failed to synthesize final response: {e}")
                 final_output = state.results[-1].get("output", "Done.")

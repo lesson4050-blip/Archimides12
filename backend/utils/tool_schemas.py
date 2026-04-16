@@ -4,7 +4,6 @@ Every tool call is validated before execution.
 """
 from pydantic import BaseModel, field_validator
 from typing import Any, Dict, Optional, Literal
-import re
 
 
 class ToolCallSchema(BaseModel):

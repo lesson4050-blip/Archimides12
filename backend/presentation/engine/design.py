@@ -1,5 +1,5 @@
 import jinja2
-from typing import Dict, Any
+from typing import Dict
 
 from backend.presentation.schemas import SlideContent, Theme, RenderedSlide
 from backend.presentation.engine.layouts import get_layout

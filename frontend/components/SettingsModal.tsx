@@ -676,7 +676,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                          <section className="space-y-6">
                             <h3 className="text-[15px] font-black border-b border-gray-100 dark:border-white/5 pb-2">Bot Settings</h3>
                             <div>
-                               <label className="block text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-1">Cosmo's email</label>
+                               <label className="block text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-1">Cosmo&apos;s email</label>
                                <div className="flex items-center gap-2 text-black dark:text-white">
                                   <input readOnly value="archimedes-cosmo@cosmo.bot" className="flex-1 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 text-sm text-gray-500" />
                                   <button className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"><Edit3 size={16} className="text-gray-400" /></button>

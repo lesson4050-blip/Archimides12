@@ -1,5 +1,6 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+import asyncio
 from backend.sandbox.executor import SandboxExecutor
 
 logger = logging.getLogger(__name__)

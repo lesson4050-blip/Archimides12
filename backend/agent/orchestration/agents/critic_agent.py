@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable
 from backend.agent.orchestration.agents.base import BaseAgent
 from backend.agent.orchestration.state import OrchestrationState
 from backend.models.model_router import ModelRouter
@@ -85,7 +85,7 @@ class CriticAgent(BaseAgent):
                 await self.log_thought(f"Quality gate flagged issues (Attempt {state.current_retry_count}/{max_retries}).", websocket_send)
                 
                 if state.current_retry_count >= max_retries:
-                    await self.log_info(f"Accepting result (retry limit reached).", websocket_send)
+                    await self.log_info("Accepting result (retry limit reached).", websocket_send)
                     state.metadata["critic_verdict"] = "LIMIT_REACHED"
                 else:
                     feedback_msg = "The Quality Critic noted:\n"
