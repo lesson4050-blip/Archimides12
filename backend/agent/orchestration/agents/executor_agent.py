@@ -210,12 +210,33 @@ class ExecutorAgent(BaseAgent):
                     
                 
                 if t_name == "file" and t_params.get("action") == "write" and success:
+                    content = t_params.get("content", "")
+                    path = t_params.get("path", "")
+
+                    # Apply TDD for Python files in execute mode
+                    if (path.endswith(".py") and
+                        len(content) > 50 and
+                        state.task_hint == "execute"):
+                        try:
+                            from backend.agent.tdd_executor import TDDExecutor
+                            from backend.sandbox.singleton import sandbox_manager
+                            tdd = TDDExecutor(self.router, sandbox_manager.executor)
+                            tdd_result = await tdd.execute_tdd(
+                                task=state.task_description,
+                                session_id=state.session_id,
+                                websocket_send=websocket_send
+                            )
+                            if "[TDD Success]" in tdd_result:
+                                output += f"\n✅ TDD: verified successfully"
+                        except Exception as tdd_err:
+                            logger.warning(f"TDD failed (non-critical): {tdd_err}")
+
                     if websocket_send:
                         await websocket_send({
                             "type": "artifact",
-                            "name": os.path.basename(t_params.get("path", "file")),
-                            "content": t_params.get("content", ""),
-                            "language": "markdown" if t_params.get("path", "").endswith(".md") else "plaintext"
+                            "name": os.path.basename(path or "file"),
+                            "content": content,
+                            "language": "markdown" if path.endswith(".md") else "plaintext"
                         })
                 
                 await self.context_manager.summarize_if_needed(self.router)

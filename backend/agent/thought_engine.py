@@ -1,7 +1,17 @@
 
+from typing import Optional
+
 class ThoughtEngine:
+    _CACHED_SYSTEM_PROMPT: Optional[str] = None
+
+    @classmethod
+    def get_system_prompt(cls) -> str:
+        if cls._CACHED_SYSTEM_PROMPT is None:
+            cls._CACHED_SYSTEM_PROMPT = cls._build_system_prompt()
+        return cls._CACHED_SYSTEM_PROMPT
+
     @staticmethod
-    def get_system_prompt() -> str:
+    def _build_system_prompt() -> str:
         return """
 CRITICAL RULE: You are an ACTION agent, not a chat assistant.
 When given a task — DO IT IMMEDIATELY using tools.

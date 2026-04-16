@@ -11,6 +11,10 @@ class MockModelRouter:
         system_msgs = [m for m in messages if m.get("role") == "system"]
         last_system = system_msgs[-1].get("content", "") if system_msgs else ""
         
+        # Check the last user message for synthesis patterns
+        user_msgs = [m for m in messages if m.get("role") == "user"]
+        last_user = user_msgs[-1].get("content", "") if user_msgs else ""
+        
         if "Planner Agent" in last_system:
             return {"text": '{"strategy": "sequential", "phases": [{"title": "Test", "subtasks": [{"type": "execute", "description": "Do something"}]}]}'}
         elif "Executor Agent" in last_system:
@@ -20,7 +24,9 @@ class MockModelRouter:
             return {"text": "Executing...", "tool_call": {"name": "message", "params": {"type": "result", "content": "Final Result"}}}
         elif "Critic" in last_system or "AGENT ATTEMPT" in last_system:
             return {"text": "VERDICT: PASS"}
-        return {"text": "Generic response"}
+        elif "Synthesize" in last_user or "синтезируй" in last_user.lower() or "ИЗНАЧАЛЬНЫЙ ЗАПРОС" in last_user:
+            return {"text": "Final Result"}
+        return {"text": "Final Result"}
 
 @pytest.mark.asyncio
 async def test_orchestrator_planning_mode():

@@ -111,30 +111,41 @@ class ContextManager:
         """Get current message history."""
         return self.history
 
-    def get_messages_with_cache(self) -> List[Dict[str, Any]]:
+    def get_messages_with_cache(self, max_total_tokens: int = 8192) -> List[Dict[str, Any]]:
         """
         Returns messages optimized for prefix caching.
         The system prompt is kept stable (cache-friendly).
-        Only new messages are appended after it.
+        Only new messages are appended after it within token budget.
         This reduces token costs by ~60-80% on repeated calls.
         """
         if not self.history:
             return []
 
         # System prompt is always first — keep it stable for cache hits
-        result = []
         system_msgs = [m for m in self.history if m["role"] == "system"]
         other_msgs = [m for m in self.history if m["role"] != "system"]
 
-        # Add system messages first (stable prefix = cache hit)
-        result.extend(system_msgs)
-        # Add only the last N non-system messages to minimize tokens
-        # while keeping enough context
-        max_recent = min(len(other_msgs), self.preserve_recent)
-        result.extend(other_msgs[-max_recent:] if max_recent > 0
-                      else other_msgs)
+        # System prompt: always include (cache hit)
+        result = list(system_msgs)
+        system_tokens = sum(
+            self._count_message_tokens(m) for m in system_msgs
+        )
 
-        return result
+        # Add recent messages within token budget
+        token_budget = max_total_tokens - system_tokens
+        selected = []
+        for msg in reversed(other_msgs):
+            cost = self._count_message_tokens(msg)
+            if token_budget - cost < 0:
+                break
+            selected.insert(0, msg)
+            token_budget -= cost
+
+        # Always include at least last 3 non-system messages
+        if len(selected) < 3 and len(other_msgs) >= 3:
+            selected = other_msgs[-3:]
+
+        return result + selected
 
     @property
     def current_tokens(self) -> int:

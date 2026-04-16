@@ -24,8 +24,11 @@ class GroqClient:
                 
                 # Transform messages: Groq requires stringified arguments in tool_calls
                 formatted_messages = []
-                for msg in messages:
+                for i, msg in enumerate(messages):
                     new_msg = msg.copy()
+                    # Mark first system message for prefix caching (Groq supports this)
+                    if msg.get("role") == "system" and i == 0:
+                        new_msg["cache_control"] = {"type": "ephemeral"}
                     if "tool_calls" in new_msg and new_msg["tool_calls"]:
                         new_tool_calls = []
                         for tc in new_msg["tool_calls"]:
