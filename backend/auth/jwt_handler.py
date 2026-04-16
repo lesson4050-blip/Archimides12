@@ -58,12 +58,19 @@ def create_api_key() -> str:
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt via passlib."""
     from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return pwd_context.hash(password)
+    return _get_pwd_context().hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return pwd_context.verify(plain_password, hashed_password)
+    return _get_pwd_context().verify(plain_password, hashed_password)
+
+
+_pwd_context = None
+
+def _get_pwd_context():
+    global _pwd_context
+    if _pwd_context is None:
+        from passlib.context import CryptContext
+        _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    return _pwd_context

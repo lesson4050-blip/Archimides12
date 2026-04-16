@@ -10,12 +10,6 @@ try:
 except ImportError:
     SHEETS_AVAILABLE = False
 
-try:
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    SCHEDULER_AVAILABLE = True
-except ImportError:
-    SCHEDULER_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
 
 class VideoTool:

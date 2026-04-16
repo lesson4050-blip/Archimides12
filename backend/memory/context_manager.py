@@ -237,12 +237,15 @@ class ContextManager:
         while idx > 1 and idx < len(self.history):
             msg = self.history[idx]
             # If this message is a tool response, don't split here
-            # (its parent assistant message is before it)
             if msg.get("role") == "tool":
                 idx -= 1
                 continue
-            # If previous message has tool_calls and this isn't a tool response,
-            # we're at a safe boundary
+            # If this is an assistant message with tool_calls,
+            # its tool response is AFTER it — don't split here either
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                idx -= 1
+                continue
+            # Safe boundary found
             break
         
         return max(1, idx)

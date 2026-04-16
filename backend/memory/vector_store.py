@@ -1,4 +1,5 @@
 import logging
+import hashlib
 import chromadb
 import asyncio
 from typing import List, Dict, Any, Optional
@@ -60,7 +61,7 @@ class VectorStore:
                 documents=[text],
                 embeddings=[embedding],
                 metadatas=[metadata or {}],
-                ids=[f"fact_{hash(text)}"]
+                ids=[f"fact_{hashlib.sha256(text.encode()).hexdigest()[:16]}"]
             )
             logger.info("Fact added to vector store.")
 

@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Archimedes Backend shutting down... Cleaning up sandboxes.")
     sandbox_manager.stop_reaper()
-    sandbox_manager.cleanup()
+    await sandbox_manager.cleanup()
 
 app = FastAPI(
     title="Archimedes API",

@@ -85,8 +85,6 @@ async def get_agent_status(user: dict = Depends(get_current_user)) -> AgentStatu
 async def get_mcp_status(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Returns status of all connected MCP servers."""
     try:
-        from backend.sandbox.singleton import sandbox_manager
-        # Get the agent for any active session
         from backend.websocket.handler import manager as ws_manager
         
         if ws_manager.agent_loops:

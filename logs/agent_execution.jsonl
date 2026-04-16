@@ -54,3 +54,8 @@
 {"ts": "2026-04-16T06:53:12.843340+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}
 {"ts": "2026-04-16T06:53:12.845962+00:00", "session": "test-session", "type": "tool_call", "tool": "message", "params": {"type": "result", "content": "Final Result", "session_id": "test-session"}, "success": true, "error": null, "output_len": 0}
 {"ts": "2026-04-16T06:53:12.845962+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}
+{"ts": "2026-04-16T07:36:52.805295+00:00", "session": "test-session", "type": "plan_created", "task": "Test my flow", "strategy": "sequential", "phases": 1}
+{"ts": "2026-04-16T07:36:52.807921+00:00", "session": "test-session", "type": "tool_call", "tool": "message", "params": {"type": "result", "content": "Final Result"}, "success": true, "error": null, "output_len": 0}
+{"ts": "2026-04-16T07:36:52.808448+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}
+{"ts": "2026-04-16T07:36:52.811594+00:00", "session": "test-session", "type": "tool_call", "tool": "message", "params": {"type": "result", "content": "Final Result"}, "success": true, "error": null, "output_len": 0}
+{"ts": "2026-04-16T07:36:52.812124+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}

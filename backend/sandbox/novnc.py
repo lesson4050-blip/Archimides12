@@ -83,6 +83,6 @@ x11vnc -display :1 -nopw -forever -shared -rfbport 5900 -bg
 
     async def stop_streaming(self, session_id: str):
         # Kill fluxbox, x11vnc, websockify, Xvfb
-        cmd = "pkill fluxbox; pkill x11vnc; pkill websockify; pkill Xvfb"
+        cmd = "pkill openbox; pkill x11vnc; pkill websockify; pkill Xvfb"
         await self.executor.run_command(session_id, cmd)
         return {"success": True}

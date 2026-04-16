@@ -1,8 +1,9 @@
 import logging
 import json
 import asyncio
+import shlex
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from backend.sandbox.executor import SandboxExecutor
 
 logger = logging.getLogger(__name__)
@@ -139,8 +140,9 @@ class BrowserTool:
             payload_json = json.dumps(payload, ensure_ascii=False)
 
             # Write command atomically (write to temp, then rename)
+            safe_json = shlex.quote(payload_json)
             write_cmd = (
-                f"printf '%s' {repr(payload_json)} > {CMD_FILE}.tmp && "
+                f"printf '%s' {safe_json} > {CMD_FILE}.tmp && "
                 f"mv {CMD_FILE}.tmp {CMD_FILE}"
             )
             write_result = await self.executor.run_command(session_id, write_cmd)

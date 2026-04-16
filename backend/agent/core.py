@@ -375,10 +375,9 @@ class ArchimedesCosmoAgent:
             if websocket_send:
                 await websocket_send({"type": "agent_error", "content": f"Критическая ошибка оркестрации: {str(e)}"})
             
-            # Попытка восстановления
-            if self.max_retries > 0:
-                self.state = AgentState.RECOVERING
-                return await self._handle_error_with_recovery(task_id, str(e), task_description)
+            # Orchestrator errors are bubbled up here.
+            # Internal retries are handled by Orchestrator's ExecutorAgent.
+            # If we reach here, it's a fatal task failure.
             
             self.state = AgentState.ERROR
             result = ExecutionResult(

@@ -109,7 +109,11 @@ class ToolRegistry:
             params = validated.params
 
         try:
-            if session_id:
+            TOOLS_NEEDING_SESSION = {
+                "file", "shell", "browser", "voice", "document",
+                "slides", "expose", "plan", "monitor", "trigger",
+            }
+            if session_id and name in TOOLS_NEEDING_SESSION:
                 params["session_id"] = session_id
 
             result = await self.tools[name](**params)

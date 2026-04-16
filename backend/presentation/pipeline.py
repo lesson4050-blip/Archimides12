@@ -1,9 +1,7 @@
 import os
-import asyncio
 import logging
 import sqlite3
-import json
-from typing import Optional, Dict
+from typing import Optional
 
 from backend.presentation.schemas import TaskStatus
 from backend.presentation.agents.planner import PlannerAgent

@@ -69,8 +69,9 @@ class ConnectionManager:
             await websocket.send_json({"type": "agent_error", "message": "Failed to create sandbox container."})
 
         if session_id not in self.agent_loops:
-            self.agent_loops[session_id] = ArchimedesCosmoAgent(name="Archimedes COSMO", session_id=session_id)
-            asyncio.create_task(self.agent_loops[session_id].initialize())
+            agent = ArchimedesCosmoAgent(name="Archimedes COSMO", session_id=session_id)
+            await agent.initialize()
+            self.agent_loops[session_id] = agent
 
         logger.info(f"WebSocket connected for session: {session_id}")
 

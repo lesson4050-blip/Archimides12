@@ -19,8 +19,8 @@ Task: {task}
         text = resp.get("text", "")
         if "VERDICT: PASS" in text.upper():
             return {"passed": True, "issues": []}
-        issues = [l.replace("ISSUE:", "").strip() 
-                  for l in text.split("\n") if l.startswith("ISSUE:")]
+        issues = [line.replace("ISSUE:", "").strip() 
+                  for line in text.split("\n") if line.startswith("ISSUE:")]
         
         # Fallback if the model didn't format issues exactly as requested, but also didn't PASS
         if not issues:

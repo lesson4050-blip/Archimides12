@@ -35,6 +35,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       fetchSettings();
       fetchUsage();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const fetchSettings = async () => {
