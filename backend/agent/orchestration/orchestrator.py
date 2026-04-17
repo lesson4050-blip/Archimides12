@@ -1,6 +1,7 @@
 import logging
 import re
-from typing import Optional, Callable, Dict, Any
+import asyncio
+from typing import Optional, Callable, Dict, Any, List, Tuple
 from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.agent.orchestration.agents.planner_agent import PlannerAgent
 from backend.agent.orchestration.agents.executor_agent import ExecutorAgent
@@ -28,24 +29,54 @@ def is_conversational(text: str) -> bool:
                 return True
     return False
 
-COMPLEX_KEYWORDS = [
-    "create", "build", "write code", "implement", "analyze",
-    "research", "find all", "compare", "generate report",
-    "make a presentation", "deploy", "setup", "configure",
-    "create website", "scrape", "automate",
-    "создай", "напиши код", "проанализируй", "исследуй",
-    "сделай сайт", "автоматизируй", "скрапь", "разработай",
+
+# Semantic routing — maps task intent to agent strategy
+ROUTING_RULES = [
+    # (pattern, complexity, strategy)
+    (r"(write|create|implement|build|code|script|function|class|api|endpoint)",
+     "complex", "swarm_code"),
+    (r"(research|find|search|analyze|compare|summarize|report|study)",
+     "complex", "swarm_research"),
+    (r"(present|slide|deck|pitch|визуал|presentation)",
+     "complex", "single_slides"),
+    (r"(debug|fix|error|bug|broken|не работает|исправь)",
+     "complex", "swarm_code"),
+    (r"(design|architect|system|structure|план|architecture)",
+     "complex", "swarm_architect"),
+    (r"(translate|переведи|перевод)",
+     "medium", "single"),
+    (r"(calculate|посчитай|вычисли|\d+[\+\-\*\/]\d+)",
+     "simple", "direct"),
+    # Russian complex keywords
+    (r"(создай|напиши код|проанализируй|исследуй|сделай сайт|автоматизируй|скрапь|разработай)",
+     "complex", "swarm_code"),
 ]
 
-def classify_task(text: str) -> str:
+
+def classify_task(text: str) -> Tuple[str, str]:
+    """Returns (complexity, strategy) using semantic routing."""
     text_lower = text.lower().strip()
-    if len(text_lower) < 20:
-        return "simple"
-    if any(kw in text_lower for kw in COMPLEX_KEYWORDS):
-        return "complex"
-    if len(text_lower) < 80:
-        return "medium"
-    return "complex"
+    if len(text_lower) < 15:
+        return "simple", "direct"
+    for pattern, complexity, strategy in ROUTING_RULES:
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            return complexity, strategy
+    if len(text_lower) > 150:
+        return "complex", "swarm_code"
+    if len(text_lower) > 50:
+        return "medium", "single"
+    return "simple", "direct"
+
+
+# Strategy to swarm agent types mapping
+STRATEGY_AGENTS = {
+    "swarm_code": ["coder", "critic", "tester"],
+    "swarm_research": ["researcher", "critic"],
+    "swarm_architect": ["architect", "coder", "critic"],
+    "single": None,
+    "single_slides": None,
+    "direct": None,
+}
 
 
 class AgentOrchestrator:
@@ -87,15 +118,19 @@ class AgentOrchestrator:
             logger.info(f"[{session_id}] Detected conversational message, using direct response")
             return await self._run_conversational(state, websocket_send)
         
-        complexity = classify_task(task_description)
-        if complexity == "simple" and mode != AgentMode.FAST:
-            logger.info(f"[{session_id}] Simple task → fast mode")
+        # Semantic task routing
+        complexity, strategy = classify_task(task_description)
+        
+        if complexity == "simple":
+            logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
             return await self._run_fast_mode(state, websocket_send)
         
         if mode == AgentMode.FAST:
             return await self._run_fast_mode(state, websocket_send)
-        else:
-            return await self._run_planning_mode(state, websocket_send)
+        
+        # Pass strategy to planning mode
+        state.metadata["strategy"] = strategy
+        return await self._run_planning_mode(state, websocket_send)
 
     async def _run_conversational(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         """Direct LLM response for simple conversational messages — no tools, no critic."""
@@ -126,6 +161,8 @@ class AgentOrchestrator:
     async def _run_planning_mode(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         logger.info(f"[{state.session_id}] Orchestrator entering PLANNING mode")
         
+        strategy = state.metadata.get("strategy", "swarm_code")
+        
         # 1. PLAN
         state = await self.planner.process(state, websocket_send)
         if not state.current_plan:
@@ -138,41 +175,78 @@ class AgentOrchestrator:
             for subtask in phase.get("subtasks", []):
                 all_subtasks.append(subtask)
         
-        for i, subtask in enumerate(all_subtasks):
-            state.current_step_index = i
-            
-            # Subtask loop (includes critic retries)
-            while True:
-                current_target = subtask.get("description", state.task_description)
-                # EXECUTE
-                # Use swarm for complex subtasks
-                if state.task_hint in ("execute", "search") or len(all_subtasks) > 2:
-                    swarm_result = await self.swarm.run(
-                        task=current_target,
-                        task_hint=state.task_hint,
-                        websocket_send=websocket_send
-                    )
+        # Section 2C: Parallel subtask execution for independent phases
+        strategy_type = state.current_plan.get("strategy", "sequential")
+        
+        if strategy_type == "parallel" and len(all_subtasks) > 1:
+            # Run all subtasks in parallel
+            tasks = []
+            for i, subtask in enumerate(all_subtasks):
+                state_copy = OrchestrationState(
+                    session_id=state.session_id,
+                    task_description=subtask.get("description", ""),
+                    mode=state.mode,
+                    task_hint=state.task_hint,
+                    current_plan=state.current_plan
+                )
+                state_copy.history = list(state.history)
+                tasks.append(
+                    self.executor.process(state_copy, websocket_send)
+                )
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
                     state.results.append({
-                        "step": i,
-                        "output": swarm_result
+                        "step": i, "output": f"Error: {result}"
                     })
-                    # Still run critic on swarm output
-                    state = await self.critic.process(state, websocket_send)
                 else:
-                    state = await self.executor.process(state, websocket_send)
-                    state = await self.critic.process(state, websocket_send)
+                    state.results.extend(result.results)
+        else:
+            # Sequential execution with strategy-aware dispatch
+            for i, subtask in enumerate(all_subtasks):
+                state.current_step_index = i
                 
-                verdict = state.metadata.get("critic_verdict")
-                
-                if verdict == "PASS" or verdict == "LIMIT_REACHED" or verdict == "ERROR_BYPASS":
-                    # Subtask successful or best effort reached
-                    break
-                elif verdict == "RETRY":
-                    # Continue loop to re-execute with critic feedback
-                    continue
-                else:
-                    # Unexpected state, break to avoid infinite loop
-                    break
+                # Subtask loop (includes critic retries)
+                while True:
+                    current_target = subtask.get("description", state.task_description)
+                    
+                    # Strategy-aware dispatch: use swarm for matching strategies
+                    agent_override = STRATEGY_AGENTS.get(strategy)
+                    if agent_override:
+                        # Use swarm with strategy-specific agents
+                        swarm_result = await self.swarm.run(
+                            task=current_target,
+                            task_hint=state.task_hint,
+                            agent_roles_override=agent_override,
+                            websocket_send=websocket_send
+                        )
+                        state.results.append({
+                            "step": i,
+                            "output": swarm_result
+                        })
+                        
+                        # Ensure critic has something to review
+                        state = await self.critic.process(state, websocket_send)
+                        
+                        # BUG 4: If critic didn't set verdict, default to PASS
+                        if not state.metadata.get("critic_verdict"):
+                            state.metadata["critic_verdict"] = "PASS"
+                    else:
+                        state = await self.executor.process(state, websocket_send)
+                        state = await self.critic.process(state, websocket_send)
+                    
+                    verdict = state.metadata.get("critic_verdict")
+                    
+                    if verdict == "PASS" or verdict == "LIMIT_REACHED" or verdict == "ERROR_BYPASS":
+                        # Subtask successful or best effort reached
+                        break
+                    elif verdict == "RETRY":
+                        # Continue loop to re-execute with critic feedback
+                        continue
+                    else:
+                        # Unexpected state, break to avoid infinite loop
+                        break
                     
         return await self._get_final_response(state, websocket_send)
 
@@ -211,4 +285,3 @@ class AgentOrchestrator:
             "plan": state.current_plan,
             "mode": state.mode.value
         }
-

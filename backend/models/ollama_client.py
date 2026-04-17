@@ -85,22 +85,14 @@ NEVER mix tool JSON with explanation text.
                 "low_vram": False,
             }
         }
-        
-        if tools and len(tools) > 0:
-            tool_schema = {
-                "type": "object",
-                "properties": {
-                    "tool_call": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "params": {"type": "object"}
-                        },
-                        "required": ["name", "params"]
-                    }
-                }
-            }
-            chat_kwargs["format"] = tool_schema
+
+        # IMPORTANT: Do NOT apply format=json globally.
+        # Only apply when specifically needed for plan generation.
+        # For tool calls, we use text injection — format=json
+        # would break conversational text responses.
+        #
+        # The format parameter is handled separately in generate_with_tools()
+        # only when force_json_schema is provided and no tools are present.
 
         # Only pass native tools if Ollama supports them for this model
         # We use text injection as primary method for reliability
@@ -109,7 +101,8 @@ NEVER mix tool JSON with explanation text.
     async def generate_with_tools(
         self,
         messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None
+        tools: Optional[List[Dict[str, Any]]] = None,
+        force_json_schema: Optional[Dict] = None
     ) -> Dict[str, Any]:
 
         messages = [msg.copy() for msg in messages]
@@ -131,10 +124,36 @@ NEVER mix tool JSON with explanation text.
                     "role": "system", "content": injection
                 })
 
+        # Apply format ONLY for schema-constrained generation (no tools)
+        if force_json_schema and not tools:
+            # Will be passed to _call_model via a modified path
+            pass  # Handled below
+
         last_error = None
         for attempt in range(MAX_TOOL_CALL_RETRIES):
             try:
-                response = await self._call_model(messages, tools)
+                # If force_json_schema and no tools, apply format constraint
+                if force_json_schema and not tools:
+                    chat_kwargs = {
+                        "model": self.model,
+                        "messages": messages,
+                        "format": force_json_schema,
+                        "options": {
+                            "num_ctx": min(
+                                settings.AGENT_MAX_CONTEXT_TOKENS, 16384
+                            ),
+                            "num_predict": 4096,
+                            "temperature": 0.1,
+                            "num_gpu": 999,
+                            "num_thread": 8,
+                            "keep_alive": "10m",
+                            "low_vram": False,
+                        }
+                    }
+                    response = await self.client.chat(**chat_kwargs)
+                else:
+                    response = await self._call_model(messages, tools)
+
                 content = response.message.content or ""
 
                 # Extract thought block

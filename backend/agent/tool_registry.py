@@ -108,6 +108,30 @@ class ToolRegistry:
         if validated:
             params = validated.params
 
+        # Type coercion: fix common model mistakes
+        tool_def = next(
+            (d for d in self.tool_definitions
+             if d.get("function", {}).get("name") == name),
+            None
+        )
+        if tool_def:
+            props = (tool_def.get("function", {})
+                     .get("parameters", {})
+                     .get("properties", {}))
+            for key, schema in props.items():
+                if key in params:
+                    val = params[key]
+                    expected_type = schema.get("type")
+                    try:
+                        if expected_type == "integer" and not isinstance(val, int):
+                            params[key] = int(val)
+                        elif expected_type == "boolean" and not isinstance(val, bool):
+                            params[key] = str(val).lower() in ("true", "1", "yes")
+                        elif expected_type == "string" and not isinstance(val, str):
+                            params[key] = str(val)
+                    except (ValueError, TypeError):
+                        pass  # Keep original if conversion fails
+
         try:
             TOOLS_NEEDING_SESSION = {
                 "file", "shell", "browser", "voice", "document",

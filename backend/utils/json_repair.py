@@ -15,7 +15,7 @@ def repair_and_parse(raw: str) -> Tuple[Optional[Any], str]:
     Attempt to extract and parse JSON from raw LLM output.
     Returns (parsed_object, error_message).
     If successful, error_message is "".
-    Tries 6 strategies in order from most to least strict.
+    Tries 7 strategies in order from most to least strict.
     """
     if not raw or not raw.strip():
         return None, "Empty input"
@@ -25,6 +25,7 @@ def repair_and_parse(raw: str) -> Tuple[Optional[Any], str]:
         _try_extract_json_block,
         _try_extract_first_object,
         _try_clean_trailing_commas,
+        _try_complete_truncated,
         _try_fix_single_quotes,
         _try_aggressive_extraction,
     ]
@@ -110,6 +111,39 @@ def _try_clean_trailing_commas(raw: str) -> Tuple[Optional[Any], str]:
         return json.loads(cleaned), ""
     except Exception as e:
         return None, str(e)
+
+
+def _try_complete_truncated(raw: str) -> Tuple[Optional[Any], str]:
+    """Complete truncated JSON by counting brackets."""
+    start = raw.find('{')
+    if start == -1:
+        return None, "No JSON start"
+
+    candidate = raw[start:]
+    open_braces = candidate.count('{')
+    close_braces = candidate.count('}')
+    open_brackets = candidate.count('[')
+    close_brackets = candidate.count(']')
+
+    missing_brackets = open_brackets - close_brackets
+    missing_braces = open_braces - close_braces
+
+    # Only attempt completion if there are actually missing closings
+    if missing_brackets <= 0 and missing_braces <= 0:
+        return None, "Not truncated"
+
+    # Add missing closings
+    completion = (
+        ']' * max(0, missing_brackets)
+        + '}' * max(0, missing_braces)
+    )
+    if completion:
+        completed = candidate + completion
+        try:
+            return json.loads(completed), ""
+        except Exception as e:
+            return None, str(e)
+    return None, "Not truncated"
 
 
 def _try_fix_single_quotes(raw: str) -> Tuple[Optional[Any], str]:

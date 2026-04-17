@@ -48,7 +48,9 @@ class BrowserTool:
                                 "get_elements", # List all interactive elements
                                 "wait_for",    # Wait for element to appear
                                 "current_state", # Get URL/title/elements (no content)
-                                "vision_analyze" # Analyze current page visually
+                                "vision_analyze", # Analyze current page visually
+                                "save_session",    # Save login state
+                                "clear_session"    # Clear cookies
                             ],
                             "description": "Browser action to perform"
                         },

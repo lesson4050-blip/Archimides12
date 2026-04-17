@@ -16,6 +16,7 @@ logger = logging.getLogger("browser_server")
 CMD_FILE = "/tmp/browser_cmd.json"
 RES_FILE = "/tmp/browser_res.json"
 MAX_TEXT_TOKENS = 3000  # ~12000 chars — enough for any LLM context
+SESSION_STORAGE = "/home/ubuntu/workspace/.browser_session"
 
 
 def _clean_text(raw: str) -> str:
@@ -127,7 +128,30 @@ async def _get_main_content(page: Page) -> str:
             return ""
 
 
-async def execute_action(page: Page, data: dict) -> dict:
+async def save_session(context):
+    """Save browser session state (cookies, localStorage) to disk."""
+    try:
+        storage = await context.storage_state()
+        with open(SESSION_STORAGE, 'w') as f:
+            json.dump(storage, f)
+        logger.info("Browser session saved")
+    except Exception as e:
+        logger.warning(f"Failed to save session: {e}")
+
+
+async def load_session(playwright):
+    """Load saved browser session state from disk."""
+    try:
+        if os.path.exists(SESSION_STORAGE):
+            with open(SESSION_STORAGE) as f:
+                storage = json.load(f)
+            return storage
+    except Exception as e:
+        logger.warning(f"Failed to load session: {e}")
+    return None
+
+
+async def execute_action(page, context, data: dict) -> dict:
     action = data.get("action", "")
     
     try:
@@ -138,11 +162,21 @@ async def execute_action(page: Page, data: dict) -> dict:
             
             # Navigate with smart wait
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                # Wait for dynamic content
-                await page.wait_for_load_state("networkidle", timeout=5000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=25000)
             except Exception:
                 pass  # Timeout is OK, page might still have content
+
+            # Section 3C: Smart wait for dynamic content (SPA support)
+            prev_content_len = 0
+            for _ in range(5):
+                await asyncio.sleep(0.8)
+                try:
+                    content = await _get_main_content(page)
+                    if len(content) == prev_content_len and len(content) > 200:
+                        break  # Content stable
+                    prev_content_len = len(content)
+                except Exception:
+                    break
             
             title = await page.title()
             content = await _get_main_content(page)
@@ -344,6 +378,15 @@ async def execute_action(page: Page, data: dict) -> dict:
                 "hint": "Call 'extract' to get page content"
             }
 
+        elif action == "save_session":
+            await save_session(context)
+            return {"success": True, "message": "Session saved"}
+
+        elif action == "clear_session":
+            if os.path.exists(SESSION_STORAGE):
+                os.remove(SESSION_STORAGE)
+            return {"success": True, "message": "Session cleared"}
+
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -366,14 +409,45 @@ async def main():
                 "--disable-extensions",
             ]
         )
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        # Section 3B: Load saved session state
+        saved_state = await load_session(p)
+
+        # Section 3A: Anti-bot fingerprint
+        context_kwargs = {
+            "viewport": {"width": 1280, "height": 900},
+            "user_agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
             ),
-            java_script_enabled=True,
-        )
+            "java_script_enabled": True,
+            "locale": "en-US",
+            "timezone_id": "America/New_York",
+            "color_scheme": "dark",
+            "extra_http_headers": {
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+            }
+        }
+
+        # Restore cookies/localStorage if saved
+        if saved_state:
+            context_kwargs["storage_state"] = saved_state
+            logger.info("Restored saved browser session")
+
+        context = await browser.new_context(**context_kwargs)
+
+        # Anti-bot: hide automation signals
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en']
+            });
+            window.chrome = { runtime: {} };
+        """)
+
         page = await context.new_page()
         await page.goto("about:blank")
         
@@ -394,7 +468,7 @@ async def main():
                     logger.info(f"Executing: {data.get('action')} "
                                 f"url={data.get('url','')} "
                                 f"text={data.get('text','')}")
-                    result = await execute_action(page, data)
+                    result = await execute_action(page, context, data)
                 except json.JSONDecodeError as e:
                     result = {"success": False, "error": f"Bad JSON command: {e}"}
                 except Exception as e:

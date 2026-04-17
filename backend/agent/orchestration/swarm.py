@@ -167,18 +167,22 @@ class MicroAgentSwarm:
         self,
         task: str,
         task_hint: str = "default",
+        agent_roles_override: Optional[List[str]] = None,
         websocket_send: Optional[Callable] = None
     ) -> str:
         """
         Main entry point.
         Spawns agents, runs them, debate if needed, returns final result.
         """
-        agent_roles = self._select_agents_for_task(task, task_hint)
+        agent_roles = (
+            agent_roles_override
+            or self._select_agents_for_task(task, task_hint)
+        )
 
         if len(agent_roles) == 1:
             # Single agent — no swarm needed
             role = agent_roles[0]
-            template = MICRO_AGENT_TEMPLATES[role]
+            template = MICRO_AGENT_TEMPLATES.get(role, MICRO_AGENT_TEMPLATES["coder"])
             agent = MicroAgent(
                 agent_id=str(uuid.uuid4())[:8],
                 role=role,
@@ -191,7 +195,7 @@ class MicroAgentSwarm:
         # Multi-agent debate
         agents = []
         for role in agent_roles:
-            template = MICRO_AGENT_TEMPLATES[role]
+            template = MICRO_AGENT_TEMPLATES.get(role, MICRO_AGENT_TEMPLATES["coder"])
             agent = MicroAgent(
                 agent_id=str(uuid.uuid4())[:8],
                 role=role,

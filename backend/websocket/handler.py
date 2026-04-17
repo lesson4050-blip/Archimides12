@@ -189,7 +189,8 @@ class ConnectionManager:
             if novnc_url:
                 await self.send_event(session_id, {"type": "novnc_ready", "url": novnc_url, "success": True})
             
-            async def sender(event):
+            # Enable token streaming for faster perceived response
+            async def streaming_sender(event):
                 await self.send_event(session_id, event)
 
             # Extra execution parameters (mode: fast/planning)
@@ -198,9 +199,10 @@ class ConnectionManager:
             
             asyncio.create_task(agent.process_task(
                 task, 
-                websocket_send=sender, 
+                websocket_send=streaming_sender, 
                 mode=mode_req, 
-                task_hint=task_hint
+                task_hint=task_hint,
+                stream=True  # Enable streaming
             ))
         else:
             logger.warning(f"No agent found for {session_id}")

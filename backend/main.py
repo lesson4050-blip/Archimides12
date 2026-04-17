@@ -82,6 +82,22 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Archimedes Backend shutting down... Cleaning up sandboxes.")
+
+    # Section 7A: Graceful shutdown for all background tasks
+    from backend.websocket.handler import manager as ws_manager
+    for session_id, agent in list(ws_manager.agent_loops.items()):
+        try:
+            if hasattr(agent, 'mcp_client'):
+                for server_name in list(
+                    getattr(agent.mcp_client, '_stop_events', {}).keys()
+                ):
+                    try:
+                        await agent.mcp_client.disconnect_server(server_name)
+                    except Exception as e:
+                        logger.warning(f"Failed to disconnect MCP server {server_name}: {e}")
+        except Exception as e:
+            logger.warning(f"Error during MCP cleanup for {session_id}: {e}")
+
     sandbox_manager.stop_reaper()
     await sandbox_manager.cleanup()
 
@@ -114,9 +130,49 @@ async def root():
 
 @app.get("/api/health")
 async def api_health():
-    """Top-level health check (без prefix /api/v1)."""
+    """Top-level health check with real component status."""
     from datetime import datetime
-    return {"status": "healthy", "timestamp": datetime.now().isoformat(), "version": "2.0.0-cosmo"}
+
+    # Check DB
+    db_ok = False
+    try:
+        from backend.db.crud import AsyncSessionLocal
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    # Check Ollama
+    ollama_ok = False
+    try:
+        import ollama
+        client = ollama.Client(host=settings.OLLAMA_BASE_URL)
+        client.list()
+        ollama_ok = True
+    except Exception:
+        pass
+
+    # Check Memory Bank
+    memory_ok = False
+    try:
+        from backend.memory.memory_bank import get_relevant_facts
+        facts = get_relevant_facts(limit=1)
+        memory_ok = True
+    except Exception:
+        pass
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "timestamp": datetime.now().isoformat(),
+        "version": "3.0.0-beyond-manus",
+        "components": {
+            "database": "ok" if db_ok else "error",
+            "ollama": "ok" if ollama_ok else "error",
+            "memory_bank": "ok" if memory_ok else "error",
+        }
+    }
 
 
 @app.websocket("/ws/{session_id}")

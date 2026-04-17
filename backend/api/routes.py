@@ -417,3 +417,23 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/tasks/{session_id}/progress", summary="Real-time task progress")
+async def get_task_progress(
+    session_id: str,
+    user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Returns real-time progress of the current task for a session."""
+    from backend.websocket.handler import manager as ws_manager
+    agent = ws_manager.agent_loops.get(session_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {
+        "session_id": session_id,
+        "agent_state": agent.state.value,
+        "current_task": getattr(agent, 'current_task', ""),
+        "tools_called": getattr(agent, 'tools_called_count', 0),
+        "start_time": getattr(agent, 'task_start_time', None),
+    }

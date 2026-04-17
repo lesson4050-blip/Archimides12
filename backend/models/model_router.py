@@ -10,8 +10,11 @@ class AllModelsExhausted(Exception):
     pass
 
 class ModelRouter:
-    # Tasks that benefit from Gemma's native reasoning via Ollama
-    OLLAMA_FIRST_TASKS = {"think", "plan"}
+    # Speed-first routing categories
+    SPEED_TASKS = {"search", "browse", "realtime", "summarize",
+                   "translate", "quick", "simple"}
+    QUALITY_TASKS = {"think", "plan", "execute", "code", "debug"}
+    CREATIVE_TASKS = {"image", "creative", "persona"}
 
     def __init__(self):
         self.ollama = OllamaClient()
@@ -29,13 +32,18 @@ class ModelRouter:
             self.gemini = None
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
-        # PRESET: Route based on task_hint
-        if task_hint in self.OLLAMA_FIRST_TASKS:
-            order = [self.ollama, self.groq, self.gemini]
-        elif task_hint in {"search", "browse", "realtime"}:
+        # SPEED-FIRST: for simple tasks, always try cloud first
+        if task_hint in self.SPEED_TASKS:
             order = [self.groq, self.gemini, self.ollama]
+        # QUALITY: use local model for reasoning (better privacy + quality)
+        elif task_hint in self.QUALITY_TASKS:
+            order = [self.ollama, self.groq, self.gemini]
+        # TOOL CALLS: Groq has best tool call reliability
+        elif tools:
+            order = [self.groq, self.gemini, self.ollama]
+        # DEFAULT: try Groq (fast, free tier), then Ollama
         else:
-            order = [self.groq, self.ollama, self.gemini]
+            order = [self.groq, self.gemini, self.ollama]
 
         # Filter out None clients (missing API keys)
         order = [c for c in order if c is not None]
@@ -56,12 +64,15 @@ class ModelRouter:
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
 
     async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
-        if task_hint in self.OLLAMA_FIRST_TASKS:
+        # SPEED-FIRST routing for streaming too
+        if task_hint in self.SPEED_TASKS:
+            order = [self.groq, self.gemini, self.ollama]
+        elif task_hint in self.QUALITY_TASKS:
             order = [self.ollama, self.groq, self.gemini]
-        elif task_hint in {"search", "browse", "realtime"}:
+        elif tools:
             order = [self.groq, self.gemini, self.ollama]
         else:
-            order = [self.groq, self.ollama, self.gemini]
+            order = [self.groq, self.gemini, self.ollama]
             
         order = [c for c in order if c is not None]
 

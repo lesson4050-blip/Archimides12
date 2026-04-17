@@ -75,6 +75,9 @@ class ExecutorAgent(BaseAgent):
         elif state.task_hint == "execute":
             hint_instructions = "DEVELOPER MODE: Focus on writing clean, functional code or documents. Use 'shell' and 'file' tools aggressively. Verify your work with tests if possible."
 
+        # Track previous error for self-improvement
+        prev_error = None
+
         # Loop for tool execution
         for step in range(self.max_steps):
             # Loop detection
@@ -131,11 +134,21 @@ class ExecutorAgent(BaseAgent):
             except Exception:
                 pass
 
-            response = await self.router.generate(
-                messages=messages,
-                tools=self.tool_registry.get_all_tool_definitions(),
-                task_hint="think"
-            )
+            # Section 2B: Support streaming mode
+            use_stream = getattr(state, 'stream', False)
+            if use_stream:
+                response = await self.router.generate_stream(
+                    messages=messages,
+                    tools=self.tool_registry.get_all_tool_definitions(),
+                    task_hint="think",
+                    on_token=lambda t: websocket_send(t) if websocket_send else None
+                )
+            else:
+                response = await self.router.generate(
+                    messages=messages,
+                    tools=self.tool_registry.get_all_tool_definitions(),
+                    task_hint="think"
+                )
 
             thought = response.get("thought", "")
             if thought:
@@ -169,17 +182,32 @@ class ExecutorAgent(BaseAgent):
                 output = str(tool_res.get("output", tool_res.get("content", "OK")))
                 if not success:
                     output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
+                    prev_error = output  # Track for self-improvement
+                    
+                    # Section 6A: Check self-improvement DB for known fix
+                    from backend.agent.self_improvement import get_fix_hint
+                    fix_hint = get_fix_hint(output)
+                    if fix_hint:
+                        output += f"\n[LEARNED FIX]: {fix_hint}"
+                        await self.log_thought(
+                            f"💡 Applied learned fix pattern", websocket_send
+                        )
+                    
                     if "not found" in output.lower() or "missing" in output.lower():
                         # Try auto-tooling
                         try:
                             from backend.mcp_hub.auto_tooling import find_and_connect_tool
                             from backend.sandbox.singleton import sandbox_manager
 
-                            available = list(self.tool_registry.tools.keys())
+                            # BUG 1: Get mcp_client from agent core via singleton
+                            from backend.websocket.handler import manager as ws_manager
+                            agent = ws_manager.agent_loops.get(state.session_id)
+                            mcp_client = getattr(agent, 'mcp_client', None) if agent else None
+
                             new_tool = await find_and_connect_tool(
                                 task_description=state.task_description,
-                                available_tools=available,
-                                mcp_client=getattr(self.tool_registry, 'mcp_client', None), 
+                                available_tools=list(self.tool_registry.tools.keys()),
+                                mcp_client=mcp_client,
                                 executor=sandbox_manager.executor,
                                 session_id=state.session_id,
                                 router=self.router
@@ -191,6 +219,16 @@ class ExecutorAgent(BaseAgent):
                                 output += f"\n(Auto-tooling installed: {new_tool}. Try again!)"
                         except Exception as e:
                             logger.warning(f"Auto-tooling attempt failed: {e}")
+                else:
+                    # Section 6A: Learn from successful recovery
+                    if prev_error and success:
+                        from backend.agent.self_improvement import learn_from_error
+                        learn_from_error(
+                            error=prev_error,
+                            fix=f"Used {t_name} with {t_params}",
+                            tool_name=t_name
+                        )
+                        prev_error = None
 
                 self.context_manager.add_message("assistant", thought or "", tool_calls=[std_tool_call])
                 self.context_manager.add_message("tool", output, tool_call_id=call_id, name=t_name)
@@ -213,7 +251,7 @@ class ExecutorAgent(BaseAgent):
                     content = t_params.get("content", "")
                     path = t_params.get("path", "")
 
-                    # Apply TDD for Python files in execute mode
+                    # BUG 2: Apply TDD for Python files in execute mode — pass actual code
                     if (path.endswith(".py") and
                         len(content) > 50 and
                         state.task_hint == "execute"):
@@ -223,6 +261,8 @@ class ExecutorAgent(BaseAgent):
                             tdd = TDDExecutor(self.router, sandbox_manager.executor)
                             tdd_result = await tdd.execute_tdd(
                                 task=state.task_description,
+                                initial_code=content,      # Pass the actual written code!
+                                code_path=path,
                                 session_id=state.session_id,
                                 websocket_send=websocket_send
                             )

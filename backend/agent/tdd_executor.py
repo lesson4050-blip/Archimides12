@@ -24,14 +24,20 @@ class TDDExecutor:
         self,
         task: str,
         session_id: str,
+        initial_code: str = "",
+        code_path: str = "implementation.py",
         websocket_send: Optional[callable] = None
     ) -> str:
         """
         1. Write test
-        2. Write code
+        2. Write code (or use provided initial_code)
         3. Run test
         4. Fix until pass (max 3 tries)
         """
+        MAX_ITERATIONS = 3
+        current_code = initial_code  # Start with provided code, don't regenerate
+        filename = code_path.split("/")[-1] or "implementation.py"
+
         if websocket_send:
             await websocket_send({
                 "type": "thought",
@@ -39,13 +45,23 @@ class TDDExecutor:
                 "agent": "tdd_executor"
             })
 
+        # Write initial code to sandbox if provided
+        if current_code:
+            safe_code = current_code.replace("'", "'\\''")
+            await self.sandbox.run_command(
+                session_id,
+                f"cat > /home/ubuntu/workspace/{filename} << 'ARCHEOF'\n"
+                f"{current_code}\nARCHEOF"
+            )
+
         # Step 1: Write Test First
         test_prompt = f"""
 Task: {task}
+{"Existing implementation:" + chr(10) + current_code[:2000] if current_code else ""}
 Write a pytest script that verifies this task is implemented correctly.
 Output ONLY the python code for the test, wrapped in ```python
 Use standard libraries or pytest.
-Assume the target code will be in a file named implementation.py
+Assume the target code will be in a file named {filename}
 """
         res_test = await self.router.generate(
             messages=[{"role": "user", "content": test_prompt}],
@@ -56,10 +72,11 @@ Assume the target code will be in a file named implementation.py
         if not test_code:
             return "[TDD] Failed to generate test. Falling back to normal execution."
 
-        # Save test to sandbox
-        safe_test = test_code.replace("'", "'\\''")
+        # Save test to sandbox using heredoc for safety
         await self.sandbox.run_command(
-            session_id, f"echo '{safe_test}' > test_task.py"
+            session_id,
+            f"cat > /home/ubuntu/workspace/test_task.py << 'ARCHEOF'\n"
+            f"{test_code}\nARCHEOF"
         )
 
         if websocket_send:
@@ -70,49 +87,102 @@ Assume the target code will be in a file named implementation.py
             })
 
         # Step 2: Loop implementation
-        max_attempts = 3
-        current_code = ""
-
-        # Initial implementation prompt
+        # If we have initial_code, skip first generation
         impl_prompt = f"""
 Task: {task}
 Pass these tests:\n{test_code}
-Write the implementation code for implementation.py
+Write the implementation code for {filename}
 Output ONLY the python code, wrapped in ```python
 """
-        for attempt in range(max_attempts):
-            res_impl = await self.router.generate(
-                messages=[{"role": "user", "content": impl_prompt}],
-                task_hint="think"
-            )
-            current_code = self._extract_code(res_impl.get("text", ""))
+        for attempt in range(MAX_ITERATIONS):
+            if not current_code:
+                # Generate implementation only if we don't have code yet
+                res_impl = await self.router.generate(
+                    messages=[{"role": "user", "content": impl_prompt}],
+                    task_hint="think"
+                )
+                current_code = self._extract_code(res_impl.get("text", ""))
 
-            # Save implementation
-            safe_impl = current_code.replace("'", "'\\''")
-            await self.sandbox.run_command(
-                session_id, f"echo '{safe_impl}' > implementation.py"
-            )
+                # Save implementation using heredoc
+                await self.sandbox.run_command(
+                    session_id,
+                    f"cat > /home/ubuntu/workspace/{filename} << 'ARCHEOF'\n"
+                    f"{current_code}\nARCHEOF"
+                )
 
-            # Step 3: Run Test
-            test_run = await self.sandbox.run_command(
-                session_id, "pytest test_task.py -v"
-            )
-            output = test_run.get("output", "")
-            
-            if test_run.get("success") and "failed" not in output.lower():
+            # Auto-install missing packages before running tests
+            test_output = ""
+            for pip_attempt in range(2):
+                # Step 3: Run Test with coverage
+                cov_result = await self.sandbox.run_command(
+                    session_id,
+                    f"cd /home/ubuntu/workspace && "
+                    f"python -m pytest test_task.py -v --tb=short "
+                    f"--cov=. --cov-report=term-missing 2>&1",
+                    timeout=30
+                )
+                test_output = cov_result.get("output", "")
+
+                # Section 4B: Auto-install missing modules
+                if "ModuleNotFoundError" in test_output:
+                    missing_match = re.search(
+                        r"No module named '(\w+)'", test_output
+                    )
+                    if missing_match:
+                        pkg = missing_match.group(1)
+                        logger.info(f"TDD: auto-installing missing package: {pkg}")
+                        await self.sandbox.run_command(
+                            session_id,
+                            f"pip install {pkg} --quiet 2>/dev/null",
+                            timeout=30
+                        )
+                        continue  # Retry test after install
+                break  # No missing module, exit pip retry loop
+
+            # Check test results
+            if cov_result.get("success") and "failed" not in test_output.lower():
+                # Section 4A: Extract coverage percentage
+                cov_match = re.search(r"TOTAL\s+\d+\s+\d+\s+(\d+)%", test_output)
+                coverage_pct = int(cov_match.group(1)) if cov_match else 0
+
+                if coverage_pct < 60 and attempt < MAX_ITERATIONS - 1:
+                    # Low coverage — ask for more tests
+                    low_cov_prompt = (
+                        f"Coverage is {coverage_pct}%. "
+                        f"Add more tests to reach 80%+ coverage.\n"
+                        f"Current tests:\n{test_code}\n"
+                        f"Coverage report:\n{test_output[-500:]}\n"
+                        f"Output ONLY the complete updated test file wrapped in ```python"
+                    )
+                    more_tests = await self.router.generate(
+                        messages=[{"role": "user", "content": low_cov_prompt}],
+                        task_hint="think"
+                    )
+                    new_test_code = self._extract_code(more_tests.get("text", ""))
+                    if new_test_code:
+                        test_code = new_test_code
+                        await self.sandbox.run_command(
+                            session_id,
+                            f"cat > /home/ubuntu/workspace/test_task.py << 'ARCHEOF'\n"
+                            f"{test_code}\nARCHEOF"
+                        )
+                        current_code = ""  # Force re-run tests
+                        continue
+
                 if websocket_send:
+                    cov_info = f" (coverage: {coverage_pct}%)" if coverage_pct > 0 else ""
                     await websocket_send({
                         "type": "thought",
-                        "content": f"🎉 TDD: Код прошел тесты (попытка {attempt+1})!",
+                        "content": f"🎉 TDD: Код прошел тесты (попытка {attempt+1})!{cov_info}",
                         "agent": "tdd_executor"
                     })
-                return f"[TDD Success]\nIMPLEMENTATION:\n{current_code}\n\nTEST RUN:\n{output}"
+                return f"[TDD Success]\nIMPLEMENTATION:\n{current_code}\n\nTEST RUN:\n{test_output}"
 
             # Failed? Update prompt with error
             if websocket_send:
                 await websocket_send({
                     "type": "thought",
-                    "content": f"❌ TDD: Тесты упали. Исправление (попытка {attempt+1}/{max_attempts})...",
+                    "content": f"❌ TDD: Тесты упали. Исправление (попытка {attempt+1}/{MAX_ITERATIONS})...",
                     "agent": "tdd_executor"
                 })
 
@@ -120,15 +190,16 @@ Output ONLY the python code, wrapped in ```python
 Task: {task}
 Your previous code failed the tests.
 TEST OUTPUT:
-{output[-1500:]}
+{test_output[-1500:]}
 
 PREVIOUS CODE:
 {current_code}
 
-Fix the code. Output ONLY the python code for implementation.py wrapped in ```python
+Fix the code. Output ONLY the python code for {filename} wrapped in ```python
 """
+            current_code = ""  # Force regeneration on next iteration
 
-        return f"[TDD Failed after {max_attempts} attempts]\nLast code:\n{current_code}"
+        return f"[TDD Failed after {MAX_ITERATIONS} attempts]\nLast code:\n{current_code}"
 
     def _extract_code(self, text: str) -> str:
         matches = re.findall(r'```(?:python)?\n(.*?)\n```', text, re.DOTALL)
