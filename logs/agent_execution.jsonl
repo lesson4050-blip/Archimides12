@@ -72,3 +72,5 @@
 {"ts": "2026-04-16T20:11:24.257726+00:00", "session": "test-session", "type": "plan_created", "task": "analyze my test flow thoroughly", "strategy": "sequential", "phases": 4}
 {"ts": "2026-04-16T20:11:24.264005+00:00", "session": "test-session", "type": "tool_call", "tool": "message", "params": {"type": "result", "content": "Final Result"}, "success": true, "error": null, "output_len": 0}
 {"ts": "2026-04-16T20:11:24.264530+00:00", "session": "test-session", "type": "model_response", "model": "unknown", "had_tool_call": true, "tokens": 0}
+{"ts": "2026-04-17T10:50:06.623905+00:00", "session": "session-l13x6fs", "type": "plan_created", "task": "Исправь баг в D:\\Cosmo\\workspace\\duel_task согласно описанию в issue.md. Тесты в test_formatter.py должны пройти", "strategy": "sequential", "phases": 3}
+{"ts": "2026-04-17T11:05:44.098361+00:00", "session": "session-l13x6fs", "type": "plan_created", "task": "Исправь баг в D:\\Cosmo\\workspace\\duel_task согласно описанию в issue.md. Тесты в test_formatter.py должны пройти.", "strategy": "sequential", "phases": 4}
