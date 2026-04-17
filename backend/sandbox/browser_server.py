@@ -160,23 +160,49 @@ async def execute_action(page, context, data: dict) -> dict:
             if not url:
                 return {"success": False, "error": "URL required"}
             
+            import time as _time
+            action_start = _time.time()
+            
             # Navigate with smart wait
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=25000)
             except Exception:
                 pass  # Timeout is OK, page might still have content
 
-            # Section 3C: Smart wait for dynamic content (SPA support)
-            prev_content_len = 0
-            for _ in range(5):
-                await asyncio.sleep(0.8)
+            # Detect SPA framework and wait accordingly
+            try:
+                framework = await page.evaluate("""() => {
+                    if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__) return 'react';
+                    if (window.angular) return 'angular';
+                    if (window.Vue) return 'vue';
+                    if (window.next) return 'next';
+                    return 'static';
+                }""")
+            except Exception:
+                framework = 'static'
+
+            if framework != 'static':
+                # For SPA: wait for network to be truly idle
                 try:
-                    content = await _get_main_content(page)
-                    if len(content) == prev_content_len and len(content) > 200:
-                        break  # Content stable
-                    prev_content_len = len(content)
+                    await page.wait_for_load_state(
+                        "networkidle", timeout=8000
+                    )
                 except Exception:
-                    break
+                    pass
+                # Additional wait for hydration
+                await asyncio.sleep(1.5)
+            else:
+                # Section 3C: Smart wait for dynamic content
+                prev_content_len = 0
+                for _ in range(5):
+                    await asyncio.sleep(0.8)
+                    try:
+                        content = await _get_main_content(page)
+                        if len(content) == prev_content_len and len(content) > 200:
+                            break  # Content stable
+                        prev_content_len = len(content)
+                    except Exception:
+                        break
             
             title = await page.title()
             content = await _get_main_content(page)
@@ -191,7 +217,7 @@ async def execute_action(page, context, data: dict) -> dict:
             except Exception:
                 screenshot_path = None
             
-            return {
+            result = {
                 "success": True,
                 "url": page.url,
                 "title": title,
@@ -201,6 +227,14 @@ async def execute_action(page, context, data: dict) -> dict:
                 "screenshot_path": screenshot_path,
                 "hint": "Use 'click' with element text or 'extract' for specific data."
             }
+            # Add structured metadata for smarter agent decisions
+            result["metadata"] = {
+                "framework": framework,
+                "load_time_ms": int((_time.time() - action_start) * 1000),
+                "content_length": len(cleaned),
+                "screenshot_available": screenshot_path is not None
+            }
+            return result
 
         elif action == "extract":
             # Smart extraction: find specific info on current page

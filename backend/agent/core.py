@@ -316,7 +316,7 @@ class ArchimedesCosmoAgent:
         except Exception as e:
             logger.error(f"ERROR: Failed to sync MCP tools: {e}")
 
-    async def process_task(self, task_description: str, websocket_send: Callable = None, **kwargs) -> ExecutionResult:
+    async def process_task(self, task_description: str, websocket_send: Callable = None, stream: bool = False, **kwargs) -> ExecutionResult:
         """Обработать задачу с использованием мультиагентной оркестрации."""
         task_id = str(uuid.uuid4())
         start_time = asyncio.get_running_loop().time()
@@ -341,7 +341,8 @@ class ArchimedesCosmoAgent:
                 mode=mode,
                 session_id=self.session_id or "default",
                 websocket_send=websocket_send,
-                task_hint=kwargs.get("task_hint", "default")
+                task_hint=kwargs.get("task_hint", "default"),
+                stream=stream
             )
             
             if not orch_result.get("success"):

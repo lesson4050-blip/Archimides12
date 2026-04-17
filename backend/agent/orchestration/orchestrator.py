@@ -100,7 +100,8 @@ class AgentOrchestrator:
                        mode: AgentMode = AgentMode.PLANNING,
                        session_id: str = "default",
                        websocket_send: Optional[Callable] = None,
-                       task_hint: str = "default") -> Dict[str, Any]:
+                       task_hint: str = "default",
+                       stream: bool = False) -> Dict[str, Any]:
         
         # Initialize state
         state = OrchestrationState(
@@ -109,6 +110,7 @@ class AgentOrchestrator:
             mode=mode,
             task_hint=task_hint
         )
+        state.stream = stream  # Enable streaming in executor
         
         # Add initial greeting/task to history
         state.add_message("user", task_description)

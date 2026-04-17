@@ -132,8 +132,27 @@ class MicroAgentSwarm:
                 "agent": agent.role
             })
 
+        # Inject relevant knowledge from GraphRAG
+        knowledge_ctx = ""
+        try:
+            from backend.memory.knowledge_graph import format_graph_context
+            from backend.memory.memory_bank import get_relevant_facts
+            task_words = task.split()[:3]
+            key_term = " ".join(task_words)
+            graph_knowledge = format_graph_context(key_term, depth=1)
+            memory_facts = get_relevant_facts(limit=3)
+            if graph_knowledge:
+                knowledge_ctx += f"\nKnowledge Graph:\n{graph_knowledge}"
+            if memory_facts:
+                knowledge_ctx += (
+                    "\nMemory:\n"
+                    + "\n".join(f"• {f}" for f in memory_facts)
+                )
+        except Exception:
+            knowledge_ctx = ""
+
         messages = [
-            {"role": "system", "content": agent.system_prompt},
+            {"role": "system", "content": agent.system_prompt + knowledge_ctx},
         ]
         if context:
             messages.append({
@@ -246,18 +265,18 @@ class MicroAgentSwarm:
             return primary_result
 
         synthesis_prompt = (
-            f"Original task: {task}\n\n"
+            f"Task: {task}\n\n"
             f"Primary solution by {primary.role}:\n{primary_result}\n\n"
         )
-        for i, (reviewer, review) in enumerate(
-            zip(agents[1:], reviews), 1
-        ):
+        for reviewer, review in zip(agents[1:], reviews):
             synthesis_prompt += (
-                f"Review/improvements by {reviewer.role}:\n{review}\n\n"
+                f"Review by {reviewer.role}:\n{review}\n\n"
             )
         synthesis_prompt += (
-            "Synthesize the best final answer incorporating all insights. "
-            "Output only the final result."
+            "Score each solution 1-10 on: correctness, completeness, "
+            "efficiency. Then synthesize the BEST final answer "
+            "incorporating the highest-scored elements. "
+            "Output only the final answer, no scores."
         )
 
         synth_response = await self.router.generate(

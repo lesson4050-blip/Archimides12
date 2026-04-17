@@ -241,11 +241,33 @@ class BrowserTool:
             if not write_result.get("success"):
                 return {"success": False, "error": "Failed to write browser command"}
 
-            # Poll for result with adaptive timeout
+            # Poll for result with adaptive timeout and retry on timeout
             timeout = 45 if action == "navigate" else 20
+            first_attempt = True
             start = time.time()
             
-            while time.time() - start < timeout:
+            while True:
+                elapsed = time.time() - start
+                if elapsed >= timeout:
+                    if first_attempt:
+                        # Restart browser server and retry once
+                        logger.warning(
+                            f"Browser timeout on '{action}'. "
+                            f"Restarting browser server and retrying..."
+                        )
+                        await self.executor.run_command(
+                            session_id,
+                            "pkill -f browser_server.py; sleep 1"
+                        )
+                        await self._ensure_browser_running(session_id)
+                        first_attempt = False
+                        start = time.time()
+                        # Write command again
+                        await self.executor.run_command(session_id, write_cmd)
+                        continue  # retry the poll loop
+                    else:
+                        break  # Give up after retry
+
                 check = await self.executor.run_command(
                     session_id,
                     f"test -f {RES_FILE} && echo EXISTS"
@@ -270,7 +292,7 @@ class BrowserTool:
 
             return {
                 "success": False,
-                "error": f"Browser action '{action}' timed out after {timeout}s. "
+                "error": f"Browser action '{action}' timed out after retry. "
                          f"The page may still be loading."
             }
 

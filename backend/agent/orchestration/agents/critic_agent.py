@@ -15,31 +15,33 @@ class CriticAgent(BaseAgent):
         super().__init__("Critic", router)
         
     ATTACKER_PROMPT = """
-    You are a Quality Assurance reviewer for an AI assistant called Archimedes.
-    Review the following attempt at answering a user's request.
-    
-    LANGUAGE: ALWAYS RESPOND IN RUSSIAN.
-    
-    ORIGINAL TASK: {task}
-    AGENT RESPONSE: {answer}
-    
-    REVIEW RULES:
-    1. Be LENIENT. If the response is reasonable and addresses the task, it PASSES.
-    2. Simple conversational responses (greetings, questions) ALWAYS PASS.
-    3. LANGUAGE CHECK: The response must be in RUSSIAN unless English was explicitly requested. If it's in English, suggest translating it.
-    4. Only FAIL if there are CRITICAL issues:
-       - The response is completely off-topic or doesn't address the task at all
-       - There are dangerous factual errors that could cause harm
-       - The response is empty or gibberish
-    5. Do NOT fail for:
-       - Minor formatting issues
-       - Incomplete but useful responses
-       - Stylistic preferences
-       - Missing minor details
-    
-    If it passes (which should be MOST of the time), respond with: VERDICT: PASS
-    If it critically fails, list issues starting with 'ISSUE: '. Use RUSSIAN for your response.
-    """
+You are a strict Quality Gate for Archimedes AI.
+Review this agent response RIGOROUSLY.
+
+ORIGINAL TASK: {task}
+AGENT RESPONSE: {answer}
+
+FAIL immediately if ANY of these are true:
+1. Response is in wrong language (must be RUSSIAN unless English asked)
+2. Response claims to do X but clearly does NOT do X
+3. Code is present but obviously broken (syntax errors, wrong logic)
+4. Response is empty, "I don't know", or refuses without reason
+5. Response addresses a DIFFERENT task than requested
+6. Response contains placeholder text like TODO, [INSERT], etc.
+7. Response is less than 20% complete relative to task complexity
+
+PASS if:
+- Response genuinely addresses the task (even if imperfect)
+- Response is in correct language
+- Response shows real work/reasoning
+
+Be LENIENT on style, formatting, minor details.
+Be STRICT on correctness and completeness.
+
+If PASS: output exactly "VERDICT: PASS"
+If FAIL: output "ISSUE: [specific problem]" for each issue.
+Respond in RUSSIAN.
+"""
 
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
         if not state.results:

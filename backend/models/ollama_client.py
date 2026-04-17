@@ -75,9 +75,9 @@ NEVER mix tool JSON with explanation text.
             "messages": messages,
             "options": {
                 "num_ctx": min(
-                    settings.AGENT_MAX_CONTEXT_TOKENS, 16384
+                    settings.AGENT_MAX_CONTEXT_TOKENS, 32768
                 ),
-                "num_predict": 4096,
+                "num_predict": 8192,
                 "temperature": 0.1,
                 "num_gpu": 999,
                 "num_thread": 8,
@@ -278,8 +278,8 @@ NEVER mix tool JSON with explanation text.
                 messages=messages,
                 stream=True,
                 options={
-                    "num_ctx": min(settings.AGENT_MAX_CONTEXT_TOKENS, 8192),
-                    "num_predict": 2048,
+                    "num_ctx": min(settings.AGENT_MAX_CONTEXT_TOKENS, 32768),
+                    "num_predict": 8192,
                     "temperature": 0.7,
                     "num_gpu": 999,
                     "keep_alive": "10m",

@@ -117,32 +117,53 @@ def _try_complete_truncated(raw: str) -> Tuple[Optional[Any], str]:
     """Complete truncated JSON by counting brackets."""
     start = raw.find('{')
     if start == -1:
+        start = raw.find('[')
+    if start == -1:
         return None, "No JSON start"
 
     candidate = raw[start:]
-    open_braces = candidate.count('{')
-    close_braces = candidate.count('}')
-    open_brackets = candidate.count('[')
-    close_brackets = candidate.count(']')
 
-    missing_brackets = open_brackets - close_brackets
-    missing_braces = open_braces - close_braces
-
-    # Only attempt completion if there are actually missing closings
-    if missing_brackets <= 0 and missing_braces <= 0:
-        return None, "Not truncated"
-
-    # Add missing closings
-    completion = (
-        ']' * max(0, missing_brackets)
-        + '}' * max(0, missing_braces)
-    )
-    if completion:
-        completed = candidate + completion
+    def _try_close(s: str) -> Optional[Any]:
+        """Try to close brackets/braces and parse."""
+        # Close any unclosed string
+        quote_count = s.count('"') - s.count('\\"')
+        if quote_count % 2 != 0:
+            s = s + '"'
+        ob = s.count('{') - s.count('}')
+        ab = s.count('[') - s.count(']')
+        if ob <= 0 and ab <= 0:
+            try:
+                return json.loads(s)
+            except Exception:
+                return None
+        closing = ']' * max(0, ab) + '}' * max(0, ob)
         try:
-            return json.loads(completed), ""
-        except Exception as e:
-            return None, str(e)
+            return json.loads(s + closing)
+        except Exception:
+            return None
+
+    # Strategy 1: close as-is
+    result = _try_close(candidate)
+    if result is not None:
+        return result, ""
+
+    # Strategy 2: strip from last comma and recompute
+    last_comma = candidate.rfind(',')
+    if last_comma > 0:
+        stripped = candidate[:last_comma]
+        result = _try_close(stripped)
+        if result is not None:
+            return result, ""
+
+    # Strategy 3: strip from second-to-last comma
+    if last_comma > 0:
+        second_comma = candidate.rfind(',', 0, last_comma)
+        if second_comma > 0:
+            stripped2 = candidate[:second_comma]
+            result = _try_close(stripped2)
+            if result is not None:
+                return result, ""
+
     return None, "Not truncated"
 
 

@@ -81,9 +81,35 @@ class SearchTool:
 
         return {"success": False, "error": "All search engines failed"}
 
+    async def _read_top_pages(
+        self, results: list, query: str
+    ) -> str:
+        """Read actual page content for top search results."""
+        from backend.tools.web_tool import WebTool
+        web = WebTool()
+        full_content = []
+        for r in results[:2]:
+            url = r.get("url", "")
+            if not url or "reddit.com" in url:
+                continue
+            try:
+                page_result = await web.execute(
+                    url=url, query=query
+                )
+                if page_result.get("success"):
+                    content = page_result.get("content", "")
+                    if len(content) > 200:
+                        full_content.append(
+                            f"[From {url}]:\n{content[:1500]}"
+                        )
+            except Exception:
+                pass
+        return "\n\n".join(full_content)
+
     async def _multi_hop_search(self, initial_query: str, max_hops: int = 3) -> str:
         all_results = []
         current_query = initial_query
+        knowledge = []
         
         from backend.models.model_router import ModelRouter
         router = ModelRouter()
@@ -96,13 +122,22 @@ class SearchTool:
             if not res or not res.get("success"):
                 res = await self._search_duckduckgo(current_query, 5)
 
-            text = res.get("output", "") if res else ""
-            all_results.append(f"--- Search [{hop+1}/{max_hops}] '{current_query}' ---\n{text}")
+            hop_text = res.get("output", "") if res else ""
+            
+            # Read actual pages for richer content
+            page_content = await self._read_top_pages(
+                res.get("results", []) if res else [], current_query
+            )
+            if page_content:
+                hop_text = hop_text + "\n\nFULL PAGE CONTENT:\n" + page_content
+
+            knowledge.append(f"Hop {hop+1}:\n{hop_text}")
+            all_results.append(f"--- Search [{hop+1}/{max_hops}] '{current_query}' ---\n{hop_text}")
             
             # Ask LLM if we have enough info
             analysis_prompt = f"""
 Goal: {initial_query}
-Found so far: { text[:2000] }
+Found so far: { hop_text[:2000] }
 If the goal is fully answered by the findings, output 'DONE'.
 If we need more info (e.g. data is missing or incomplete), output a single new search query string.
 Do not output any reasoning, just 'DONE' or the new query.
@@ -115,7 +150,28 @@ Do not output any reasoning, just 'DONE' or the new query.
             if "DONE" in ans.upper() or not ans:
                 break
             current_query = ans
-            
+        
+        # Synthesize with citation instruction
+        synthesis_prompt = (
+            f"Question: {initial_query}\n\n"
+            f"Research:\n" + "\n\n".join(knowledge[:3])
+            + "\n\nWrite a comprehensive, accurate answer. "
+            f"Cite sources as [1], [2] inline. "
+            f"Add 'Sources:' section at the end with URLs. "
+            f"Be specific with numbers, dates, names."
+        )
+        
+        try:
+            synth_resp = await router.generate(
+                messages=[{"role": "user", "content": synthesis_prompt}],
+                task_hint="think"
+            )
+            synthesized = synth_resp.get("text", "")
+            if synthesized and len(synthesized) > 100:
+                return synthesized
+        except Exception:
+            pass
+
         return "\n\n".join(all_results)
 
     async def _search_tavily(

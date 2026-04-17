@@ -20,6 +20,25 @@ class TDDExecutor:
         self.router = router
         self.sandbox = sandbox_executor
 
+    def _get_test_config(self, code_path: str) -> dict:
+        """Get test configuration based on file language."""
+        if code_path.endswith(".py"):
+            return {
+                "test_file": "test_task.py",
+                "run_cmd": "python -m pytest test_task.py -v "
+                           "--tb=short --cov=. --cov-report=term-missing",
+                "impl_file": "implementation.py",
+                "lang": "python"
+            }
+        elif code_path.endswith((".js", ".ts")):
+            return {
+                "test_file": "test_task.test.js",
+                "run_cmd": "npx jest test_task.test.js --no-coverage",
+                "impl_file": "implementation.js",
+                "lang": "javascript"
+            }
+        return None
+
     async def execute_tdd(
         self,
         task: str,
@@ -113,6 +132,37 @@ Output ONLY the python code, wrapped in ```python
             # Auto-install missing packages before running tests
             test_output = ""
             for pip_attempt in range(2):
+                # Pre-flight: lint the code
+                if pip_attempt == 0:
+                    if filename.endswith(".py"):
+                        lint_result = await self.sandbox.run_command(
+                            session_id,
+                            f"python -m py_compile /home/ubuntu/workspace/{filename} "
+                            f"2>&1 || true",
+                            timeout=10
+                        )
+                        lint_output = lint_result.get("output", "")
+                        if "SyntaxError" in lint_output:
+                            # Fix syntax errors before running tests
+                            fix_prompt = (
+                                f"This Python code has syntax errors:\n"
+                                f"```python\n{current_code}\n```\n"
+                                f"Errors: {lint_output[:500]}\n"
+                                f"Fix the syntax. Output only fixed code."
+                            )
+                            fix_resp = await self.router.generate(
+                                messages=[{"role": "user", "content": fix_prompt}],
+                                task_hint="think"
+                            )
+                            fixed = self._extract_code(fix_resp.get("text", ""))
+                            if fixed:
+                                current_code = fixed
+                                await self.sandbox.run_command(
+                                    session_id,
+                                    f"cat > /home/ubuntu/workspace/{filename} "
+                                    f"<< 'ARCHEOF'\n{current_code}\nARCHEOF"
+                                )
+
                 # Step 3: Run Test with coverage
                 cov_result = await self.sandbox.run_command(
                     session_id,

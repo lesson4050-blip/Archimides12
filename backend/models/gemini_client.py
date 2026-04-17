@@ -207,3 +207,61 @@ class GeminiClient:
                 else:
                     raise
         raise RateLimitExceeded("Gemini Rate Limit exceeded (generate_simple)")
+
+    async def generate_stream(
+        self,
+        messages,
+        tools=None,
+        on_token=None
+    ):
+        """
+        Gemini streaming via generate_content_stream.
+        Falls back to non-stream if tools present.
+        """
+        if tools:
+            return await self.generate_with_tools(messages, tools)
+
+        contents = []
+        system_instruction = None
+        for msg in messages:
+            if msg["role"] == "system":
+                system_instruction = msg["content"]
+                continue
+            role = "user" if msg["role"] == "user" else "model"
+            if msg.get("content"):
+                contents.append(
+                    types.Content(
+                        role=role,
+                        parts=[types.Part(text=msg["content"])]
+                    )
+                )
+
+        full_text = ""
+        try:
+            stream = await asyncio.to_thread(
+                self.client.models.generate_content_stream,
+                model=self.model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                )
+            )
+            for chunk in stream:
+                if chunk.text:
+                    full_text += chunk.text
+                    if on_token:
+                        await on_token({
+                            "type": "token",
+                            "content": chunk.text
+                        })
+        except Exception as e:
+            logger.error(f"Gemini stream error: {e}")
+            return await self.generate_with_tools(messages, None)
+
+        return {
+            "model_used": "gemini",
+            "thought": "",
+            "tool_call": None,
+            "text": full_text,
+            "tokens_used": 0
+        }

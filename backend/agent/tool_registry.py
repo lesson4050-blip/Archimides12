@@ -129,6 +129,21 @@ class ToolRegistry:
                             params[key] = str(val).lower() in ("true", "1", "yes")
                         elif expected_type == "string" and not isinstance(val, str):
                             params[key] = str(val)
+                        elif expected_type == "array" and isinstance(val, str):
+                            # Model passed a string instead of array
+                            if val.startswith('['):
+                                from backend.utils.json_repair import repair_and_parse
+                                parsed, _ = repair_and_parse(val)
+                                if isinstance(parsed, list):
+                                    params[key] = parsed
+                            else:
+                                # Split by comma as fallback
+                                params[key] = [v.strip() for v in val.split(',')]
+                        elif expected_type == "number" and isinstance(val, str):
+                            try:
+                                params[key] = float(val)
+                            except ValueError:
+                                pass
                     except (ValueError, TypeError):
                         pass  # Keep original if conversion fails
 

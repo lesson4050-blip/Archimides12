@@ -111,7 +111,25 @@ class ContextManager:
         """Get current message history."""
         return self.history
 
-    def get_messages_with_cache(self, max_total_tokens: int = 8192) -> List[Dict[str, Any]]:
+    def _deduplicate_tool_results(
+        self, messages: List[Dict]
+    ) -> List[Dict]:
+        """Remove duplicate tool results keeping only the latest."""
+        seen_tool_names = {}
+        result = []
+        # Process in reverse to keep latest
+        for msg in reversed(messages):
+            if msg.get("role") == "tool":
+                name = msg.get("name", "unknown")
+                if name not in seen_tool_names:
+                    seen_tool_names[name] = True
+                    result.insert(0, msg)
+                # Skip duplicate tool results
+            else:
+                result.insert(0, msg)
+        return result
+
+    def get_messages_with_cache(self, max_total_tokens: int = 24000) -> List[Dict[str, Any]]:
         """
         Returns messages optimized for prefix caching.
         The system prompt is kept stable (cache-friendly).
@@ -121,9 +139,12 @@ class ContextManager:
         if not self.history:
             return []
 
+        # Step 1: deduplicate tool results
+        history = self._deduplicate_tool_results(self.history)
+
         # System prompt is always first — keep it stable for cache hits
-        system_msgs = [m for m in self.history if m["role"] == "system"]
-        other_msgs = [m for m in self.history if m["role"] != "system"]
+        system_msgs = [m for m in history if m["role"] == "system"]
+        other_msgs = [m for m in history if m["role"] != "system"]
 
         # System prompt: always include (cache hit)
         result = list(system_msgs)
@@ -141,9 +162,9 @@ class ContextManager:
             selected.insert(0, msg)
             token_budget -= cost
 
-        # Always include at least last 3 non-system messages
-        if len(selected) < 3 and len(other_msgs) >= 3:
-            selected = other_msgs[-3:]
+        # Always include at least last 5 non-system messages
+        if len(selected) < 5 and len(other_msgs) >= 5:
+            selected = other_msgs[-5:]
 
         return result + selected
 

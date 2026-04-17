@@ -96,12 +96,18 @@ class ExecutorAgent(BaseAgent):
             
             if not any(m["role"] == "system" for m in messages):
                 # Inject relevant memory bank context
-                from backend.memory.memory_bank import get_relevant_facts
+                from backend.memory.memory_bank import (
+                    get_relevant_facts, get_session_summary
+                )
                 from backend.memory.knowledge_graph import format_graph_context
 
-                memory_facts = get_relevant_facts(limit=3)
+                memory_facts = get_relevant_facts(limit=5)
+
+                # Get summary of last session for continuity
+                last_session_facts = get_relevant_facts(limit=3, category="task_result")
+
                 # Extract key terms from task for graph query
-                task_words = current_target.split()[:3]
+                task_words = current_target.split()[:4]
                 key_term = " ".join(task_words) if task_words else ""
                 graph_ctx = format_graph_context(key_term, depth=2) if key_term else ""
 
@@ -110,6 +116,11 @@ class ExecutorAgent(BaseAgent):
                     memory_context += (
                         "\n\nMEMORY BANK:\n"
                         + "\n".join(f"• {f}" for f in memory_facts)
+                    )
+                if last_session_facts:
+                    memory_context += (
+                        "\n\nLAST SESSION LEARNINGS:\n"
+                        + "\n".join(f"→ {f}" for f in last_session_facts)
                     )
                 if graph_ctx:
                     memory_context += f"\n\n{graph_ctx}"
@@ -183,6 +194,11 @@ class ExecutorAgent(BaseAgent):
                 if not success:
                     output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
                     prev_error = output  # Track for self-improvement
+
+                    # Track confidence: failure drops score
+                    if not hasattr(state, 'confidence_score'):
+                        state.confidence_score = 100
+                    state.confidence_score = max(0, state.confidence_score - 15)
                     
                     # Section 6A: Check self-improvement DB for known fix
                     from backend.agent.self_improvement import get_fix_hint
@@ -230,6 +246,24 @@ class ExecutorAgent(BaseAgent):
                         )
                         prev_error = None
 
+                    # Track confidence: success increases score
+                    if not hasattr(state, 'confidence_score'):
+                        state.confidence_score = 100
+                    state.confidence_score = min(100, state.confidence_score + 5)
+
+                    # Send confidence to frontend periodically
+                    if websocket_send and step % 3 == 0:
+                        score = getattr(state, 'confidence_score', 100)
+                        await websocket_send({
+                            "type": "confidence",
+                            "score": score,
+                            "label": (
+                                "🟢 Уверен" if score > 70
+                                else "🟡 Осторожно" if score > 40
+                                else "🔴 Затрудняюсь"
+                            )
+                        })
+
                 self.context_manager.add_message("assistant", thought or "", tool_calls=[std_tool_call])
                 self.context_manager.add_message("tool", output, tool_call_id=call_id, name=t_name)
                 state.history = self.context_manager.get_messages()
@@ -251,8 +285,8 @@ class ExecutorAgent(BaseAgent):
                     content = t_params.get("content", "")
                     path = t_params.get("path", "")
 
-                    # BUG 2: Apply TDD for Python files in execute mode — pass actual code
-                    if (path.endswith(".py") and
+                    # BUG 2: Apply TDD for code files in execute mode — pass actual code
+                    if (path.endswith((".py", ".js", ".ts")) and
                         len(content) > 50 and
                         state.task_hint == "execute"):
                         try:
@@ -335,6 +369,33 @@ class ExecutorAgent(BaseAgent):
                         logger.warning(f"Memory Bank write failed (non-critical): {e}")
 
                 state.history = self.context_manager.get_messages()
+
+                # Proactive next-step suggestion
+                if res_text and len(res_text) > 100:
+                    try:
+                        suggest_prompt = (
+                            f"Task completed: {state.task_description}\n"
+                            f"Result: {res_text[:300]}\n\n"
+                            f"Suggest 2-3 logical NEXT STEPS the user might want. "
+                            f"Output as short JSON array: "
+                            f'["action1", "action2", "action3"]\n'
+                            f"Max 8 words each. In RUSSIAN."
+                        )
+                        sug_resp = await self.router.generate(
+                            messages=[{"role": "user", "content": suggest_prompt}],
+                            task_hint="think"
+                        )
+                        from backend.utils.json_repair import repair_and_parse as _rp
+                        suggestions, _ = _rp(sug_resp.get("text", ""))
+                        if isinstance(suggestions, list) and suggestions:
+                            if websocket_send:
+                                await websocket_send({
+                                    "type": "suggestions",
+                                    "items": suggestions[:3]
+                                })
+                    except Exception:
+                        pass  # Non-critical
+
                 return state
         
         await self.log_info(f"Subtask hit iteration limit ({self.max_steps} steps).", websocket_send)
