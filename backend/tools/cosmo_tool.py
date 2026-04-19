@@ -146,7 +146,7 @@ class CosmoPresentationTool:
 
         try:
             # Use the REAL Presenton API: POST /api/v1/ppt/presentation/generate
-            async with httpx.AsyncClient(timeout=300) as c:
+            async with httpx.AsyncClient(timeout=900) as c:
                 logger.info(
                     f"COSMO: generating presentation via "
                     f"/api/v1/ppt/presentation/generate "
@@ -164,7 +164,7 @@ class CosmoPresentationTool:
                         "include_title_slide": True,
                         "include_table_of_contents": False,
                     },
-                    timeout=300
+                    timeout=900
                 )
 
                 if r.status_code != 200:
