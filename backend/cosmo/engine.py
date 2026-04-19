@@ -52,7 +52,7 @@ async def start_engine():
         _process = subprocess.Popen(
             [
                 sys.executable, "-m", "uvicorn",
-                "main:app",
+                "api.main:app",
                 "--host", "127.0.0.1",
                 "--port", str(ENGINE_PORT),
                 "--log-level", "error"
