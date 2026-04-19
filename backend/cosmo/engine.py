@@ -45,8 +45,11 @@ async def start_engine():
         "IMAGE_PROVIDER": os.environ.get("IMAGE_PROVIDER", "pexels"),
         "PEXELS_API_KEY": os.environ.get("PEXELS_API_KEY", ""),
         "APP_NAME": "COSMO Presentation",
-        "DATA_DIR": str(ENGINE_DIR / "data"),
+        "APP_DATA_DIRECTORY": str(ENGINE_DIR / "data"),
+        "DATABASE_URL": "sqlite+aiosqlite:///presenton.db",
     }
+    
+    (ENGINE_DIR / "data").mkdir(parents=True, exist_ok=True)
 
     try:
         _process = subprocess.Popen(
@@ -63,8 +66,8 @@ async def start_engine():
             stderr=subprocess.PIPE
         )
 
-        # Wait up to 15 seconds for engine to be ready
-        for i in range(30):
+        # Wait up to 10 minutes for engine to be ready (model downloads)
+        for i in range(1200):
             await asyncio.sleep(0.5)
             if await _health_check():
                 logger.info(
@@ -73,7 +76,7 @@ async def start_engine():
                 )
                 return True
 
-        logger.error("COSMO engine failed to start in 15s")
+        logger.error("COSMO engine failed to start in 10m")
         return False
 
     except Exception as e:
