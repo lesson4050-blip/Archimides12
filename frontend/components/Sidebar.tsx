@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit, Sparkles, Search, Library, Plus, ListFilter, Settings, LayoutGrid, MonitorSmartphone } from "lucide-react";
+import { Edit, Sparkles, Search, Library, Plus, ListFilter, Settings, LayoutGrid, MonitorSmartphone, Plug } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import SettingsModal from "./SettingsModal";
@@ -9,6 +9,7 @@ import LibraryDrawer from "./LibraryDrawer";
 import AgentModal from "./AgentModal";
 import SearchModal from "./SearchModal";
 import ProjectModal from "./ProjectModal";
+import ConnectorsPanel from "./ConnectorsPanel";
 
 interface SidebarProps {
   onNewTask: () => void;
@@ -25,6 +26,7 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isConnectorsOpen, setIsConnectorsOpen] = useState(false);
 
   return (
     <>
@@ -89,6 +91,15 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
         >
           <Library size={16} className="text-gray-400" />
           <span>Библиотека</span>
+        </button>
+
+        <button 
+          onClick={() => setIsConnectorsOpen(true)}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
+        >
+          <Plug size={16} className="text-gray-400 group-hover:text-[#7C6FFF] transition-colors" />
+          <span>Коннекторы</span>
+          <span className="ml-auto text-[10px] text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded font-medium">80+</span>
         </button>
       </div>
 
@@ -161,6 +172,7 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
     />
     <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     <ProjectModal isOpen={isProjectModalOpen} onClose={() => setIsProjectModalOpen(false)} />
+    <ConnectorsPanel isOpen={isConnectorsOpen} onClose={() => setIsConnectorsOpen(false)} />
     </>
   );
 }

@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@nangohq/node": "^0.70.1"
+  }
+}

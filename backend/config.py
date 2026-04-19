@@ -53,6 +53,11 @@ class Settings(BaseSettings):
         "memory": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}
     }
     
+    # Nango
+    NANGO_PUBLIC_KEY: str = ""
+    NANGO_SECRET_KEY: str = ""
+    NANGO_BASE_URL: str = "http://localhost:3003"
+    
     # Frontend/WebSocket
     NEXT_PUBLIC_WS_URL: str = "ws://localhost:8000/ws"
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"

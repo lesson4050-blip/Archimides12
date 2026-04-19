@@ -79,3 +79,21 @@ backend/archemidas.db
 
 # Artifacts
 output/
+
+# Temp clones & embedded repos
+_presenton_tmp/
+cosmo_engine/
+
+# Engine model cache
+cosmo_engine_core/chroma/
+
+# Test/scratch scripts & logs
+generate_space*.py
+install_engine*.py
+test_uvicorn.py
+check_integrations.py
+setup_nango_integrations.py
+space_log*.txt
+*_final*.log
+*_test*.log
+tags.json
