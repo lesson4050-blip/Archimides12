@@ -3,8 +3,10 @@ COSMO Presentation — Native Archimedes Tool
 Generates Gamma/Kimi quality PPTX presentations.
 Works exactly like browser_tool or shell_tool — always available,
 no external dependencies for the agent.
+
+Uses the real Presenton engine API:
+  POST /api/v1/ppt/presentation/generate
 """
-import asyncio
 import httpx
 import logging
 import os
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Where generated PPTX files are saved for download
 OUTPUT_DIR = Path(os.environ.get(
     "COSMO_OUTPUT_DIR",
-    "/home/ubuntu/workspace/presentations"
+    str(Path(__file__).parent.parent.parent / "workspace" / "presentations")
 ))
 
 
@@ -59,48 +61,28 @@ class CosmoPresentationTool:
                             "type": "integer",
                             "description": (
                                 "Number of slides. Default: 8. "
-                                "Min: 5. Max: 20."
-                            )
-                        },
-                        "theme": {
-                            "type": "string",
-                            "enum": [
-                                "dark", "light", "navy", "corporate",
-                                "minimal", "bold", "emerald",
-                                "rose", "gradient"
-                            ],
-                            "description": (
-                                "Visual theme. "
-                                "dark — premium dark OLED (default). "
-                                "corporate — professional business. "
-                                "minimal — clean whitespace. "
-                                "bold — high contrast modern."
+                                "Min: 3. Max: 20."
                             )
                         },
                         "language": {
                             "type": "string",
                             "description": (
                                 "Output language. "
-                                "ru for Russian (default), en for English."
+                                "Russian (default), English, etc."
                             )
                         },
-                        "outline": {
-                            "type": "array",
+                        "template": {
+                            "type": "string",
+                            "enum": [
+                                "general", "business", "education",
+                                "marketing", "technology"
+                            ],
                             "description": (
-                                "Optional: pre-defined slide structure. "
-                                "If provided, skips outline generation. "
-                                "Format: [{title, points: []}]"
-                            ),
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "title": {"type": "string"},
-                                    "points": {
-                                        "type": "array",
-                                        "items": {"type": "string"}
-                                    }
-                                }
-                            }
+                                "Visual template. "
+                                "general — universal (default). "
+                                "business — professional corporate. "
+                                "education — academic style."
+                            )
                         },
                         "filename": {
                             "type": "string",
@@ -117,17 +99,23 @@ class CosmoPresentationTool:
 
     async def execute(
         self,
-        prompt: str,
+        prompt: str = None,
         slide_count: int = 8,
-        theme: str = "dark",
-        language: str = "ru",
-        outline: List[Dict] = None,
+        language: str = "Russian",
+        template: str = "general",
         filename: str = None,
         session_id: str = None,
+        # Legacy kwargs compatibility
+        topic: str = None,
+        pages: int = None,
         **kwargs
     ) -> Dict[str, Any]:
 
-        if not prompt:
+        # Support legacy parameter names
+        content = prompt or topic
+        n_slides = slide_count if pages is None else pages
+
+        if not content:
             return {"success": False, "error": "prompt is required"}
 
         # Ensure engine is running
@@ -145,68 +133,84 @@ class CosmoPresentationTool:
                     )
                 }
 
-        slide_count = min(max(slide_count, 5), 20)
+        n_slides = min(max(n_slides, 3), 20)
 
         # Generate filename
         if not filename:
             safe = "".join(
-                c for c in prompt[:40] if c.isalnum() or c in " _-"
+                c for c in content[:40] if c.isalnum() or c in " _-"
             ).strip().replace(" ", "_")
             filename = f"cosmo_{safe}" if safe else "cosmo_presentation"
 
         output_path = OUTPUT_DIR / f"{filename}.pptx"
 
         try:
-            async with httpx.AsyncClient(timeout=180) as c:
-
-                # STEP 1: Generate or use provided outline
-                if outline:
-                    presentation_id = await self._create_from_outline(
-                        c, engine_url, prompt, outline, theme, language
-                    )
-                else:
-                    # Generate outline first (Kimi-style workflow)
-                    logger.info(f"COSMO: generating outline for '{prompt[:50]}'")
-                    presentation_id = await self._generate_outline(
-                        c, engine_url, prompt, slide_count, language
-                    )
-
-                if not presentation_id:
-                    return {
-                        "success": False,
-                        "error": "Failed to generate presentation outline"
-                    }
-
-                # STEP 2: Generate slides from outline
+            # Use the REAL Presenton API: POST /api/v1/ppt/presentation/generate
+            async with httpx.AsyncClient(timeout=300) as c:
                 logger.info(
-                    f"COSMO: generating slides "
-                    f"(id={presentation_id}, theme={theme})"
+                    f"COSMO: generating presentation via "
+                    f"/api/v1/ppt/presentation/generate "
+                    f"(slides={n_slides}, lang={language})"
                 )
-                ok = await self._generate_slides(
-                    c, engine_url, presentation_id, theme
+
+                r = await c.post(
+                    f"{engine_url}/api/v1/ppt/presentation/generate",
+                    json={
+                        "content": content,
+                        "n_slides": n_slides,
+                        "language": language,
+                        "template": template,
+                        "export_as": "pptx",
+                        "include_title_slide": True,
+                        "include_table_of_contents": False,
+                    },
+                    timeout=300
                 )
-                if not ok:
+
+                if r.status_code != 200:
+                    error_text = r.text[:300]
+                    logger.error(
+                        f"COSMO generation failed "
+                        f"({r.status_code}): {error_text}"
+                    )
                     return {
                         "success": False,
-                        "error": "Slide generation failed"
+                        "error": f"Engine returned {r.status_code}: {error_text}"
                     }
 
-                # STEP 3: Download PPTX
-                logger.info(f"COSMO: downloading PPTX to {output_path}")
-                downloaded = await self._download_pptx(
-                    c, engine_url, presentation_id, output_path
-                )
-                if not downloaded:
-                    return {
-                        "success": False,
-                        "error": "Failed to download PPTX file"
-                    }
+                result = r.json()
+                # result contains: path, edit_path
+                pptx_server_path = result.get("path", "")
+
+                # Download the exported PPTX file
+                if pptx_server_path:
+                    dl = await c.get(
+                        f"{engine_url}/exports/{Path(pptx_server_path).name}",
+                        timeout=30
+                    )
+                    if dl.status_code == 200:
+                        output_path.parent.mkdir(parents=True, exist_ok=True)
+                        output_path.write_bytes(dl.content)
+                    else:
+                        # Try static file endpoint
+                        dl2 = await c.get(
+                            f"{engine_url}/api/v1/ppt/files/download?path={pptx_server_path}",
+                            timeout=30
+                        )
+                        if dl2.status_code == 200:
+                            output_path.parent.mkdir(parents=True, exist_ok=True)
+                            output_path.write_bytes(dl2.content)
+                        else:
+                            return {
+                                "success": False,
+                                "error": f"Generated but download failed. Server path: {pptx_server_path}"
+                            }
 
         except httpx.TimeoutException:
             return {
                 "success": False,
                 "error": (
-                    "Generation timeout. "
+                    "Generation timeout (5 min). "
                     "Try fewer slides or a simpler prompt."
                 )
             }
@@ -214,15 +218,11 @@ class CosmoPresentationTool:
             logger.error(f"COSMO tool error: {e}")
             return {"success": False, "error": str(e)}
 
-        # STEP 4: Copy to sandbox workspace for download
-        try:
-            sandbox_path = (
-                f"/home/ubuntu/workspace/{output_path.name}"
-            )
-            import shutil
-            shutil.copy2(str(output_path), sandbox_path)
-        except Exception:
-            sandbox_path = str(output_path)
+        if not output_path.exists():
+            return {
+                "success": False,
+                "error": "PPTX file was not saved locally"
+            }
 
         file_size_kb = output_path.stat().st_size // 1024
 
@@ -230,124 +230,21 @@ class CosmoPresentationTool:
             "success": True,
             "output": (
                 f"✅ COSMO Presentation готова!\n\n"
-                f"📊 Тема: {prompt[:60]}\n"
-                f"🎨 Стиль: {theme}\n"
+                f"📊 Тема: {content[:60]}\n"
+                f"📄 Слайдов: {n_slides}\n"
                 f"📁 Файл: {output_path.name} ({file_size_kb} KB)\n"
-                f"📥 Путь: {sandbox_path}\n\n"
+                f"📥 Путь: {output_path}\n\n"
                 f"Файл сохранён и готов к скачиванию."
             ),
-            "file_path": sandbox_path,
+            "file_path": str(output_path),
             "filename": output_path.name,
             "file_size_kb": file_size_kb,
-            "presentation_id": presentation_id,
-            "preview_url": (
-                f"{engine_url}/presentation/{presentation_id}"
-            )
         }
 
     async def _ping(self, engine_url: str) -> bool:
         try:
             async with httpx.AsyncClient(timeout=2) as c:
-                r = await c.get(f"{engine_url}/api/health")
+                r = await c.get(f"{engine_url}/health")
                 return r.status_code == 200
         except Exception:
-            return False
-
-    async def _generate_outline(
-        self,
-        c: httpx.AsyncClient,
-        engine_url: str,
-        prompt: str,
-        slide_count: int,
-        language: str
-    ) -> Optional[str]:
-        try:
-            r = await c.post(
-                f"{engine_url}/api/v1/ppt/generate-outline",
-                json={
-                    "prompt": prompt,
-                    "slide_count": slide_count,
-                    "language": language
-                },
-                timeout=60
-            )
-            if r.status_code == 200:
-                return r.json().get("id")
-            logger.error(f"Outline error {r.status_code}: {r.text[:200]}")
-            return None
-        except Exception as e:
-            logger.error(f"Outline generation failed: {e}")
-            return None
-
-    async def _create_from_outline(
-        self,
-        c: httpx.AsyncClient,
-        engine_url: str,
-        title: str,
-        outline: List[Dict],
-        theme: str,
-        language: str
-    ) -> Optional[str]:
-        try:
-            r = await c.post(
-                f"{engine_url}/api/v1/ppt/create-from-outline",
-                json={
-                    "title": title,
-                    "outline": outline,
-                    "theme": theme,
-                    "language": language
-                },
-                timeout=60
-            )
-            if r.status_code == 200:
-                return r.json().get("id")
-            return None
-        except Exception as e:
-            logger.error(f"Create from outline failed: {e}")
-            return None
-
-    async def _generate_slides(
-        self,
-        c: httpx.AsyncClient,
-        engine_url: str,
-        presentation_id: str,
-        theme: str
-    ) -> bool:
-        try:
-            r = await c.post(
-                f"{engine_url}/api/v1/ppt/generate-presentation",
-                json={
-                    "id": presentation_id,
-                    "theme": theme,
-                    "fetch_images": True
-                },
-                timeout=150
-            )
-            return r.status_code == 200
-        except Exception as e:
-            logger.error(f"Slide generation failed: {e}")
-            return False
-
-    async def _download_pptx(
-        self,
-        c: httpx.AsyncClient,
-        engine_url: str,
-        presentation_id: str,
-        output_path: Path
-    ) -> bool:
-        try:
-            r = await c.get(
-                f"{engine_url}/api/v1/ppt/download/{presentation_id}",
-                timeout=30
-            )
-            if r.status_code == 200:
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_bytes(r.content)
-                return True
-            logger.error(
-                f"Download failed {r.status_code}: {r.text[:100]}"
-            )
-            return False
-        except Exception as e:
-            logger.error(f"PPTX download failed: {e}")
             return False

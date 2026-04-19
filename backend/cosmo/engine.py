@@ -100,7 +100,7 @@ async def stop_engine():
 async def _health_check() -> bool:
     try:
         async with httpx.AsyncClient(timeout=2) as c:
-            r = await c.get(f"{ENGINE_URL}/api/health")
+            r = await c.get(f"{ENGINE_URL}/health")
             return r.status_code == 200
     except Exception:
         return False

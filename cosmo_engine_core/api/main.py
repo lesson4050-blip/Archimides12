@@ -15,6 +15,11 @@ app.include_router(API_V1_PPT_ROUTER)
 app.include_router(API_V1_WEBHOOK_ROUTER)
 app.include_router(API_V1_MOCK_ROUTER)
 
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 # Middlewares
 origins = ["*"]
 app.add_middleware(
