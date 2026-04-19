@@ -1,5 +1,5 @@
 export type AgentEvent = {
-  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued" | "confidence" | "suggestions" | "token";
+  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued" | "confidence" | "suggestions" | "token" | "file_artifact" | "browser_navigate";
   content?: string;
   text?: string;
   tool?: string;
@@ -12,10 +12,18 @@ export type AgentEvent = {
   name?: string;
   path?: string;
   language?: string;
+  // File Artifact fields
+  filename?: string;
+  mime_type?: string;
+  data?: string;
+  size_kb?: number;
+  preview_url?: string;
+  label?: string;
+  // Browser fields
+  title?: string;
+  url?: string;
   // Plan updates
   phases?: any[];
-  // VNC
-  url?: string;
   // Message result attachments
   message?: string;
   attachments?: string[];

@@ -33,6 +33,18 @@ class ExecutorAgent(BaseAgent):
        {hint_instructions}
     4. ACTION: If tools are needed, use them immediately. Don't over-explain if a tool can do the job.
     
+    PRESENTATION GENERATION (MANDATORY RULES):
+    - For ANY request about "презентация", "слайды", "pitch deck",
+      "deck", "presentation" → ALWAYS use the presentation tool.
+    - NEVER try to generate slides with file tool or shell tool.
+    - presentation tool produces Gamma/Kimi quality PPTX automatically.
+    - Default: slide_count=8, theme="dark", language="ru"
+    - For business pitch: theme="corporate", slide_count=10
+    - For education: theme="light", slide_count=12
+    - For creative topics: theme="bold" or "gradient"
+    - After generation: share the file with user and open preview
+    - The tool handles everything — just call it with a good prompt.
+    
     When you have completed the subtask, provide a polite and clear summary of your work in RUSSIAN.{memory_context}
     """
 
@@ -312,6 +324,42 @@ class ExecutorAgent(BaseAgent):
                             "content": content,
                             "language": "markdown" if path.endswith(".md") else "plaintext"
                         })
+                
+                # COSMO Presentation file artifact
+                if t_name == "presentation" and success:
+                    file_path = tool_res.get("file_path", "")
+                    filename = tool_res.get("filename", "presentation.pptx")
+                    preview_url = tool_res.get("preview_url", "")
+            
+                    if file_path and os.path.exists(file_path):
+                        # Read file and send as base64 artifact
+                        import base64
+                        with open(file_path, "rb") as f:
+                            pptx_bytes = f.read()
+                        b64 = base64.b64encode(pptx_bytes).decode()
+            
+                        if websocket_send:
+                            # Send downloadable file artifact
+                            await websocket_send({
+                                "type": "file_artifact",
+                                "filename": filename,
+                                "mime_type": (
+                                    "application/vnd.openxmlformats-"
+                                    "officedocument.presentationml.presentation"
+                                ),
+                                "data": b64,
+                                "size_kb": tool_res.get("file_size_kb", 0),
+                                "preview_url": preview_url,
+                                "label": "⚡ COSMO Presentation"
+                            })
+            
+                            # Also send preview in browser tab if preview_url exists
+                            if preview_url:
+                                await websocket_send({
+                                    "type": "browser_navigate",
+                                    "url": preview_url,
+                                    "title": "COSMO Presentation Preview"
+                                })
                 
                 await self.context_manager.summarize_if_needed(self.router)
                 # CONTINUE the loop to process tool output

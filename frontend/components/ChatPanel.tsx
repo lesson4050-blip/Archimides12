@@ -23,9 +23,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Message {
   role: "user" | "assistant" | "system";
-  type: "text" | "info" | "ask" | "result" | "plan" | "artifact" | "thought" | "tool" | "tool_call";
+  type: "text" | "info" | "ask" | "result" | "plan" | "artifact" | "thought" | "tool" | "tool_call" | "file_download";
   content: string;
   artifactData?: ArtifactData;
+  filename?: string;
+  download_url?: string;
+  size_kb?: number;
+  preview_url?: string;
 }
 
 const cleanMessageContent = (content: string | undefined): string => {
@@ -308,6 +312,32 @@ export default function ChatPanel({
       }
       case "suggestions": {
         setSuggestions((event as any).items || []);
+        break;
+      }
+      case "file_artifact": {
+        // Create auto-download link
+        const blob = new Blob(
+          [Uint8Array.from(atob(event.data || ""), c => c.charCodeAt(0))],
+          { type: event.mime_type }
+        );
+        const url = URL.createObjectURL(blob);
+
+        // Add download message to chat
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          type: "file_download",
+          content: event.label || "Файл сгенерирован",
+          filename: event.filename,
+          download_url: url,
+          size_kb: event.size_kb,
+          preview_url: event.preview_url
+        }]);
+        break;
+      }
+      case "browser_navigate": {
+        if (typeof window !== "undefined" && window.dispatchEvent) {
+           window.dispatchEvent(new CustomEvent("archimedes-open-browser", { detail: { url: event.url, title: event.title } }));
+        }
         break;
       }
     }
@@ -645,6 +675,32 @@ export default function ChatPanel({
                           <div className="mt-2">
                             {(msg.type === "thought" || msg.type === "tool" || msg.type === "plan") ? (
                               <MessagePill type={msg.type} content={msg.content} />
+                            ) : msg.type === "file_download" ? (
+                              <div className="flex items-center gap-3 p-4 rounded-xl bg-violet-600/10 border border-violet-500/30 mt-2">
+                                <span className="text-2xl">📊</span>
+                                <div className="flex-1">
+                                  <div className="font-medium text-sm text-white">
+                                    {msg.content}
+                                  </div>
+                                  <div className="text-xs text-gray-400 mt-0.5">
+                                    {msg.filename} • {msg.size_kb} KB
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  {msg.preview_url && (
+                                    <a href={msg.preview_url}
+                                       target="_blank" rel="noreferrer"
+                                       className="text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors">
+                                      Preview
+                                    </a>
+                                  )}
+                                  <a href={msg.download_url}
+                                     download={msg.filename}
+                                     className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white transition-colors font-medium">
+                                    ↓ Download PPTX
+                                  </a>
+                                </div>
+                              </div>
                             ) : (
                               <div className="markdown-content prose prose-invert prose-sm max-w-none text-[#ECECEC] text-[15px] leading-relaxed mt-1">
                                 <ReactMarkdown>{msg.content}</ReactMarkdown>

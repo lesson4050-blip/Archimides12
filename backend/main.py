@@ -11,6 +11,7 @@ from backend.api.routes import router as main_router
 from backend.auth.routes import router as auth_router
 from backend.api.settings_routes import router as settings_router
 from backend.api.presentation_router import router as presentation_router
+from backend.api.connectors_router import router as connectors_router
 
 
 # Configure logging
@@ -66,6 +67,11 @@ async def lifespan(app: FastAPI):
     from backend.tools.scheduler_singleton import get_scheduler
     get_scheduler().start()
     
+    # Start COSMO Presentation engine
+    from backend.cosmo.engine import start_engine, stop_engine
+    asyncio.create_task(start_engine())
+    logger.info("COSMO Presentation engine starting...")
+    
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
 
@@ -100,6 +106,7 @@ async def lifespan(app: FastAPI):
 
     sandbox_manager.stop_reaper()
     await sandbox_manager.cleanup()
+    await stop_engine()
 
 app = FastAPI(
     title="Archimedes API",
@@ -120,6 +127,7 @@ app.include_router(auth_router)
 app.include_router(main_router)
 app.include_router(settings_router)
 app.include_router(presentation_router, prefix="/api/v1")
+app.include_router(connectors_router)
 
 
 

@@ -131,6 +131,13 @@ class ArchimedesCosmoAgent:
         self.mcp_client = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
         # asyncio.create_task(self._init_mcp())  # Moved to initialize()
 
+        # Connector Bridge: Nango OAuth + MCP tool registration
+        from backend.connectors.mcp_bridge import ConnectorMCPBridge
+        self.connector_bridge = ConnectorMCPBridge(
+            self.tool_registry,
+            self.session_id or "default"
+        )
+
         # Registration of extended tools
         self._init_extended_tools()
         
@@ -144,6 +151,21 @@ class ArchimedesCosmoAgent:
     async def initialize(self):
         """Async initialization for the agent."""
         await self._init_mcp()
+        await self._init_connectors()
+
+    async def _init_connectors(self):
+        """Initialize connector bridge — load connected services as agent tools."""
+        try:
+            await self.connector_bridge.sync_connected_services()
+            ctx = self.connector_bridge.get_active_services_context()
+            if ctx:
+                # Inject into system prompt so the agent knows what's available
+                self.system_prompt = self.system_prompt + f"\n\n{ctx}"
+                if self.history and self.history[0].get("role") == "system":
+                    self.history[0]["content"] = self.system_prompt
+                logger.info("Connector bridge initialized with active services")
+        except Exception as e:
+            logger.warning(f"Connector init failed (non-critical): {e}")
 
     def _init_extended_tools(self):
         """Инициализация и регистрация всех доступных инструментов."""
@@ -227,6 +249,14 @@ class ArchimedesCosmoAgent:
             from backend.tools.slides_tool import SlidesTool
             self.slides_tool = SlidesTool()
             self.register_tool("slides", self.slides_tool.execute)
+            
+            # COSMO Presentation — native slide generator
+            from backend.tools.cosmo_tool import CosmoPresentationTool
+            self.cosmo_tool = CosmoPresentationTool()
+            self.tool_registry.register(
+                "presentation", self.cosmo_tool.execute
+            )
+            logger.info("COSMO Presentation tool registered as native tool")
             
             # Add missing plan and expose tools
             from backend.tools.plan_tool import PlanTool
