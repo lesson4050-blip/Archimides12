@@ -40,11 +40,13 @@ class CosmoPresentationTool:
                 "name": "presentation",
                 "description": (
                     "Generate professional AI presentations (PPTX). "
-                    "Gamma/Kimi level quality with real images and themes. "
-                    "ALWAYS use this for: pitch decks, business slides, "
+                    "Gamma/Kimi level quality with rich content and themes. "
+                    "ALWAYS use for: pitch decks, business slides, "
                     "educational presentations, reports as slides, "
                     "any request for 'презентация', 'слайды', 'deck'. "
-                    "Returns downloadable PPTX file."
+                    "IMPORTANT: provide a DETAILED prompt with: topic context, "
+                    "key points to cover, target audience, and purpose. "
+                    "The richer the prompt, the better the presentation."
                 ),
                 "parameters": {
                     "type": "object",
@@ -52,9 +54,16 @@ class CosmoPresentationTool:
                         "prompt": {
                             "type": "string",
                             "description": (
-                                "What to create a presentation about. "
-                                "Be specific: include topic, audience, "
-                                "key points, tone (formal/creative/etc)."
+                                "DETAILED description of what to present. Include: "
+                                "1) Main topic and angle "
+                                "2) Key points or sections to cover "
+                                "3) Target audience "
+                                "4) Purpose (pitch/education/report/etc). "
+                                "The more detail, the better the result. "
+                                "Example: 'Pitch deck for Archimedes AI agent: "
+                                "cover problem, solution architecture (GraphRAG, Swarm, MCP), "
+                                "competitive advantage vs Manus, market opportunity, "
+                                "team and roadmap. Audience: tech investors.'"
                             )
                         },
                         "slide_count": {
@@ -162,7 +171,19 @@ class CosmoPresentationTool:
                         "template": template,
                         "export_as": "pptx",
                         "include_title_slide": True,
-                        "include_table_of_contents": False,
+                        "include_table_of_contents": n_slides >= 6,
+                        # QUALITY FIELDS — these are what make Gamma-level output
+                        "tone": "professional",
+                        "verbosity": "text-heavy",
+                        "web_search": True,
+                        "instructions": (
+                            "Generate rich, detailed slide content. "
+                            "Each slide must have a clear headline, "
+                            "detailed body text with 3-5 specific points, "
+                            "and concrete data, facts, or examples. "
+                            "NO placeholder text. NO generic filler. "
+                            "Every slide must look like a real professional deck."
+                        ),
                     },
                     timeout=3600
                 )

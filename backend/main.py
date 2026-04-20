@@ -10,7 +10,6 @@ from backend.db.crud import init_db
 from backend.api.routes import router as main_router
 from backend.auth.routes import router as auth_router
 from backend.api.settings_routes import router as settings_router
-from backend.api.presentation_router import router as presentation_router
 from backend.api.connectors_router import router as connectors_router
 
 
@@ -126,7 +125,6 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(main_router)
 app.include_router(settings_router)
-app.include_router(presentation_router, prefix="/api/v1")
 app.include_router(connectors_router)
 
 
