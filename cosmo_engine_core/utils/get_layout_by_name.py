@@ -1,33 +1,18 @@
 import aiohttp
 from fastapi import HTTPException
-from models.presentation_layout import PresentationLayoutModel, SlideLayoutModel
-from typing import List
+from models.presentation_layout import PresentationLayoutModel
+import typing
+
 
 async def get_layout_by_name(layout_name: str) -> PresentationLayoutModel:
-    # Since the original NextJS frontend is removed, we mock the basic template schemas locally.
-    title_schema = {
-        "title": "Title Slide", "type": "object",
-        "properties": {
-            "title": {"type": "string", "description": "Main title"},
-            "subtitle": {"type": "string", "description": "Subtitle"}
-        }, "required": ["title", "subtitle"]
-    }
-    content_schema = {
-        "title": "Content Slide", "type": "object",
-        "properties": {
-            "heading": {"type": "string"},
-            "bullet_points": {
-                "type": "array", 
-                "items": {"type": "string"}
-            }
-        }, "required": ["heading", "bullet_points"]
-    }
-    
-    return PresentationLayoutModel(
-        name=layout_name,
-        ordered=False,
-        slides=[
-            SlideLayoutModel(id="title_slide", name="Title", description="Title slide", json_schema=title_schema),
-            SlideLayoutModel(id="content_slide", name="Content", description="Content slide", json_schema=content_schema)
-        ]
-    )
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"http://localhost:3005/api/template?group={layout_name}"
+        ) as response:
+            if response.status != 200:
+                print(f"Failed to get layout from nextjs: {await response.text()}")
+                raise HTTPException(
+                    status_code=500, detail="Failed to get format templates"
+                )
+            result = await response.json()
+            return PresentationLayoutModel(**typing.cast(dict, result))

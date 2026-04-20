@@ -61,6 +61,8 @@ from utils.ppt_utils import (
     get_presentation_title_from_outlines,
     select_toc_or_list_slide_layout_index,
 )
+from utils.safe_log import safe_print
+
 from utils.process_slides import (
     process_slide_add_placeholder_assets,
     process_slide_and_fetch_assets,
@@ -563,11 +565,17 @@ async def generate_presentation_handler(
 
                 presentation_outlines_text += chunk
 
+            safe_print("-" * 20)
+            safe_print("RAW PRESENTATION OUTLINES TEXT:")
+            safe_print(presentation_outlines_text)
+            safe_print("-" * 20)
+
             try:
                 presentation_outlines_json = dict(
                     dirtyjson.loads(presentation_outlines_text)
                 )
             except Exception:
+                safe_print("FAILED TO PARSE JSON. RAW CONTENT ABOVE.")
                 traceback.print_exc()
                 raise HTTPException(
                     status_code=400,
@@ -595,8 +603,8 @@ async def generate_presentation_handler(
             sql_session.add(async_status)
             await sql_session.commit()
 
-        print("-" * 40)
-        print(f"Generated {total_outlines} outlines for the presentation")
+        safe_print("-" * 40)
+        safe_print(f"Generated {total_outlines} outlines for the presentation")
 
         # Parse Layouts
         layout_model = await get_layout_by_name(request.template)

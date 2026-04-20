@@ -30,6 +30,7 @@ from utils.image_provider import (
     is_open_webui_selected,
 )
 import uuid
+from utils.safe_log import safe_print
 
 
 class ImageGenerationService:
@@ -72,17 +73,17 @@ class ImageGenerationService:
         - Output Directory is used for saving the generated image not the stock provider.
         """
         if self.is_image_generation_disabled:
-            print("Image generation is disabled. Using placeholder image.")
+            safe_print("Image generation is disabled. Using placeholder image.")
             return "/static/images/placeholder.jpg"
 
         if not self.image_gen_func:
-            print("No image generation function found. Using placeholder image.")
+            safe_print("No image generation function found. Using placeholder image.")
             return "/static/images/placeholder.jpg"
 
         image_prompt = prompt.get_image_prompt(
             with_theme=not self.is_stock_provider_selected()
         )
-        print(f"Request - Generating Image for {image_prompt}")
+        safe_print(f"Request - Generating Image for {image_prompt}")
 
         try:
             if self.is_stock_provider_selected():
@@ -106,7 +107,7 @@ class ImageGenerationService:
             raise Exception(f"Image not found at {image_path}")
 
         except Exception as e:
-            print(f"Error generating image: {e}")
+            safe_print(f"Error generating image: {e}")
             return "/static/images/placeholder.jpg"
 
     async def generate_image_openai(
@@ -452,7 +453,7 @@ class ImageGenerationService:
         if not prompt_id:
             raise Exception("No prompt_id returned from ComfyUI")
 
-        print(f"ComfyUI workflow submitted. Prompt ID: {prompt_id}")
+        safe_print(f"ComfyUI workflow submitted. Prompt ID: {prompt_id}")
         return prompt_id
 
     async def _wait_for_comfyui_completion(
@@ -503,7 +504,7 @@ class ImageGenerationService:
                     print("ComfyUI workflow completed (outputs found)")
                     return status_data
 
-            print(f"Waiting for ComfyUI workflow... ({int(elapsed)}s)")
+            safe_print(f"Waiting for ComfyUI workflow... ({int(elapsed)}s)")
 
     async def _download_comfyui_image(
         self,
@@ -553,7 +554,7 @@ class ImageGenerationService:
                         with open(image_path, "wb") as f:
                             f.write(image_data)
 
-                        print(f"Downloaded image from ComfyUI: {image_path}")
+                        safe_print(f"Downloaded image from ComfyUI: {image_path}")
                         return image_path
                     else:
                         raise Exception(f"Failed to download image: {response.status}")
