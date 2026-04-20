@@ -9,6 +9,18 @@ from api.v1.mock.router import API_V1_MOCK_ROUTER
 
 app = FastAPI(lifespan=app_lifespan)
 
+from fastapi.staticfiles import StaticFiles
+import os
+
+# Mount app_data directory for file serving
+APP_DATA = os.environ.get("APP_DATA_DIRECTORY", "/tmp/cosmo_data")
+os.makedirs(f"{APP_DATA}/exports", exist_ok=True)
+app.mount(
+    "/exports",
+    StaticFiles(directory=f"{APP_DATA}/exports"),
+    name="exports"
+)
+
 
 # Routers
 app.include_router(API_V1_PPT_ROUTER)

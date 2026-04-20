@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from backend.cosmo.engine import get_engine_url, start_engine
+from backend.cosmo.engine import get_engine_url, start_engine, ENGINE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -182,28 +182,36 @@ class CosmoPresentationTool:
                 # result contains: path, edit_path
                 pptx_server_path = result.get("path", "")
 
-                # Download the exported PPTX file
                 if pptx_server_path:
+                    # pptx_server_path is absolute path like /app_data/exports/file.pptx
+                    # The filename is the last part
+                    pptx_filename = Path(pptx_server_path).name
+
+                    # Try static mount first (fastest)
                     dl = await c.get(
-                        f"{engine_url}/exports/{Path(pptx_server_path).name}",
+                        f"{engine_url}/exports/{pptx_filename}",
                         timeout=30
                     )
                     if dl.status_code == 200:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                         output_path.write_bytes(dl.content)
                     else:
-                        # Try static file endpoint
-                        dl2 = await c.get(
-                            f"{engine_url}/api/v1/ppt/files/download?path={pptx_server_path}",
-                            timeout=30
-                        )
-                        if dl2.status_code == 200:
+                        # Fallback: read directly from filesystem
+                        # (only works if engine runs on same machine, which it does)
+                        engine_data_dir = ENGINE_DIR / "data" / "exports"
+                        local_file = engine_data_dir / pptx_filename
+                        if local_file.exists():
+                            import shutil
                             output_path.parent.mkdir(parents=True, exist_ok=True)
-                            output_path.write_bytes(dl2.content)
+                            shutil.copy2(str(local_file), str(output_path))
                         else:
                             return {
                                 "success": False,
-                                "error": f"Generated but download failed. Server path: {pptx_server_path}"
+                                "error": (
+                                    f"PPTX generated at {pptx_server_path} "
+                                    f"but could not retrieve the file. "
+                                    f"Check engine data directory."
+                                )
                             }
 
         except httpx.TimeoutException:
