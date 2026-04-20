@@ -58,12 +58,12 @@ async def start_engine():
                 "api.main:app",
                 "--host", "127.0.0.1",
                 "--port", str(ENGINE_PORT),
-                "--log-level", "error"
+                "--log-level", "debug"
             ],
             cwd=str(ENGINE_DIR),
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
+            stdout=sys.stdout,
+            stderr=sys.stderr
         )
 
         # Wait up to 10 minutes for engine to be ready (model downloads)

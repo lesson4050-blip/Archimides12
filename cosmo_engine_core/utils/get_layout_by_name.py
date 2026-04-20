@@ -1,18 +1,33 @@
 import aiohttp
 from fastapi import HTTPException
-from models.presentation_layout import PresentationLayoutModel
+from models.presentation_layout import PresentationLayoutModel, SlideLayoutModel
 from typing import List
 
 async def get_layout_by_name(layout_name: str) -> PresentationLayoutModel:
-    url = f"http://localhost/api/template?group={layout_name}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Template '{layout_name}' not found: {error_text}"
-                )
-            layout_json = await response.json()
-    # Parse the JSON into your Pydantic model
-    return PresentationLayoutModel(**layout_json)
+    # Since the original NextJS frontend is removed, we mock the basic template schemas locally.
+    title_schema = {
+        "title": "Title Slide", "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Main title"},
+            "subtitle": {"type": "string", "description": "Subtitle"}
+        }, "required": ["title", "subtitle"]
+    }
+    content_schema = {
+        "title": "Content Slide", "type": "object",
+        "properties": {
+            "heading": {"type": "string"},
+            "bullet_points": {
+                "type": "array", 
+                "items": {"type": "string"}
+            }
+        }, "required": ["heading", "bullet_points"]
+    }
+    
+    return PresentationLayoutModel(
+        name=layout_name,
+        ordered=False,
+        slides=[
+            SlideLayoutModel(id="title_slide", name="Title", description="Title slide", json_schema=title_schema),
+            SlideLayoutModel(id="content_slide", name="Content", description="Content slide", json_schema=content_schema)
+        ]
+    )

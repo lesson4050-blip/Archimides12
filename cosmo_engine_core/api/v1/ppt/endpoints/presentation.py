@@ -440,9 +440,14 @@ async def export_presentation_as_pptx_or_pdf(
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
 
+    slides = await sql_session.scalars(
+        select(SlideModel)
+        .where(SlideModel.presentation == id)
+        .order_by(SlideModel.index)
+    )
     presentation_and_path = await export_presentation(
-        id,
-        presentation.title or str(uuid.uuid4()),
+        presentation,
+        slides.all(),
         export_as,
     )
 
@@ -756,7 +761,7 @@ async def generate_presentation_handler(
 
         # 9. Export
         presentation_and_path = await export_presentation(
-            presentation_id, presentation.title or str(uuid.uuid4()), request.export_as
+            presentation, slides, request.export_as
         )
 
         response = PresentationPathAndEditPath(
