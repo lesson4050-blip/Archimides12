@@ -82,15 +82,13 @@ class CosmoPresentationTool:
                         },
                         "template": {
                             "type": "string",
-                            "enum": [
-                                "general", "business", "education",
-                                "marketing", "technology"
-                            ],
+                            "enum": ["general", "modern", "standard", "swift"],
                             "description": (
-                                "Visual template. "
-                                "general — universal (default). "
-                                "business — professional corporate. "
-                                "education — academic style."
+                                "Visual template style. "
+                                "general: clean professional (default). "
+                                "modern: contemporary design. "
+                                "standard: traditional layout. "
+                                "swift: minimal fast-paced."
                             )
                         },
                         "filename": {
@@ -111,7 +109,7 @@ class CosmoPresentationTool:
         prompt: str = None,
         slide_count: int = 8,
         language: str = "Russian",
-        template: str = "general",
+        template: str = "general",   # general | modern | standard | swift
         filename: str = None,
         session_id: str = None,
         # Legacy kwargs compatibility
@@ -168,21 +166,21 @@ class CosmoPresentationTool:
                         "content": content,
                         "n_slides": n_slides,
                         "language": language,
-                        "template": template,
+                        "template": template,          # "general" | "modern" | "standard" | "swift"
                         "export_as": "pptx",
                         "include_title_slide": True,
-                        "include_table_of_contents": n_slides >= 6,
-                        # QUALITY FIELDS — these are what make Gamma-level output
+                        "include_table_of_contents": n_slides >= 8,
+                        # Quality multipliers
                         "tone": "professional",
                         "verbosity": "text-heavy",
                         "web_search": True,
                         "instructions": (
-                            "Generate rich, detailed slide content. "
-                            "Each slide must have a clear headline, "
-                            "detailed body text with 3-5 specific points, "
-                            "and concrete data, facts, or examples. "
-                            "NO placeholder text. NO generic filler. "
-                            "Every slide must look like a real professional deck."
+                            "Create a visually rich, professional presentation. "
+                            "Each slide must have: a strong headline, "
+                            "3-5 specific data points or insights, "
+                            "concrete examples and real numbers where possible. "
+                            "NO generic filler. NO placeholder text. "
+                            "Make every slide worth reading."
                         ),
                     },
                     timeout=3600

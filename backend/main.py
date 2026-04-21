@@ -70,6 +70,11 @@ async def lifespan(app: FastAPI):
     from backend.cosmo.engine import start_engine, stop_engine
     asyncio.create_task(start_engine())
     logger.info("COSMO Presentation engine starting...")
+
+    # Start COSMO Artist (Next.js template server)
+    from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn
+    artist_task = asyncio.create_task(start_artist())
+    logger.info("COSMO Artist server starting on port 3005...")
     
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
@@ -106,6 +111,7 @@ async def lifespan(app: FastAPI):
     sandbox_manager.stop_reaper()
     await sandbox_manager.cleanup()
     await stop_engine()
+    await stop_artist_fn()
 
 app = FastAPI(
     title="Archimedes API",

@@ -58,21 +58,45 @@ def get_relevant_facts(
     """Retrieve most relevant/important facts."""
     try:
         conn = _get_conn()
-        if category:
+        if query:
+            # Simple keyword search - split query and match
+            keywords = query.lower().split()[:5]
+            conditions = " OR ".join(
+                [f"LOWER(fact) LIKE ?" for _ in keywords]
+            )
+            params = [f"%{kw}%" for kw in keywords]
+            if category:
+                conditions += " AND category = ?"
+                params.append(category)
+            params.append(limit)
             rows = conn.execute(
-                "SELECT fact FROM memories "
-                "WHERE category = ? "
-                "ORDER BY importance DESC, access_count DESC "
-                "LIMIT ?",
-                (category, limit)
+                f"SELECT fact FROM memories WHERE ({conditions}) "
+                f"ORDER BY importance DESC LIMIT ?",
+                params
             ).fetchall()
+            # Fallback to importance-based if no results
+            if not rows:
+                rows = conn.execute(
+                    "SELECT fact FROM memories "
+                    "ORDER BY importance DESC LIMIT ?",
+                    (limit,)
+                ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT fact FROM memories "
-                "ORDER BY importance DESC, access_count DESC "
-                "LIMIT ?",
-                (limit,)
-            ).fetchall()
+            if category:
+                rows = conn.execute(
+                    "SELECT fact FROM memories "
+                    "WHERE category = ? "
+                    "ORDER BY importance DESC, access_count DESC "
+                    "LIMIT ?",
+                    (category, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT fact FROM memories "
+                    "ORDER BY importance DESC, access_count DESC "
+                    "LIMIT ?",
+                    (limit,)
+                ).fetchall()
         conn.close()
         return [r[0] for r in rows]
     except Exception as e:

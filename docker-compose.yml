@@ -22,3 +22,19 @@ services:
 volumes:
   postgres_data:
     driver: local
+
+  cosmo-artist:
+    build:
+      context: ./cosmo_artist
+      dockerfile: Dockerfile.artist
+    container_name: cosmo_artist
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_SERVER_URL=http://cosmo-engine:5051
+    depends_on:
+      - postgres
+    restart: unless-stopped

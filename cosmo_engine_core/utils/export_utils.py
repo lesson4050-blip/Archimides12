@@ -22,8 +22,9 @@ async def export_presentation(
 
         # Get the converted PPTX model from the Next.js service (Artist)
         async with aiohttp.ClientSession() as session:
+            artist_url = os.environ.get("ARTIST_URL", "http://localhost:3005")
             async with session.get(
-                f"http://localhost:3005/api/presentation_to_pptx_model?id={presentation.id}"
+                f"{artist_url}/api/presentation_to_pptx_model?id={presentation.id}"
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
@@ -54,8 +55,9 @@ async def export_presentation(
         )
     else:
         async with aiohttp.ClientSession() as session:
+            artist_url = os.environ.get("ARTIST_URL", "http://localhost:3005")
             async with session.post(
-                "http://localhost:3005/api/export-as-pdf",
+                f"{artist_url}/api/export-as-pdf",
                 json={
                     "id": str(presentation.id),
                     "title": sanitize_filename(presentation.title or str(uuid.uuid4())),

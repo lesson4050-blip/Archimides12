@@ -22,12 +22,11 @@ ARTIST_PORT = 3005
 ARTIST_DIR = Path(__file__).parent.parent.parent / "cosmo_engine" / "designer"
 
 _process: subprocess.Popen = None
-_artist_process: subprocess.Popen = None
 
 
 async def start_engine():
     """Start COSMO engine and Artist subprocesses on startup."""
-    global _process, _artist_process
+    global _process
     
     if _process and _process.poll() is None:
         logger.info("COSMO engine already running")
@@ -41,6 +40,7 @@ async def start_engine():
         **os.environ,
         "PORT": str(ENGINE_PORT),
         "HOST": "127.0.0.1",
+        "ARTIST_URL": f"http://127.0.0.1:{os.environ.get('COSMO_ARTIST_PORT', '3005')}",
         # Use Ollama as default — no API key needed
         "LLM": os.environ.get("LLM", "ollama"),
         "OLLAMA_HOST": os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
@@ -71,33 +71,13 @@ async def start_engine():
             stderr=sys.stderr
         )
         
-        # Start Next.js Frontend (Artist)
-        if ARTIST_DIR.exists():
-            npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
-            logger.info("Starting Next.js Artist on port 3005...")
-            artist_env = os.environ.copy()
-            artist_env["TEMP_DIRECTORY"] = str(ENGINE_DIR / "data" / "temp")
-            artist_env["NEXT_PUBLIC_COSMO_ENGINE_URL"] = f"http://localhost:{ENGINE_PORT}"
-            artist_env["NEXT_PUBLIC_API_URL"] = f"http://localhost:{ENGINE_PORT}"
-            artist_env["NODE_ENV"] = "development"
-            
-            _artist_process = subprocess.Popen(
-                [npm_cmd, "run", "dev", "--", "-p", str(ARTIST_PORT)],
-                cwd=str(ARTIST_DIR),
-                env=artist_env,
-                stdout=sys.stdout,
-                stderr=sys.stderr
-            )
-        else:
-            logger.warning(f"Artist directory not found at {ARTIST_DIR}")
-
         # Wait up to 10 minutes for engine to be ready (model downloads)
         for i in range(1200):
             await asyncio.sleep(0.5)
             if await _health_check():
                 logger.info(
                     f"COSMO Presentation engine started "
-                    f"on port {ENGINE_PORT} (Artist on port 3005)"
+                    f"on port {ENGINE_PORT}"
                 )
                 return True
 
@@ -110,8 +90,8 @@ async def start_engine():
 
 
 async def stop_engine():
-    """Stop engine and artist on shutdown."""
-    global _process, _artist_process
+    """Stop engine on shutdown."""
+    global _process
     
     if _process:
         _process.terminate()
@@ -121,22 +101,12 @@ async def stop_engine():
             _process.kill()
         _process = None
         logger.info("COSMO engine stopped")
-        
-    if _artist_process:
-        _artist_process.terminate()
-        try:
-            _artist_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            _artist_process.kill()
-        _artist_process = None
-        logger.info("COSMO artist stopped")
 
 
 async def _health_check() -> bool:
     try:
         async with httpx.AsyncClient(timeout=2) as c:
             r = await c.get(f"{ENGINE_URL}/health")
-            # Artist might take longer to compile, but main health is via uvicorn
             return r.status_code == 200
     except Exception:
         return False

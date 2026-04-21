@@ -41,7 +41,7 @@ class ModelRouter:
         # TOOL CALLS: Groq has best tool call reliability
         elif tools:
             order = [self.groq, self.gemini, self.ollama]
-        # DEFAULT: try Groq (fast, free tier), then Ollama
+        # DEFAULT: Groq first (fast, free), Ollama fallback
         else:
             order = [self.groq, self.gemini, self.ollama]
 
