@@ -612,7 +612,11 @@ export default function ChatPanel({
                 mode={currentMode} 
                 onSelectPrompt={(p) => setInput(p)}
                 onSelectTemplate={(t) => {
-                    setInput(`Create a presentation about [topic] using the ${t} template style.`);
+                    setInput(
+                        `Создай профессиональную презентацию на тему: [тема]. ` +
+                        `Включи: введение, ключевые проблемы, решение, данные и факты, ` +
+                        `выводы. Используй шаблон ${t}. Слайдов: 8.`
+                    );
                 }}
               />
            </div>

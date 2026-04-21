@@ -49,6 +49,11 @@ def get_system_prompt(
             - If verbosity is 'standard', then generate description as 2/3 of the max character limit.
             - If verbosity is 'text-heavy', then generate description as 3/4 or higher of the max character limit. Make sure it does not exceed the max character limit.
 
+        - Text must always end at a complete sentence or phrase.
+        - Never cut text mid-word or mid-sentence to fit a limit.
+        - If content is too long, summarize it to fit, don't truncate.
+        - Complete the thought before stopping.
+
         User instructions, tone and verbosity should always be followed and should supercede any other instruction, except for max and min character limit, slide schema and number of items.
 
         - Provide output in json format and **don't include <parameters> tags**.

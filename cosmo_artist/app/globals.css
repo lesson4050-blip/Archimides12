@@ -530,3 +530,9 @@ thead {
 .token.entity {
   cursor: help;
 }
+
+.slide-title, [data-slide-title], h1, h2 {
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  hyphens: auto !important;
+}

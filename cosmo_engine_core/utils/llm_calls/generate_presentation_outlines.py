@@ -40,6 +40,9 @@ def get_system_prompt(
         - Do not generate table of contents slide.
         - Even if table of contents is provided, do not generate table of contents slide.
         {"- Always make first slide a title slide." if include_title_slide else "- Do not include title slide in the presentation."}
+        - Each slide point must be a complete sentence.
+        - Maximum 80 characters per bullet point for Russian text.
+        - Write shorter, complete sentences rather than long truncated ones.
 
         **Search web to get latest information about the topic**
     """

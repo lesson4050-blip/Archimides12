@@ -96,3 +96,7 @@ test_uvicorn.py
 test_uvicorn2.py
 test_*.py
 uv.lock
+
+# Symlinks
+skills
+skills/

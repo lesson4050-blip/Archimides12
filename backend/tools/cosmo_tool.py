@@ -180,7 +180,15 @@ class CosmoPresentationTool:
                             "3-5 specific data points or insights, "
                             "concrete examples and real numbers where possible. "
                             "NO generic filler. NO placeholder text. "
-                            "Make every slide worth reading."
+                            "Make every slide worth reading. "
+                            "CRITICAL FOR CHART SLIDES: "
+                            "Only use realistic, believable data values. "
+                            "Percentages must be between -100% and +500%. "
+                            "Never use values like -65000000% or +11000000%. "
+                            "Use organic numbers: 47.3%, +127%, -12.4%, not round or extreme values. "
+                            "For bar/line charts: use values between 0 and 100 for percentages, "
+                            "or realistic business metrics (thousands, not millions unless context requires). "
+                            "If no real data is available, use plausible estimates with a note."
                         ),
                     },
                     timeout=3600
