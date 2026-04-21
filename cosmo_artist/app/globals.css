@@ -531,8 +531,10 @@ thead {
   cursor: help;
 }
 
-.slide-title, [data-slide-title], h1, h2 {
+.slide-title, [data-slide-title], h1, h2, h3, h4, p, span {
   overflow-wrap: break-word !important;
   word-break: break-word !important;
   hyphens: auto !important;
+  flex-shrink: 0 !important;
+  min-height: min-content !important;
 }

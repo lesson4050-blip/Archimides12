@@ -188,7 +188,10 @@ class CosmoPresentationTool:
                             "Use organic numbers: 47.3%, +127%, -12.4%, not round or extreme values. "
                             "For bar/line charts: use values between 0 and 100 for percentages, "
                             "or realistic business metrics (thousands, not millions unless context requires). "
-                            "If no real data is available, use plausible estimates with a note."
+                            "If no real data is available, use plausible estimates with a note. "
+                            "VITAL FORMATTING RULES: "
+                            "NEVER use markdown formatting like **bold** or _italic_ in the text fields! "
+                            "Output just plain text. The frontend React templates do not parse markdown, so asterisks will look ugly."
                         ),
                     },
                     timeout=3600

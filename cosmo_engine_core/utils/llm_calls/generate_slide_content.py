@@ -34,7 +34,7 @@ def get_system_prompt(
         # Notes
         - Slide body should not use words like "This slide", "This presentation".
         - Rephrase the slide body to make it flow naturally.
-        - Only use markdown to highlight important points.
+        - DO NOT USE ANY MARKDOWN FORMATTING (no **, _, etc). Output only plain text as the frontend does not support markdown parsing.
         - Make sure to follow language guidelines.
         - Speaker note should be normal text, not markdown.
         - Strictly follow the max and min character limit for every property in the slide.
