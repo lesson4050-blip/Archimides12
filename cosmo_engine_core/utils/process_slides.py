@@ -1,5 +1,5 @@
 import asyncio
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from models.image_prompt import ImagePrompt
 from models.sql.image_asset import ImageAsset
 from models.sql.slide import SlideModel
@@ -12,6 +12,7 @@ from utils.dict_utils import get_dict_at_path, get_dict_paths_with_key, set_dict
 async def process_slide_and_fetch_assets(
     image_generation_service: ImageGenerationService,
     slide: SlideModel,
+    image_style: Optional[str] = None,
 ) -> List[ImageAsset]:
 
     async_tasks = []
@@ -21,10 +22,12 @@ async def process_slide_and_fetch_assets(
 
     for image_path in image_paths:
         __image_prompt__parent = get_dict_at_path(slide.content, image_path)
+        base_prompt = __image_prompt__parent["__image_prompt__"]
+        full_prompt = f"{base_prompt}, {image_style}" if image_style else base_prompt
         async_tasks.append(
             image_generation_service.generate_image(
                 ImagePrompt(
-                    prompt=__image_prompt__parent["__image_prompt__"],
+                    prompt=full_prompt,
                 )
             )
         )

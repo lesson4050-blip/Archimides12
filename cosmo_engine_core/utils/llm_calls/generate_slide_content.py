@@ -29,34 +29,26 @@ def get_system_prompt(
         # Steps
         1. Analyze the outline.
         2. Generate structured slide based on the outline.
-        3. Generate speaker note that is simple, clear, concise and to the point.
+        3. IMPORTANT: Distribute the information across ALL available fields in the schema (e.g., bullets, metrics, chartData).
+        4. If a field like "description" has a small character limit (e.g. 300), put the additional detail into "bullets" or other list fields.
+        5. Generate speaker note that is simple, clear, concise and to the point.
+
+        # Visual Excellence (Gamma/Kimi Quality)
+        - If the schema contains an `image` object, you MUST provide a detailed, artistic `__image_prompt__`.
+        - Image prompts should be cinematic, professional, or corporate-editorial (e.g., "Cinematic shot of NVIDIA H100 GPU in a high-tech data center, neon blue lighting, hyper-realistic").
+        - If the schema contains `icons`, provide precise `__icon_query__` terms (e.g., "artificial intelligence", "database", "revenue growth").
 
         # Notes
         - Slide body should not use words like "This slide", "This presentation".
         - Rephrase the slide body to make it flow naturally.
-        - DO NOT USE ANY MARKDOWN FORMATTING (no **, _, etc). Output only plain text as the frontend does not support markdown parsing.
-        - Make sure to follow language guidelines.
-        - Speaker note should be normal text, not markdown.
+        - DO NOT USE ANY MARKDOWN FORMATTING (no **, _, etc). Output only plain text.
         - Strictly follow the max and min character limit for every property in the slide.
-        - Never ever go over the max character limit. Limit your narration to make sure you never go over the max character limit.
-        - Number of items should not be more than max number of items specified in slide schema. If you have to put multiple points then merge them to obey max numebr of items.
-        - Generate content as per the given tone.
-        - Be very careful with number of words to generate for given field. As generating more than max characters will overflow in the design. So, analyze early and never generate more characters than allowed.
-        - Do not add emoji in the content.
-        - Metrics should be in abbreviated form with least possible characters. Do not add long sequence of words for metrics.
-        - For verbosity:
-            - If verbosity is 'concise', then generate description as 1/3 or lower of the max character limit. Don't worry if you miss content or context.
-            - If verbosity is 'standard', then generate description as 2/3 of the max character limit.
-            - If verbosity is 'text-heavy', then generate description as 3/4 or higher of the max character limit. Make sure it does not exceed the max character limit.
+        - Never go over the max character limit.
+        - If you have more content than fits in a field, MOVE IT to another appropriate field (like a bullet list or metric) instead of truncating.
+        - For Metrics: Extract numerical data points from the outline into the `metrics` or `metricCards` array.
+        - For Charts: If data is available, populate `chartData`.
 
-        - Text must always end at a complete sentence or phrase.
-        - Never cut text mid-word or mid-sentence to fit a limit.
-        - If content is too long, summarize it to fit, don't truncate.
-        - Complete the thought before stopping.
-
-        User instructions, tone and verbosity should always be followed and should supercede any other instruction, except for max and min character limit, slide schema and number of items.
-
-        - Provide output in json format and **don't include <parameters> tags**.
+        Provide output in json format and **don't include <parameters> tags**.
 
         # Image and Icon Output Format
         image: {{

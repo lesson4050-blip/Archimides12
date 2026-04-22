@@ -64,6 +64,7 @@ from utils.ppt_utils import (
     select_toc_or_list_slide_layout_index,
 )
 from utils.safe_log import safe_print, DEEP_LOGGER
+from utils.llm_calls.define_visual_persona import define_visual_persona, VisualPersonaModel
 
 from utils.process_slides import (
     process_slide_add_placeholder_assets,
@@ -207,13 +208,11 @@ async def prepare_presentation(
         )
 
     presentation_structure.slides = presentation_structure.slides[: len(outlines)]
-    for index in range(total_outlines):
-        random_slide_index = random.randint(0, total_slide_layouts - 1)
-        if index >= total_outlines:
-            presentation_structure.slides.append(random_slide_index)
-            continue
-        if presentation_structure.slides[index] >= total_slide_layouts:
-            presentation_structure.slides[index] = random_slide_index
+    
+    # Validation: Ensure we have enough layout selections, duplicate last if short
+    while len(presentation_structure.slides) < total_outlines:
+        fallback_layout = presentation_structure.slides[-1] if presentation_structure.slides else 0
+        presentation_structure.slides.append(fallback_layout)
 
     if presentation.include_table_of_contents:
         n_toc_slides = presentation.n_slides - total_outlines
@@ -449,14 +448,22 @@ async def export_presentation_as_pptx_or_pdf(
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
 
-    slides = await sql_session.scalars(
-        select(SlideModel)
-        .where(SlideModel.presentation == id)
-        .order_by(SlideModel.index)
-    )
+    slides_list = slides.all()
+    
+    # Deduplicate slides by title
+    seen_titles = set()
+    unique_slides = []
+    for slide in slides_list:
+        title = getattr(slide, 'title', '') or (slide.content.get('title', '') if hasattr(slide, 'content') and isinstance(slide.content, dict) else '')
+        if not title or title not in seen_titles:
+            unique_slides.append(slide)
+            if title:
+                seen_titles.add(title)
+    slides_list = unique_slides
+
     presentation_and_path = await export_presentation(
         presentation,
-        slides.all(),
+        slides_list,
         export_as,
     )
 
@@ -522,7 +529,7 @@ async def generate_presentation_handler(
             if async_status_id:
                 stmt = select(AsyncPresentationGenerationTaskModel).where(AsyncPresentationGenerationTaskModel.id == async_status_id)
                 async_status = (await sql_session.execute(stmt)).scalar_one_or_none()
-        # Initialize deep logging for this generation task
+            # Initialize deep logging for this generation task
             app_data_dir = get_app_data_directory_env() or "data"
             log_dir = os.path.join(app_data_dir, "logs")
             log_file_path = os.path.abspath(os.path.join(log_dir, f"gen_{presentation_id}.log"))
@@ -531,6 +538,18 @@ async def generate_presentation_handler(
             DEEP_LOGGER.log(f"Starting async generation for presentation {presentation_id}")
             DEEP_LOGGER.log(f"Request parameters: {request.model_dump_json()}", "DEBUG")
     
+            # STEP 0: Define the Visual Persona (The aesthetic \"brain\")
+            print(f"DEBUG: Calling define_visual_persona for {presentation_id}")
+            visual_persona = await define_visual_persona(
+                title=request.content[:100],  # Use content or title if provided
+                content=request.content,
+                instructions=request.instructions
+            )
+            print(f"DEBUG: visual_persona result: {visual_persona.theme_category} | {visual_persona.curated_palette}")
+
+            # Check if user provided an explicit theme in the request, otherwise use the AI generated persona
+            final_theme = request.theme or visual_persona.model_dump()
+
             using_slides_markdown = False
     
             if request.slides_markdown:
@@ -636,23 +655,21 @@ async def generate_presentation_handler(
             if layout_model.ordered:
                 presentation_structure = layout_model.to_presentation_structure()
             else:
-                presentation_structure: PresentationStructureModel = (
-                    await generate_presentation_structure(
-                        presentation_outlines,
-                        layout_model,
-                        request.instructions,
-                        using_slides_markdown,
-                    )
+                print(f"DEBUG: Calling generate_presentation_structure with visual_persona: {visual_persona.theme_category}")
+                presentation_structure: PresentationStructureModel = await generate_presentation_structure(
+                    presentation_outlines,
+                    layout_model,
+                    visual_persona=VisualPersonaModel(**final_theme) if isinstance(final_theme, dict) else visual_persona,
+                    instructions=request.instructions,
+                    using_slides_markdown=using_slides_markdown,
                 )
     
             presentation_structure.slides = presentation_structure.slides[:total_outlines]
-            for index in range(total_outlines):
-                random_slide_index = random.randint(0, total_slide_layouts - 1)
-                if index >= total_outlines:
-                    presentation_structure.slides.append(random_slide_index)
-                    continue
-                if presentation_structure.slides[index] >= total_slide_layouts:
-                    presentation_structure.slides[index] = random_slide_index
+            
+            # Validation: Ensure we have enough layout selections, duplicate last if short
+            while len(presentation_structure.slides) < total_outlines:
+                fallback_layout = presentation_structure.slides[-1] if presentation_structure.slides else 0
+                presentation_structure.slides.append(fallback_layout)
     
             # Injecting table of contents to the presentation structure and outlines
             if request.include_table_of_contents and not using_slides_markdown:
@@ -701,6 +718,7 @@ async def generate_presentation_handler(
                 outlines=presentation_outlines.model_dump(),
                 layout=layout_model.model_dump(),
                 structure=presentation_structure.model_dump(),
+                theme=final_theme,
                 tone=request.tone.value,
                 verbosity=request.verbosity.value,
                 instructions=request.instructions,
@@ -761,9 +779,10 @@ async def generate_presentation_handler(
     
             # Fetch assets for each slide sequentially for local hardware stability
             generated_assets = []
+            image_style = (presentation.theme.get("image_style", "") if presentation.theme else "")
             for i, slide in enumerate(slides):
                 print(f"Fetching assets for slide {i+1}/{len(slides)}...")
-                assets = await process_slide_and_fetch_assets(image_generation_service, slide)
+                assets = await process_slide_and_fetch_assets(image_generation_service, slide, image_style=image_style)
                 generated_assets.extend(assets)
     
             # 8. Save PresentationModel and Slides
@@ -778,6 +797,17 @@ async def generate_presentation_handler(
                 sql_session.add(async_status)
     
             # 9. Export
+            # Deduplicate slides by title
+            seen_titles = set()
+            unique_slides = []
+            for slide in slides:
+                title = getattr(slide, 'title', '') or (slide.content.get('title', '') if hasattr(slide, 'content') and isinstance(slide.content, dict) else '')
+                if not title or title not in seen_titles:
+                    unique_slides.append(slide)
+                    if title:
+                        seen_titles.add(title)
+            slides = unique_slides
+
             presentation_and_path = await export_presentation(
                 presentation, slides, request.export_as
             )

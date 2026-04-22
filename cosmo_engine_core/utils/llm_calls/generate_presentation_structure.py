@@ -9,31 +9,51 @@ from utils.llm_provider import get_model
 from models.presentation_structure_model import PresentationStructureModel
 from utils.safe_log import DEEP_LOGGER
 
+from utils.llm_calls.define_visual_persona import VisualPersonaModel
+
 class SlideLayoutSelectionModel(BaseModel):
     layout_index: int = Field(description="The index of the selected layout for the slide")
+    rationale: str = Field(description="Briefly explain why this layout fits the Visual Persona and content purpose")
 
 def get_slide_selection_messages(
     presentation_layout: PresentationLayoutModel,
     slide_content: str,
     slide_index: int,
     total_slides: int,
+    visual_persona: Optional[VisualPersonaModel] = None,
     instructions: Optional[str] = None,
 ):
+    persona_context = ""
+    if visual_persona:
+        persona_context = f"""
+        # Visual Persona Context
+        - Theme Category: {visual_persona.theme_category}
+        - Typography Mood: {visual_persona.typography_mood}
+        - Aesthetic Goal: Match the vibe of '{visual_persona.curated_palette}' palette.
+        """
+
     return [
         LLMSystemMessage(
             content=f"""
-                You're a professional presentation designer. Your task is to select the most appropriate slide layout for slide {slide_index + 1} of {total_slides}.
+                You're a professional Art Director and Presentation Designer. 
+                Your task is to select the most appropriate slide layout for slide {slide_index + 1} of {total_slides}.
+                
+                {persona_context}
 
+                # Available Layouts
                 {presentation_layout.to_string()}
 
-                # Layout Selection Guidelines
+                # Layout Selection & Visual Rhythm Guidelines
                 1. Match layout to content purpose:
-                   - Opening/Title -> Look for title layouts
-                   - Content/Lists -> Balanced layouts
-                   - Visuals/Media -> Image focused layouts
-                2. Instructions: {instructions or "Follow standard design principles."}
+                   - Opening/Title -> Look for title layouts.
+                   - Content/Lists -> Balanced layouts.
+                   - Visuals/Media -> Image focused layouts.
+                2. **Visual Rhythm**: Avoid using the same layout index multiple times in a row. 
+                3. **Alternation**: If the content allows, alternate between left-aligned and right-aligned layouts to create kinetic energy.
+                4. **Persona Alignment**: If the Persona is 'Scientific', prefer clear, data-focused grids. If 'Creative', prefer asymmetrical or bold layouts.
+                5. Instructions: {instructions or "Follow standard high-end design principles."}
 
-                Return the index of the best matching layout for the provided slide content.
+                Return the index of the best matching layout and a brief rationale.
             """,
         ),
         LLMUserMessage(
@@ -44,6 +64,7 @@ def get_slide_selection_messages(
 async def generate_presentation_structure(
     presentation_outline: PresentationOutlineModel,
     presentation_layout: PresentationLayoutModel,
+    visual_persona: Optional[VisualPersonaModel] = None,
     instructions: Optional[str] = None,
     using_slides_markdown: bool = False,
 ) -> PresentationStructureModel:
@@ -53,7 +74,7 @@ async def generate_presentation_structure(
     n_slides = len(presentation_outline.slides)
     selected_layouts: List[int] = []
 
-    DEEP_LOGGER.log(f"Starting iterative layout selection for {n_slides} slides")
+    DEEP_LOGGER.log(f"Starting iterative layout selection for {n_slides} slides with persona: {visual_persona.theme_category if visual_persona else 'None'}")
 
     for i, slide in enumerate(presentation_outline.slides):
         DEEP_LOGGER.log(f"Selecting layout for slide {i+1}/{n_slides}")
@@ -65,12 +86,16 @@ async def generate_presentation_structure(
                     slide.content,
                     i,
                     n_slides,
+                    visual_persona,
                     instructions
                 ),
                 response_format=SlideLayoutSelectionModel.model_json_schema(),
                 strict=True,
             )
             layout_index = response.get("layout_index", 0)
+            rationale = response.get("rationale", "No rationale")
+            
+            DEEP_LOGGER.log(f"Selected layout index {layout_index} for slide {i+1}. Rationale: {rationale}")
             
             # Validation: ensure layout_index is within bounds
             if layout_index < 0 or layout_index >= len(presentation_layout.slides):
@@ -78,7 +103,6 @@ async def generate_presentation_structure(
                 layout_index = 0
                 
             selected_layouts.append(layout_index)
-            DEEP_LOGGER.log(f"Selected layout index {layout_index} for slide {i+1}")
             
         except Exception as e:
             DEEP_LOGGER.log_error(f"Failed to select layout for slide {i+1}, defaulting to 0", e)

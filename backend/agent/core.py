@@ -227,23 +227,15 @@ class ArchimedesCosmoAgent:
             self.document_tool = DocumentTool()
             self.register_tool("document", self.document_tool.execute)
             
-            # Phase 2: Adversarial Self-Review
-            from backend.agent.self_review import AdversarialReviewer
-            self.reviewer = AdversarialReviewer()
+            # Phase 2: Persona Mode (Removed)
             
             # Phase 2: MiroFish Tool
             from backend.tools.mirofish_tool import MiroFishTool
             self.mirofish_tool = MiroFishTool()
             self.register_tool("mirofish", self.mirofish_tool.execute)
             
-            # Phase 2: Persona Mode
-            from backend.agent.persona_mode import PersonaMode
-            self.persona_mode = PersonaMode()
+            # Phase 2: Conditional Triggers (Removed)
             
-            # Phase 2: Conditional Triggers
-            from backend.tools.trigger_tool import TriggerTool
-            self.trigger_tool = TriggerTool()
-            self.register_tool("trigger", self.trigger_tool.execute)
             
             
             # COSMO Presentation — native slide generator
@@ -565,7 +557,7 @@ class ArchimedesCosmoAgent:
                                 }
                             }
 
-                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides", "expose", "plan", "monitor", "trigger"]
+                            TOOLS_NEEDING_SESSION = ["file", "shell", "browser", "voice", "document", "slides", "expose", "plan", "monitor"]
                             t_args = {**t_params}
                             if t_name in TOOLS_NEEDING_SESSION:
                                 t_args["session_id"] = self.session_id
@@ -600,20 +592,7 @@ class ArchimedesCosmoAgent:
                                         "language": "markdown" if t_params.get("path", "").endswith(".md") else "plaintext"
                                     })
                         
-                        if t_name == "message" and t_params.get("type") == "result":
-                            # --- ADVERSARIAL SELF-REVIEW ---
-                            # Extract original task from history (usually index 1)
-                            original_task = self.history[1]["content"] if len(self.history) > 1 else subtask.get("params", {}).get("task", "")
-                            review = await self.reviewer.review(
-                                task=original_task,
-                                answer=t_params.get("content", ""),
-                                router=self.router
-                            )
-                            if not review.get("passed") and step < max_steps - 3:
-                                fix_msg = "Please fix these issues before finishing:\n" + "\n".join(review.get("issues", []))
-                                self.context_manager.add_message("system", fix_msg)
-                                self.history = self.context_manager.get_messages()
-                                continue
+                            # --- AUTO-VERIFICATION (Placeholder) ---
 
                             # --- AUTO-VERIFICATION ---
                             original_task = ""

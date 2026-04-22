@@ -14,6 +14,10 @@ export const Schema = z.object({
         { heading: 'Operational efficiency', description: 'Automate repetitive workflows to free capacity for strategic work.' },
         { heading: 'Team enablement', description: 'Invest in training and tools so teams can execute at scale.' },
     ]),
+    image: z.object({
+        __image_url__: z.string().describe('The URL of the featured image'),
+        __image_prompt__: z.string().max(100).describe('A description for generating a replacement image')
+    }).optional().describe('An optional image to display next to the bullets'),
 });
 
 export const layoutId = 'title-description-bullet-list';
@@ -21,7 +25,7 @@ export const layoutName = 'Title Description Bullet List';
 export const layoutDescription = 'A clean two-column layout with a main title and description on the left, and up to 5 bullet points on the right. Each bullet has a heading and a short description. Ideal for key takeaways, feature highlights, or structured lists with context.';
 
 const dynamicSlideLayout: React.FC<{ data: Partial<z.infer<typeof Schema>> }> = ({ data }) => {
-    const { title, description, bullets } = data;
+    const { title, description, bullets, image } = data;
 
     return (
         <>
@@ -36,53 +40,66 @@ const dynamicSlideLayout: React.FC<{ data: Partial<z.infer<typeof Schema>> }> = 
                     fontFamily: 'var(--body-font-family,Montserrat)',
                 }}
             >
-                <div className="flex h-full w-full items-center justify-between px-[115px] gap-20">
+                <div className="flex h-full w-full items-center justify-between px-[80px] gap-12">
                     {/* Left Section: Title + Description */}
-                    <div className="flex flex-col flex-[1.2] justify-center">
+                    <div className="flex flex-col flex-1 justify-center">
                         {title && (
                             <h1
-                                className="text-[42.7px] font-bold mb-6 leading-tight"
-                                style={{ letterSpacing: '-1.6px', color: 'var(--background-text,#002BB2)' }}
+                                className="text-[40px] font-bold mb-6 leading-tight"
+                                style={{ letterSpacing: '-1.2px', color: 'var(--background-text,#111827)' }}
                             >
                                 {title}
                             </h1>
                         )}
                         {description && (
                             <p
-                                className="text-[16px] leading-[28.5px] max-w-[475px]"
-                                style={{ color: 'var(--background-text,#002BB2)' }}
+                                className="text-[16px] leading-[28px] max-w-[420px] opacity-80"
+                                style={{ color: 'var(--background-text,#374151)' }}
                             >
                                 {description}
                             </p>
                         )}
                     </div>
 
-                    {/* Right Section: Bullet list */}
-                    <div className="flex flex-col flex-1 justify-center gap-5">
+                    {/* Middle Section: Bullet list */}
+                    <div className="flex flex-col flex-1 justify-center gap-4">
                         {bullets?.map((item, index) => (
                             <div
                                 key={index}
-                                className="flex flex-col justify-center px-5 py-4 rounded-[3.4px] border-l-4"
+                                className="flex flex-col justify-center px-5 py-3 rounded-[8px]"
                                 style={{
-                                    backgroundColor: 'var(--card-color,#F7F8FF)',
-                                    borderLeftColor: 'var(--stroke,#4C68DF)',
+                                    backgroundColor: 'var(--card-color,#F3F4F6)',
+                                    borderLeft: '4px solid var(--stroke,#4C68DF)',
                                 }}
                             >
                                 <h3
-                                    className="text-[17.5px] font-bold leading-[21px]"
-                                    style={{ color: 'var(--background-text,#002BB2)' }}
+                                    className="text-[16px] font-bold leading-tight"
+                                    style={{ color: 'var(--background-text,#111827)' }}
                                 >
                                     {item.heading}
                                 </h3>
                                 <p
-                                    className="text-[15.3px] leading-[18.4px] mt-1"
-                                    style={{ color: 'var(--background-text,#002BB2)' }}
+                                    className="text-[14px] leading-tight mt-1 opacity-70"
+                                    style={{ color: 'var(--background-text,#374151)' }}
                                 >
                                     {item.description}
                                 </p>
                             </div>
                         ))}
                     </div>
+
+                    {/* Right Section: Optional Image */}
+                    {image?.__image_url__ && (
+                        <div className="flex-shrink-0 w-[320px] h-[480px] p-[2px] rounded-[24px] bg-black/5 border border-black/5 shadow-inner">
+                            <div className="w-full h-full rounded-[22px] overflow-hidden bg-gray-100">
+                                <img
+                                    src={image.__image_url__}
+                                    alt={image.__image_prompt__ || 'Slide Visual'}
+                                    className="w-full h-full object-cover"
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </>

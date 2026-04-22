@@ -1,16 +1,22 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { RootState } from "@/store/store";
 import { setPresentationData } from "@/store/slices/presentationGeneration";
 import { DashboardApi } from "../services/api/dashboard";
 import { PresentationLayoutRenderer } from "../components/PresentationLayoutRenderer";
 
+import { getThemeVariables } from "@/utils/theme-registry";
+
 const PresentationPage = ({ presentation_id }: { presentation_id: string }) => {
   const [contentLoading, setContentLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const dispatch = useDispatch();
   const { presentationData } = useSelector((state: RootState) => state.presentationGeneration);
+
+  const themeVars = useMemo(() => {
+    return getThemeVariables((presentationData?.theme as any)?.curated_palette);
+  }, [(presentationData?.theme as any)?.curated_palette]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,12 +47,17 @@ const PresentationPage = ({ presentation_id }: { presentation_id: string }) => {
   if (contentLoading || !presentationData) return <div className="p-20 text-gray-500">BROWSER: Loading slides...</div>;
 
   return (
-    <div id="presentation-slides-wrapper" className="flex flex-col items-center bg-[#1a1a1a] py-20 gap-20 min-h-screen">
+    <div 
+        id="presentation-slides-wrapper" 
+        className="flex flex-col items-center bg-[#1a1a1a] py-20 gap-20 min-h-screen"
+        style={themeVars as any}
+    >
       {presentationData.slides?.map((slide: any, index: number) => (
         <div 
           key={index} 
           id={`slide-${index}`} 
-          className="w-[1280px] h-[720px] slide-rendered-marker bg-white shadow-2xl relative overflow-hidden shrink-0" 
+          className="w-[1280px] h-[720px] slide-rendered-marker bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-2xl relative overflow-hidden shrink-0" 
+          style={{ fontFamily: 'var(--font-main)' }}
           data-speaker-note={slide.speaker_note}
         >
           <PresentationLayoutRenderer slide={slide} />

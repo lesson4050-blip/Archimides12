@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { ApiError } from "@/models/errors";
 import { NextRequest, NextResponse } from "next/server";
 import puppeteer, { Browser, Page } from "puppeteer";
@@ -25,6 +27,9 @@ export async function GET(request: NextRequest) {
     });
 
     page = await browser.newPage();
+    // Force set viewport to match slide aspect ratio/size
+    await page.setViewport({ width: 1280, height: 800 });
+    
     page.on('console', msg => console.log('BROWSER:', msg.text()));
     page.on('pageerror', err => console.error('BROWSER ERROR:', err.message));
 
@@ -35,14 +40,38 @@ export async function GET(request: NextRequest) {
     console.log(`[PPTXAPI] Visiting ${targetUrl}`);
     await page.goto(targetUrl, { waitUntil: "networkidle0", timeout: 120000 });
     
-    // Wait for markers
+    // 1. Wait for markers to appear
     await page.waitForSelector(".slide-rendered-marker", { timeout: 60000 });
     
-    // Extract slides info from DOM with high fidelity
-    const rawData = await page.evaluate(async (SCALE_FACTOR) => {
-      const slideMarkers = Array.from(document.querySelectorAll(".slide-rendered-marker"));
+    // 2. Wait for fonts and images in a separate, isolated evaluate
+    await page.evaluate(async () => {
+      if (document.fonts) await document.fonts.ready;
+      const images = Array.from(document.querySelectorAll('img'));
+      await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      })));
+    });
 
-      const rgbToHex = (rgb: string): string => {
+    // 3. Extract slides info
+    const rawData = await page.evaluate(async () => {
+      console.log("[BROWSER] Extraction script started.");
+      
+      // Wait for all images to have a width > 0
+      const imgs = Array.from(document.querySelectorAll('img'));
+      await Promise.all(imgs.map(img => {
+        if (img.complete && (img as any).naturalWidth > 0) return Promise.resolve();
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+          setTimeout(resolve, 3000); 
+        });
+      }));
+
+      const slideMarkers = document.querySelectorAll(".slide-rendered-marker");
+      console.log("[BROWSER] Found markers: " + slideMarkers.length);
+
+      const rgbToHex = (rgb: any) => {
         if (!rgb || rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') return '';
         if (rgb.startsWith('#')) return rgb.replace('#', '').toUpperCase();
         
@@ -57,104 +86,163 @@ export async function GET(request: NextRequest) {
         return hex;
       };
 
-      const parseShadow = (shadowStr: string) => {
+      const parseShadow = (shadowStr: any) => {
         if (!shadowStr || shadowStr === 'none') return undefined;
-        // Basic parser for boxShadow: "rgba(0, 0, 0, 0.2) 0px 4px 6px -1px"
         const parts = shadowStr.split(' ');
-        const color = rgbToHex(parts.slice(0, 3).join(' '));
+        let colorStr = parts.find((p: any) => p.startsWith('rgb'));
+        const color = colorStr ? rgbToHex(colorStr) : '000000';
         return {
           color: color || '000000',
-          radius: 4, // default
+          radius: 4,
           opacity: 0.2
         };
       };
 
-      // Wait for fonts and images to load
-      await document.fonts.ready;
-      const images = Array.from(document.querySelectorAll('img'));
-      await Promise.all(images.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      })));
-
-      return slideMarkers.map(marker => {
+      return Array.from(slideMarkers).map((marker, slideIdx) => {
         const elements: any[] = [];
         const markerRect = marker.getBoundingClientRect();
-
-        // Scan ALL elements within the slide
         const allItems = marker.querySelectorAll('*');
+        let captured = 0;
         
-        allItems.forEach((el: any) => {
+        // Capture slide background
+        const markerStyle = window.getComputedStyle(marker);
+        const slideBgColor = rgbToHex(markerStyle.backgroundColor) || 'FFFFFF';
+
+        allItems.forEach((el) => {
+          if (el.classList.contains('slide-rendered-marker')) return;
+          
           const rect = el.getBoundingClientRect();
+          const isImage = el.tagName.toUpperCase() === 'IMG';
           const style = window.getComputedStyle(el);
           
-          // Wait for images to load if it's an image or has background
-          const isImage = el.tagName === 'IMG';
+          // Check for background image (often used for icons or cards)
+          let backgroundImage = style.backgroundImage;
+          if (backgroundImage === 'none') backgroundImage = '';
+          const bgImageUrlMatch = backgroundImage.match(/url\(['"]?(.*?)['"]?\)/);
+          const bgImageUrl = bgImageUrlMatch ? bgImageUrlMatch[1] : undefined;
+          
           const iconUrl = el.getAttribute('data-path');
-          const bgImage = style.backgroundImage !== 'none' ? style.backgroundImage.replace(/url\(['"]?(.*?)['"]?\)/, '$1') : null;
-          const imageSrc = isImage ? (el as HTMLImageElement).src : (iconUrl || bgImage || undefined);
+          const hasImage = isImage || !!iconUrl || !!bgImageUrl || el.classList.contains('image');
+          
+          // Filter out elements outside the slide or invisible
+          if (!hasImage && (rect.width === 0 || rect.height === 0)) return;
+          
+          // Relaxed bounds check for images
+          const padding = hasImage ? 5 : 0;
+          if (rect.bottom < markerRect.top - padding || rect.top > markerRect.bottom + padding || 
+              rect.right < markerRect.left - padding || rect.left > markerRect.right + padding) return;
+          
+          // CRITICAL FIX: Do not capture full-slide wrapper divs as shapes.
+          if (!hasImage && rect.width >= 1270 && rect.height >= 710) return;
 
-          const hasBackground = style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent';
-          const hasBorder = style.borderStyle !== 'none' && parseFloat(style.borderWidth) > 0;
-          const isText = el.childNodes.length > 0 && Array.from(el.childNodes).some((n: any) => n.nodeType === 3 && n.textContent?.trim());
-          const hasText = el.innerText && el.innerText.trim().length > 0 && isText;
-          const hasShadow = style.boxShadow !== 'none';
+          const opacity = parseFloat(style.opacity);
+          if (opacity === 0 || style.display === 'none' || style.visibility === 'hidden') return;
 
-          // Include elements that are images or icons
-          if (!hasBackground && !hasBorder && !hasText && !imageSrc && !hasShadow) return;
+          const bgColor = rgbToHex(style.backgroundColor);
+          const hasBackground = bgColor !== '' && bgColor !== '00000000';
+          
+          // Check for opacity (for glassmorphism support)
+          let bgOpacity = 1.0;
+          if (style.backgroundColor.startsWith('rgba')) {
+            const bgOpacityMatch = style.backgroundColor.match(/rgba?\(.*,\s*([\d.]+)\)/);
+            bgOpacity = bgOpacityMatch ? parseFloat(bgOpacityMatch[1]) : 1.0;
+          }
 
-          // Capture element relative to slide
+          let finalImageSrc = isImage ? (el as HTMLImageElement).src : (bgImageUrl || iconUrl);
+          if (finalImageSrc && finalImageSrc.startsWith('/static/')) {
+             finalImageSrc = window.location.origin + finalImageSrc;
+          }
+
+          // Check for text content in this specific element (not children)
+          let hasOwnText = false;
+          for (let node of el.childNodes) {
+            if (node.nodeType === 3 && (node.textContent?.trim()?.length ?? 0) > 0) {
+              hasOwnText = true;
+              break;
+            }
+          }
+          
+          const borderWidth = parseFloat(style.borderWidth);
+          const hasBorder = borderWidth > 0 && rgbToHex(style.borderColor) !== '';
+
+          // Capture Shadow
+          const boxShadow = style.boxShadow;
+          const hasShadow = boxShadow !== 'none' && boxShadow !== '';
+
+          // CRITICAL FIX: Ignore empty container divs that just have background/border/shadow 
+          if (!hasOwnText && !hasImage && (hasBackground || hasBorder || hasShadow)) {
+             if (rect.width > 300 && rect.height > 300 && bgOpacity < 0.2) return; 
+          }
+
+          // ONLY CAPTURE VISUAL ELEMENTS
+          if (!hasOwnText && !hasBackground && !hasImage && !hasBorder && !hasShadow) return;
+
+          // DEBUG
+          if (hasImage) console.log(`[BROWSER] Slide ${slideIdx}: Found IMAGE: ${el.tagName} src=${finalImageSrc} size=${Math.round(rect.width)}x${Math.round(rect.height)} at ${Math.round(rect.left)},${Math.round(rect.top)}`);
+
+          captured++;
           elements.push({
             tagName: el.tagName.toLowerCase(),
-            className: el.className,
-            innerText: hasText ? el.innerText : undefined,
-            imageSrc: imageSrc,
+            innerText: hasOwnText ? (el as any).innerText.trim() : undefined,
             position: {
-              left: (rect.left - markerRect.left) * SCALE_FACTOR,
-              top: (rect.top - markerRect.top) * SCALE_FACTOR,
-              width: rect.width * SCALE_FACTOR,
-              height: rect.height * SCALE_FACTOR
+              left: Math.round(rect.left - markerRect.left),
+              top: Math.round(rect.top - markerRect.top),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
             },
-            background: {
-              color: rgbToHex(style.backgroundColor),
-              opacity: parseFloat(style.opacity)
-            },
+            background: hasBackground ? { color: bgColor, opacity: bgOpacity } : undefined,
+            shadow: hasShadow ? parseShadow(boxShadow) : undefined,
             border: hasBorder ? {
-              color: rgbToHex(style.borderColor),
-              width: parseFloat(style.borderWidth) * SCALE_FACTOR
+                color: rgbToHex(style.borderColor),
+                width: borderWidth,
+                opacity: 1.0
             } : undefined,
-            borderRadius: [
-              parseFloat(style.borderTopLeftRadius) * SCALE_FACTOR,
-              parseFloat(style.borderTopRightRadius) * SCALE_FACTOR,
-              parseFloat(style.borderBottomRightRadius) * SCALE_FACTOR,
-              parseFloat(style.borderBottomLeftRadius) * SCALE_FACTOR
-            ],
-            shadow: hasShadow ? parseShadow(style.boxShadow) : undefined,
-            font: hasText ? {
+            opacity: opacity,
+            imageSrc: hasImage ? finalImageSrc : undefined,
+            font: hasOwnText ? {
               name: style.fontFamily.split(',')[0].replace(/['"]/g, ''),
-              size: parseFloat(style.fontSize) * SCALE_FACTOR,
+              size: parseFloat(style.fontSize),
               weight: parseInt(style.fontWeight),
-              color: rgbToHex(style.color),
+              color: rgbToHex(style.color) || '000000',
               italic: style.fontStyle === 'italic'
             } : undefined,
+            zIndex: parseInt(style.zIndex) || 0,
+            borderRadius: style.borderRadius !== '0px' ? [
+              parseFloat(style.borderTopLeftRadius),
+              parseFloat(style.borderTopRightRadius),
+              parseFloat(style.borderBottomRightRadius),
+              parseFloat(style.borderBottomLeftRadius)
+            ] : undefined,
             textAlign: style.textAlign,
-            lineHeight: parseFloat(style.lineHeight) * SCALE_FACTOR,
-            zIndex: parseInt(style.zIndex) || 0
+            lineHeight: parseFloat(style.lineHeight) || 0
           });
         });
 
-        // Sort elements by zIndex to maintain layering
-        elements.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+        console.log("[BROWSER] Slide " + slideIdx + ": Captured " + captured + " elements");
+        if (elements.length > 0) {
+          const e = elements[0];
+          console.log("[BROWSER] Slide " + slideIdx + " Elem 0: Tag=" + e.tagName + " Pos=" + JSON.stringify(e.position) + " BG=" + JSON.stringify(e.background) + " Font=" + JSON.stringify(e.font));
+        }
+        elements.sort((a, b) => {
+          const zDiff = (a.zIndex || 0) - (b.zIndex || 0);
+          if (zDiff !== 0) return zDiff;
+          const areaA = (a.position.width || 0) * (a.position.height || 0);
+          const areaB = (b.position.width || 0) * (b.position.height || 0);
+          return areaB - areaA;
+        });
 
         return {
           elements,
-          backgroundColor: rgbToHex(window.getComputedStyle(marker).backgroundColor) || 'FFFFFF',
+          backgroundColor: slideBgColor,
           speakerNote: marker.getAttribute("data-speaker-note") || ""
         };
       });
     });
 
-    console.log(`[PPTXAPI] Extracted attributes for ${rawData.length} slides.`);
+    console.log(`[PPTXAPI] Extracted ${rawData.length} slides data.`);
+    rawData.forEach((s, idx) => {
+      console.log(`[PPTXAPI] Slide ${idx}: Captured ${s.elements.length} elements.`);
+    });
     
     // Use the existing utility to convert raw attributes to valid PPTX models
     const pptxSlides = convertElementAttributesToPptxSlides(rawData);
@@ -162,6 +250,15 @@ export async function GET(request: NextRequest) {
     const presentation_pptx_model: PptxPresentationModel = {
       slides: pptxSlides
     };
+
+    // DEBUG: Save full model to file for audit
+    try {
+      const debugPath = path.join(process.cwd(), "..", "scratch", "last_pptx_model.json");
+      fs.writeFileSync(debugPath, JSON.stringify(presentation_pptx_model, null, 2));
+      console.log(`[PPTXAPI] Debug model saved to ${debugPath}`);
+    } catch (e) {
+      console.error("[PPTXAPI] Failed to save debug model:", e);
+    }
 
     return NextResponse.json(presentation_pptx_model);
   } catch (error: any) {

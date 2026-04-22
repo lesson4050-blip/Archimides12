@@ -63,6 +63,49 @@ class PptxPresentationCreator:
         self._ppt.slide_width = Pt(1280)
         self._ppt.slide_height = Pt(720)
 
+        self._SAFE_FONTS = {
+            "sans-serif": "Calibri",
+            "serif": "Georgia",
+            "monospace": "Courier New",
+            "system-ui": "Calibri",
+        }
+
+    def _sanitize_font_name(self, font_name: str) -> str:
+        """Convert CSS/Next.js font variables to real PowerPoint fonts."""
+        if not font_name:
+            return "Calibri"
+
+        # Clean the font name
+        clean_name = font_name.strip("'\"")
+
+        # Map hashed Next.js font names to real font names
+        if "Jakarta" in clean_name:
+            return "Plus Jakarta Sans"
+        if "Syne" in clean_name:
+            return "Syne"
+        if "Inter" in clean_name:
+            return "Inter"
+        if "Montserrat" in clean_name:
+            return "Montserrat"
+        if "Outfit" in clean_name:
+            return "Outfit"
+
+        # CSS variable names from Next.js (e.g. __Syne_c1a642)
+        if clean_name.startswith("__") or clean_name.startswith("var("):
+            return "Calibri"
+
+        # Comma-separated fallback stack — take first valid one
+        if "," in clean_name:
+            parts = [p.strip() for p in clean_name.split(",")]
+            for part in parts:
+                clean = part.strip("'\"")
+                if not clean.startswith("__") and clean not in self._SAFE_FONTS:
+                    return clean
+            return "Calibri"
+
+        # Generic CSS families
+        return self._SAFE_FONTS.get(clean_name.lower(), clean_name)
+
     def get_sub_element(self, parent, tagname, **kwargs):
         """Helper method to create XML elements"""
         element = OxmlElement(tagname)
@@ -398,13 +441,16 @@ class PptxPresentationCreator:
 
     def add_textbox(self, slide: Slide, textbox_model: PptxTextBoxModel):
         position = textbox_model.position
-        textbox_shape = slide.shapes.add_textbox(*position.to_pt_list())
+        # Anti-clipping padding: add +20 to height so PPTX doesn't cut off descenders or tight wrapped lines
+        padded_height = position.height + 20
+        textbox_shape = slide.shapes.add_textbox(Pt(position.left), Pt(position.top), Pt(position.width), Pt(padded_height))
         textbox_shape.width += Pt(2)
 
         textbox = textbox_shape.text_frame
         textbox.word_wrap = textbox_model.text_wrap
 
         self.apply_fill_to_shape(textbox_shape, textbox_model.fill)
+        self.apply_shadow_to_shape(textbox_shape, textbox_model.shadow)
         self.apply_margin_to_text_box(textbox, textbox_model.margin)
         self.add_paragraphs(textbox, textbox_model.paragraphs)
 
@@ -613,7 +659,7 @@ class PptxPresentationCreator:
         self.apply_font(paragraph.font, font)
 
     def apply_font(self, font: Font, font_model: PptxFontModel):
-        font.name = font_model.name
+        font.name = self._sanitize_font_name(font_model.name or "Calibri")
         font.color.rgb = RGBColor.from_string(font_model.color)
         font.italic = font_model.italic
         font.size = Pt(font_model.size)

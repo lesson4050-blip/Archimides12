@@ -54,22 +54,23 @@ const IntroPitchDeckSlide: React.FC<IntroSlideLayoutProps> = ({
         rel="stylesheet"
       />
       <div
-        className="w-full max-w-[1280px] aspect-video mx-auto relative overflow-hidden rounded-md"
+        className="w-full max-w-[1280px] aspect-video mx-auto relative overflow-hidden"
         style={{
-          fontFamily: "var(--heading-font-family,Montserrat)",
-          backgroundColor: 'var(--background-color, #FFFFFF)',
-          backgroundSize: "cover",
-          backgroundPosition: "center",
+          fontFamily: "var(--font-main, sans-serif)",
+          backgroundColor: 'var(--bg-primary, #FFFFFF)',
+          color: 'var(--text-primary, #111827)',
         }}
       >
+        {/* Background Decorative Element */}
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full opacity-10 blur-[120px]" style={{ backgroundColor: 'var(--accent-primary, #1E4CD9)' }}></div>
+
         {/* Top Header */}
         {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
+          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-8 z-10">
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
-
-                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
+              <div className="flex items-center gap-3">
+                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />}
+                {(slideData as any)?.__companyName__ && <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
                   {(slideData as any)?.__companyName__ || 'Company Name'}
                 </span>}
               </div>
@@ -77,53 +78,43 @@ const IntroPitchDeckSlide: React.FC<IntroSlideLayoutProps> = ({
           </div>
         )}
 
-        {/* Main Title and Description (shifted slightly up) */}
+        {/* Main Content Area */}
         <div
-          className="absolute left-10 right-[42%]"
-          style={{
-            top: "50%",
-            transform: "translateY(-50%)",
-          }}
+          className="absolute left-20 right-[45%] top-[55%] -translate-y-1/2 z-10"
         >
           {slideData?.title && (
-            <div className="relative inline-block">
+            <div className="relative mb-8">
               <h1
-                className="text-5xl font-bold leading-none"
-                style={{ color: 'var(--background-text, #1E4CD9)' }}
+                className="text-7xl font-bold editorial-title"
+                style={{ color: 'var(--text-primary)' }}
                 id="pitchdeck-title"
               >
                 {slideData?.title}
               </h1>
-              <span
-                className="block h-[4px] absolute left-0"
-                style={{
-                  width: "50%",
-                  bottom: "-0.5em",
-                  transition: "width 0.3s",
-                  backgroundColor: 'var(--primary-color, #1E4CD9)'
-                }}
-              />
+              <div className="w-24 h-1 mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
             </div>
           )}
-          <p className="text-lg leading-relaxed font-normal mt-6 max-w-xl" style={{ color: 'var(--background-text, #234CD9)' }}>
+          <p className="text-xl leading-relaxed opacity-80 max-w-xl" style={{ color: 'var(--text-primary)' }}>
             {slideData?.description}
           </p>
+          
           {slideData?.introCard?.enabled && (
-            <div className="mt-6 inline-flex items-center gap-4 rounded-lg px-5 py-4 shadow-sm min-w-[400px]" style={{ backgroundColor: 'var(--card-color, #FFFFFF)', border: '1px solid var(--stroke, #E5E7EB)' }}>
-              <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold" style={{ backgroundColor: 'var(--primary-color, #F5F8FE)', color: 'var(--primary-text, #234CD9)' }}>
+            <div className="mt-12 glass-card rounded-2xl p-6 shadow-xl flex items-center gap-6 max-w-md">
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shadow-inner" style={{ backgroundColor: 'var(--accent-primary)', color: '#FFFFFF' }}>
                 {(slideData?.introCard?.name || "").split(" ").map(p => p.charAt(0)).join("").slice(0, 2).toUpperCase()}
               </div>
               <div className="flex flex-col">
-                <div className="text-[16px] font-semibold" style={{ color: 'var(--background-text, #234CD9)' }}>{slideData?.introCard?.name}</div>
-                <div className="text-[14px]" style={{ color: 'var(--background-text, #234CD9)' }}>{slideData?.introCard?.date}</div>
+                <div className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{slideData?.introCard?.name}</div>
+                <div className="text-sm opacity-60" style={{ color: 'var(--text-primary)' }}>{slideData?.introCard?.date}</div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Image */}
+        {/* Right Hero Image Section */}
         {slideData?.image && slideData?.image?.__image_url__ && (
-          <div className="absolute top-16 bottom-16 right-10 w-[42%] rounded-md overflow-hidden">
+          <div className="absolute top-0 bottom-0 right-0 w-[42%] z-0">
+            <div className="absolute inset-0 z-10" style={{ background: 'linear-gradient(to right, var(--bg-primary) 0%, transparent 40%)' }}></div>
             <img
               src={slideData?.image?.__image_url__}
               alt={slideData?.image?.__image_prompt__ || slideData?.title || "intro-image"}

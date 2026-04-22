@@ -67,15 +67,19 @@ cosmo_engine/
 
 # Engine model cache
 cosmo_engine_core/chroma/
-cosmo_engine_core/data/
+cosmo_engine_core/data/**
+!cosmo_engine_core/data/.keep
 
 # COSMO Artist
-cosmo_artist/node_modules/
-cosmo_artist/.next/
-cosmo_artist/.next-build/
+**/node_modules/
+**/.next/
 cosmo_artist/out/
 cosmo_artist/package-lock.json
-cosmo_artist/.cypress/
+cosmo_artist/data/
+cosmo_artist/api_resp.json
+cosmo_artist/html_dump.txt
+cosmo_artist/test_pexels.png
+cosmo_artist/.next-build/
 
 # Backend Node
 backend/node_modules/
@@ -96,6 +100,25 @@ test_uvicorn.py
 test_uvicorn2.py
 test_*.py
 uv.lock
+capture_results.cjs
+dump_latest.py
+generate_custom.py
+list_presentations.py
+run_capture_flow.py
+test_pexels.html
+test_pexels.js
+test_pexels.png
+html_dump.txt
+api_resp.json
+cosmo_artist/capture_now.cjs
+cosmo_artist/capture_results.cjs
+cosmo_artist/dump_html.cjs
+cosmo_artist/test_pexels.cjs
+cosmo_artist/app/debug-slides/
+cosmo_engine_core/dump.txt
+cosmo_engine_core/dump_latest.py
+cosmo_engine_core/list_presentations.py
+cosmo_engine_core/api_resp.json
 
 # Symlinks
 skills

@@ -49,7 +49,7 @@ function convertLineHeightToRelative(lineHeight?: number, fontSize?: number): nu
     calculatedLineHeight = Math.round((lineHeight / fontSize) * 100) / 100;
   }
 
-  return calculatedLineHeight - 0.3
+  return calculatedLineHeight;
 }
 
 export function convertElementAttributesToPptxSlides(
@@ -103,6 +103,18 @@ function convertElementToPptxShape(
   return convertToAutoShapeBox(element);
 }
 
+function convertShadowToPptxShadow(shadow?: any): PptxShadowModel | undefined {
+  if (!shadow || !shadow.color) return undefined;
+  
+  return {
+    radius: Math.round(shadow.radius ?? 4),
+    offset: Math.round(shadow.offset ? Math.sqrt(shadow.offset[0] ** 2 + shadow.offset[1] ** 2) : 0),
+    color: shadow.color,
+    opacity: shadow.opacity ?? 0.5,
+    angle: Math.round(shadow.angle ?? 0)
+  };
+}
+
 function convertToTextBox(element: ElementAttributes): PptxTextBoxModel {
   const position: PptxPositionModel = {
     left: Math.round(element.position?.left ?? 0),
@@ -117,7 +129,7 @@ function convertToTextBox(element: ElementAttributes): PptxTextBoxModel {
   } : undefined;
 
   const font: PptxFontModel | undefined = element.font ? {
-    name: element.font.name ?? "Inter",
+    name: element.font.name ?? "Plus Jakarta Sans",
     size: Math.round(element.font.size ?? 16),
     font_weight: element.font.weight ?? 400,
     italic: element.font.italic ?? false,
@@ -136,6 +148,7 @@ function convertToTextBox(element: ElementAttributes): PptxTextBoxModel {
     shape_type: "textbox",
     margin: undefined,
     fill,
+    shadow: convertShadowToPptxShadow(element.shadow),
     position,
     text_wrap: element.textWrap ?? true,
     paragraphs: [paragraph]
@@ -160,19 +173,13 @@ function convertToAutoShapeBox(element: ElementAttributes): PptxAutoShapeBoxMode
     opacity: element.border.opacity ?? 1.0
   } : undefined;
 
-  const shadow: PptxShadowModel | undefined = element.shadow?.color ? {
-    radius: Math.round(element.shadow.radius ?? 4),
-    offset: Math.round(element.shadow.offset ? Math.sqrt(element.shadow.offset[0] ** 2 + element.shadow.offset[1] ** 2) : 0),
-    color: element.shadow.color,
-    opacity: element.shadow.opacity ?? 0.5,
-    angle: Math.round(element.shadow.angle ?? 0)
-  } : undefined;
+  const shadow: PptxShadowModel | undefined = convertShadowToPptxShadow(element.shadow);
 
   const paragraphs: PptxParagraphModel[] | undefined = element.innerText ? [{
     spacing: undefined,
     alignment: convertTextAlignToPptxAlignment(element.textAlign),
     font: element.font ? {
-      name: element.font.name ?? "Inter",
+      name: element.font.name ?? "Plus Jakarta Sans",
       size: Math.round(element.font.size ?? 16),
       font_weight: element.font.weight ?? 400,
       italic: element.font.italic ?? false,

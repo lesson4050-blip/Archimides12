@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 
-export const V1ContentRender = ({ slide }: { slide: any, isEditMode: boolean }) => {
+export const V1ContentRender = ({ slide, isEditMode, theme }: { slide: any, isEditMode: boolean, theme?: any }) => {
     if (!slide || !slide.content) return <div>Empty Slide</div>;
 
     return (

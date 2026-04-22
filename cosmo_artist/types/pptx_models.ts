@@ -284,6 +284,7 @@ export interface PptxTextBoxModel extends PptxShapeModel {
   shape_type: string;
   margin?: PptxSpacingModel;
   fill?: PptxFillModel;
+  shadow?: PptxShadowModel;
   position: PptxPositionModel;
   text_wrap: boolean;
   paragraphs: PptxParagraphModel[];

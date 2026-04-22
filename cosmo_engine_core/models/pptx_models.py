@@ -114,6 +114,7 @@ class PptxTextBoxModel(PptxShapeModel):
     shape_type: Literal["textbox"] = "textbox"
     margin: Optional[PptxSpacingModel] = None
     fill: Optional[PptxFillModel] = None
+    shadow: Optional[PptxShadowModel] = None
     position: PptxPositionModel
     text_wrap: bool = True
     paragraphs: List[PptxParagraphModel]
