@@ -1,14 +1,14 @@
 'use client'
-import React from "react";
-
+import React, { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
 import PdfMakerPage from "./PdfMakerPage";
-const page = () => {
 
+const PdfMakerContent = () => {
     const router = useRouter();
     const params = useSearchParams();
     const queryId = params.get("id");
+
     if (!queryId) {
         return (
             <div className="flex flex-col items-center justify-center h-screen">
@@ -18,8 +18,15 @@ const page = () => {
             </div>
         );
     }
-    return (
-        <PdfMakerPage presentation_id={queryId} />
-    );
+
+    return <PdfMakerPage presentation_id={queryId} />;
 };
-export default page;
+
+export default function page() {
+    return (
+        <Suspense fallback={<div>Loading Page Environment...</div>}>
+            <PdfMakerContent />
+        </Suspense>
+    );
+}
+

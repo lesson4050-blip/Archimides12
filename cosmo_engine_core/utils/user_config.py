@@ -77,11 +77,12 @@ def get_user_config():
 
     existing_config = UserConfig()
     try:
-        if os.path.exists(user_config_path):
-            with open(user_config_path, "r") as f:
-                existing_config = UserConfig(**json.load(f))
-    except Exception:
-        print("Error while loading user config")
+        if user_config_path and os.path.exists(user_config_path):
+            with open(user_config_path, "r", encoding="utf-8-sig") as f:
+                config_data = json.load(f)
+                existing_config = UserConfig(**config_data)
+    except Exception as e:
+        print(f"Error while loading user config from {user_config_path}: {e}")
         pass
 
     return UserConfig(
@@ -221,7 +222,7 @@ def save_codex_tokens_to_user_config() -> None:
     existing: dict = {}
     try:
         if os.path.exists(user_config_path):
-            with open(user_config_path, "r") as f:
+            with open(user_config_path, "r", encoding="utf-8-sig") as f:
                 existing = json.load(f)
     except Exception:
         pass

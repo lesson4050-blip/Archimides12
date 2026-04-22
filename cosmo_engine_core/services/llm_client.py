@@ -65,6 +65,7 @@ from utils.set_env import (
 )
 from utils.llm_provider import get_llm_provider, get_model
 from utils.parsers import parse_bool_or_none
+from utils.safe_log import DEEP_LOGGER
 from utils.schema_utils import (
     ensure_array_schemas_have_items,
     ensure_strict_json_schema,
@@ -632,6 +633,9 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         tools: Optional[List[type[LLMTool] | LLMDynamicTool]] = None,
     ):
+        DEEP_LOGGER.log(f"LLM generate call: model={model}")
+        DEEP_LOGGER.log(f"LLM messages: {json.dumps([m.model_dump() for m in messages])}", "DEBUG")
+        
         parsed_tools = self.tool_calls_handler.parse_tools(tools)
 
         content = None
@@ -673,10 +677,13 @@ class LLMClient:
                     model=model, messages=messages, max_tokens=max_tokens
                 )
         if content is None:
+            DEEP_LOGGER.log_error("LLM did not return any content")
             raise HTTPException(
                 status_code=400,
                 detail="LLM did not return any content",
             )
+        
+        DEEP_LOGGER.log(f"LLM response: {content[:500]}...", "DEBUG")
         return content
 
     # ? Generate Structured Content
@@ -1077,6 +1084,10 @@ class LLMClient:
         tools: Optional[List[type[LLMTool] | LLMDynamicTool]] = None,
         max_tokens: Optional[int] = None,
     ) -> dict:
+        DEEP_LOGGER.log(f"LLM generate_structured call: model={model}")
+        DEEP_LOGGER.log(f"LLM messages: {json.dumps([m.model_dump() for m in messages])}", "DEBUG")
+        DEEP_LOGGER.log(f"LLM response_format: {json.dumps(response_format)}", "DEBUG")
+
         parsed_tools = self.tool_calls_handler.parse_tools(tools)
 
         for attempt in range(3):
@@ -1134,11 +1145,14 @@ class LLMClient:
                     )
 
             if content is not None:
+                DEEP_LOGGER.log(f"LLM structured response keys: {list(content.keys()) if isinstance(content, dict) else 'NOT A DICT'}", "DEBUG")
                 return content
 
+            DEEP_LOGGER.log(f"LLM structured attempt {attempt + 1} failed, retrying...", "WARNING")
             if attempt < 2:
                 await asyncio.sleep(0.5 * (attempt + 1))
 
+        DEEP_LOGGER.log_error("LLM structured generation failed after 3 attempts")
         raise HTTPException(
             status_code=400,
             detail="LLM did not return any content",
@@ -1161,14 +1175,22 @@ class LLMClient:
         current_id = None
         current_name = None
         current_arguments = None
-        async for event in await client.chat.completions.create(
-            model=model,
-            messages=[message.model_dump() for message in messages],
-            max_completion_tokens=max_tokens,
-            tools=tools,
-            extra_body=extra_body,
-            stream=True,
-        ):
+        DEEP_LOGGER.log(f"Starting OpenAI stream: model={model}, messages_count={len(messages)}", "DEBUG")
+        try:
+            completion_stream = await client.chat.completions.create(
+                model=model,
+                messages=[message.model_dump() for message in messages],
+                max_completion_tokens=max_tokens,
+                tools=tools,
+                extra_body=extra_body,
+                stream=True,
+            )
+            DEEP_LOGGER.log("OpenAI stream created successfully", "DEBUG")
+        except Exception as e:
+            DEEP_LOGGER.log_error(f"Failed to create OpenAI stream: {e}")
+            raise e
+
+        async for event in completion_stream:
             event: OpenAIChatCompletionChunk = event
             if not event.choices:
                 continue
@@ -1563,6 +1585,9 @@ class LLMClient:
         max_tokens: Optional[int] = None,
         tools: Optional[List[type[LLMTool] | LLMDynamicTool]] = None,
     ):
+        DEEP_LOGGER.log(f"LLM stream call: model={model}")
+        DEEP_LOGGER.log(f"LLM messages: {json.dumps([m.model_dump() for m in messages])}", "DEBUG")
+
         parsed_tools = self.tool_calls_handler.parse_tools(tools)
 
         match self.llm_provider:
@@ -1653,38 +1678,48 @@ class LLMClient:
         current_arguments = None
 
         has_response_schema_tool_call = False
-        async for event in await client.chat.completions.create(
-            model=model,
-            messages=[message.model_dump() for message in messages],
-            max_completion_tokens=max_tokens,
-            tools=all_tools,
-            response_format=(
-                {
-                    "type": "json_schema",
-                    "json_schema": (
-                        {
-                            "name": "ResponseSchema",
-                            "strict": strict,
-                            "schema": response_schema,
-                        }
-                    ),
-                }
-                if not use_tool_calls_for_structured_output
-                else None
-            ),
-            extra_body=extra_body,
-            stream=True,
-        ):
+        DEEP_LOGGER.log(f"Starting OpenAI structured stream: model={model}, messages_count={len(messages)}", "DEBUG")
+        try:
+            completion_stream = await client.chat.completions.create(
+                model=model,
+                messages=[message.model_dump() for message in messages],
+                max_completion_tokens=max_tokens,
+                tools=all_tools,
+                response_format=(
+                    {
+                        "type": "json_schema",
+                        "json_schema": (
+                            {
+                                "name": "ResponseSchema",
+                                "strict": strict,
+                                "schema": response_schema,
+                            }
+                        ),
+                    }
+                    if not use_tool_calls_for_structured_output
+                    else None
+                ),
+                extra_body=extra_body,
+                stream=True,
+            )
+            DEEP_LOGGER.log("OpenAI structured stream created successfully", "DEBUG")
+        except Exception as e:
+            DEEP_LOGGER.log_error(f"Failed to create OpenAI structured stream: {e}")
+            raise e
+
+        async for event in completion_stream:
             event: OpenAIChatCompletionChunk = event
             if not event.choices:
                 continue
 
             content_chunk = event.choices[0].delta.content
             if content_chunk and not use_tool_calls_for_structured_output:
+                DEEP_LOGGER.log(f"Received content chunk: {len(content_chunk)} chars", "DEBUG")
                 yield content_chunk
 
             tool_call_chunk = event.choices[0].delta.tool_calls
             if tool_call_chunk:
+                DEEP_LOGGER.log("Received tool call chunk", "DEBUG")
                 tool_index = tool_call_chunk[0].index
                 tool_id = tool_call_chunk[0].id
                 tool_name = tool_call_chunk[0].function.name
@@ -2268,6 +2303,10 @@ class LLMClient:
         tools: Optional[List[type[LLMTool] | LLMDynamicTool]] = None,
         max_tokens: Optional[int] = None,
     ):
+        DEEP_LOGGER.log(f"LLM stream_structured call: model={model}")
+        DEEP_LOGGER.log(f"LLM messages: {json.dumps([m.model_dump() for m in messages])}", "DEBUG")
+        DEEP_LOGGER.log(f"LLM response_format: {json.dumps(response_format)}", "DEBUG")
+
         parsed_tools = self.tool_calls_handler.parse_tools(tools)
 
         match self.llm_provider:

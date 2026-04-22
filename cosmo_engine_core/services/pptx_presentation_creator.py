@@ -367,7 +367,13 @@ class PptxPresentationCreator:
             picture_model.position, picture_model.margin
         )
 
-        slide.shapes.add_picture(image_path, *margined_position.to_pt_list())
+        picture_shape = slide.shapes.add_picture(image_path, *margined_position.to_pt_list())
+
+        # Apply visual styles 
+        if hasattr(picture_model, 'stroke') and picture_model.stroke:
+            self.apply_stroke_to_shape(picture_shape, picture_model.stroke)
+        if hasattr(picture_model, 'shadow') and picture_model.shadow:
+            self.apply_shadow_to_shape(picture_shape, picture_model.shadow)
 
     def add_autoshape(self, slide: Slide, autoshape_box_model: PptxAutoShapeBoxModel):
         position = autoshape_box_model.position

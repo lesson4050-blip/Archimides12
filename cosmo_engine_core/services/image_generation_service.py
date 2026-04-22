@@ -30,7 +30,7 @@ from utils.image_provider import (
     is_open_webui_selected,
 )
 import uuid
-from utils.safe_log import safe_print
+from utils.safe_log import safe_print, DEEP_LOGGER
 
 
 class ImageGenerationService:
@@ -271,22 +271,46 @@ class ImageGenerationService:
         )
 
     async def get_image_from_pexels(self, prompt: str) -> str:
+        DEEP_LOGGER.log(f"Searching Pexels for: {prompt}")
         async with aiohttp.ClientSession(trust_env=True) as session:
-            response = await session.get(
-                f"https://api.pexels.com/v1/search?query={prompt}&per_page=1",
-                headers={"Authorization": f"{get_pexels_api_key_env()}"},
-            )
+            url = f"https://api.pexels.com/v1/search?query={prompt}&per_page=1"
+            headers = {"Authorization": f"{get_pexels_api_key_env()}"}
+            DEEP_LOGGER.log_api_call("Pexels", url, headers=headers)
+            
+            response = await session.get(url, headers=headers)
             data = await response.json()
+            
+            DEEP_LOGGER.log_api_response("Pexels", response.status, data)
+            
+            if response.status != 200:
+                DEEP_LOGGER.log_error(f"Pexels API error: {response.status}", Exception(str(data)))
+                return "/static/images/placeholder.jpg"
+
+            if not data.get("photos") or len(data["photos"]) == 0:
+                DEEP_LOGGER.log(f"No photos found on Pexels for query: {prompt}", "WARNING")
+                return "/static/images/placeholder.jpg"
+
             image_url = data["photos"][0]["src"]["large"]
+            DEEP_LOGGER.log(f"Pexels found image: {image_url}")
             return image_url
 
     async def get_image_from_pixabay(self, prompt: str) -> str:
+        DEEP_LOGGER.log(f"Searching Pixabay for: {prompt}")
         async with aiohttp.ClientSession(trust_env=True) as session:
-            response = await session.get(
-                f"https://pixabay.com/api/?key={get_pixabay_api_key_env()}&q={prompt}&image_type=photo&per_page=3"
-            )
+            url = f"https://pixabay.com/api/?key={get_pixabay_api_key_env()}&q={prompt}&image_type=photo&per_page=3"
+            DEEP_LOGGER.log_api_call("Pixabay", url)
+            
+            response = await session.get(url)
             data = await response.json()
+            
+            DEEP_LOGGER.log_api_response("Pixabay", response.status, data)
+
+            if response.status != 200 or not data.get("hits") or len(data["hits"]) == 0:
+                DEEP_LOGGER.log(f"Pixabay error or no hits for: {prompt}", "WARNING")
+                return "/static/images/placeholder.jpg"
+
             image_url = data["hits"][0]["largeImageURL"]
+            DEEP_LOGGER.log(f"Pixabay found image: {image_url}")
             return image_url
 
     async def generate_image_comfyui(self, prompt: str, output_directory: str) -> str:

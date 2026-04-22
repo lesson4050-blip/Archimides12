@@ -28,10 +28,10 @@ async def export_presentation(
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    print(f"Failed to get PPTX model: {error_text}")
+                    print(f"FAILED TO GET PPTX MODEL FROM ARTIST. Status: {response.status}, Error: {error_text}")
                     raise HTTPException(
                         status_code=500,
-                        detail="Failed to convert presentation to PPTX model",
+                        detail=f"Failed to convert presentation to PPTX model: {error_text[:200]}",
                     )
                 pptx_model_data = await response.json()
 
@@ -67,5 +67,5 @@ async def export_presentation(
 
         return PresentationAndPath(
             presentation_id=presentation.id,
-            path=response_json["path"],
+            path=response_json.get("path") or "",
         )

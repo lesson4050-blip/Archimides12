@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import puppeteer from "puppeteer";
 
 export async function GET(request: Request) {
@@ -9,79 +11,49 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing group name" }, { status: 400 });
   }
 
+  if (groupName === "general") {
+    try {
+      const cachePath = path.join(process.cwd(), "public", "layouts_general.json");
+      if (fs.existsSync(cachePath)) {
+        const cacheData = fs.readFileSync(cachePath, "utf-8");
+        return NextResponse.json(JSON.parse(cacheData));
+      }
+    } catch (err) {
+      console.error("[API/Layout] Cache error:", err);
+    }
+  }
+
   const port = process.env.PORT || "3005";
-  const engineUrl = process.env.NEXT_PUBLIC_FAST_API || process.env.NEXT_PUBLIC_SERVER_URL || "http://127.0.0.1:5051";
-  const schemaPageUrl = `http://127.0.0.1:${port}/schema?group=${encodeURIComponent(
-    groupName
-  )}&fastapiUrl=${encodeURIComponent(engineUrl)}`;
+  const engineUrl = process.env.NEXT_PUBLIC_FAST_API || "http://127.0.0.1:5051";
+  const schemaPageUrl = `http://127.0.0.1:${port}/schema?group=${encodeURIComponent(groupName)}&fastapiUrl=${encodeURIComponent(engineUrl)}`;
 
   let browser;
   try {
     browser = await puppeteer.launch({
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-web-security",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
-        "--disable-features=TranslateUI",
-        "--disable-ipc-flooding-protection",
-      ],
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
     });
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720 });
-    page.setDefaultNavigationTimeout(300000);
-    page.setDefaultTimeout(300000);
-    await page.goto(schemaPageUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 300000,
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) req.abort();
+      else req.continue();
     });
-
-    await page.waitForSelector("[data-layouts]", { timeout: 300000 });
-    await page.waitForSelector("[data-settings]", { timeout: 300000 });
-
-    const { dataLayouts, dataGroupSettings } = await page.$eval(
-      "[data-layouts]",
-      (el) => ({
-        dataLayouts: el.getAttribute("data-layouts"),
-        dataGroupSettings: el.getAttribute("data-settings"),
-      })
-    );
-
-    let slides, groupSettings;
-    try {
-      slides = JSON.parse(dataLayouts || "[]");
-    } catch (e) {
-      slides = [];
-    }
-    try {
-      groupSettings = JSON.parse(dataGroupSettings || "null");
-    } catch (e) {
-      groupSettings = null;
-    }
-
-    const response = {
+    await page.goto(schemaPageUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForSelector("[data-layouts]", { timeout: 15000 });
+    const result = await page.evaluate(() => ({
+      dataLayouts: document.querySelector("[data-layouts]")?.getAttribute("data-layouts") || "[]",
+      dataSettings: document.querySelector("[data-settings]")?.getAttribute("data-settings") || "null"
+    }));
+    const slides = JSON.parse(result.dataLayouts);
+    return NextResponse.json({
       name: groupName,
-      ordered: groupSettings?.ordered ?? false,
-      slides: slides.map((slide: any) => ({
-        id: slide.id,
-        name: slide.name,
-        description: slide.description,
-        json_schema: slide.json_schema,
-      })),
-    };
-
-    return NextResponse.json(response);
+      ordered: JSON.parse(result.dataSettings)?.ordered ?? false,
+      slides: slides.map((s: any) => ({ id: s.id, name: s.name, description: s.description, json_schema: s.json_schema }))
+    });
   } catch (err) {
-    return NextResponse.json(
-      { error: "Failed to fetch or parse client page" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed" }, { status: 500 });
   } finally {
     if (browser) await browser.close();
   }

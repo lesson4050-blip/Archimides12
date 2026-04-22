@@ -1,0 +1,257 @@
+{
+  "name": "general",
+  "ordered": false,
+  "slides": [
+    {
+      "id": "general:general-intro-slide",
+      "name": "Intro Slide",
+      "description": "A clean slide layout with title, description text, presenter info, and a supporting image.",
+      "json_schema": {
+        "title": "Intro Slide",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Main title of the slide" },
+          "description": { "type": "string", "description": "Main description text content" },
+          "presenterName": { "type": "string", "description": "Name of the presenter" },
+          "presentationDate": { "type": "string", "description": "Date of the presentation" },
+          "image": {
+            "type": "object",
+            "properties": {
+              "__image_url__": { "type": "string" },
+              "__image_prompt__": { "type": "string" }
+            }
+          }
+        },
+        "required": ["title", "description", "presenterName", "presentationDate"]
+      }
+    },
+    {
+      "id": "general:basic-info-slide",
+      "name": "Basic Info",
+      "description": "A clean slide layout with title, description text, and a supporting image.",
+      "json_schema": {
+        "title": "Basic Info",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Main title of the slide" },
+          "description": { "type": "string", "description": "Main description text content" },
+          "image": {
+            "type": "object",
+            "properties": {
+              "__image_url__": { "type": "string" },
+              "__image_prompt__": { "type": "string" }
+            }
+          }
+        },
+        "required": ["title", "description"]
+      }
+    },
+    {
+      "id": "general:bullet-icons-only-slide",
+      "name": "Bullet Icons Only",
+      "description": "A slide layout with title, grid of bullet points (title and description) with icons, and a supporting image.",
+      "json_schema": {
+        "title": "Bullet Icons Only",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "image": { "type": "object", "properties": { "__image_url__": { "type": "string" }, "__image_prompt__": { "type": "string" } } },
+          "bulletPoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "icon": { "type": "object", "properties": { "__icon_url__": { "type": "string" }, "__icon_query__": { "type": "string" } } }
+              }
+            }
+          }
+        },
+        "required": ["title", "bulletPoints"]
+      }
+    },
+    {
+      "id": "general:bullet-with-icons-slide",
+      "name": "Bullet with Icons",
+      "description": "A bullets style slide with main content, supporting image, and bullet points with icons and descriptions.",
+      "json_schema": {
+        "title": "Bullet with Icons",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "image": { "type": "object", "properties": { "__image_url__": { "type": "string" }, "__image_prompt__": { "type": "string" } } },
+          "bulletPoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "description": { "type": "string" },
+                "icon": { "type": "object", "properties": { "__icon_url__": { "type": "string" }, "__icon_query__": { "type": "string" } } }
+              }
+            }
+          }
+        },
+        "required": ["title", "description", "bulletPoints"]
+      }
+    },
+    {
+      "id": "general:metrics-slide",
+      "name": "Metrics",
+      "description": "A slide layout for showcasing key business metrics with large numbers and descriptive text boxes.",
+      "json_schema": {
+        "title": "Metrics",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "string" },
+                "value": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["title", "metrics"]
+      }
+    },
+    {
+      "id": "general:metrics-with-image-slide",
+      "name": "Metrics with Image",
+      "description": "A slide layout with supporting image on the left and title, description, and metrics grid on the right.",
+      "json_schema": {
+        "title": "Metrics with Image",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "image": { "type": "object", "properties": { "__image_url__": { "type": "string" }, "__image_prompt__": { "type": "string" } } },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": { "type": "string" },
+                "value": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["title", "description", "metrics"]
+      }
+    },
+    {
+      "id": "general:numbered-bullets-slide",
+      "name": "Numbered Bullets",
+      "description": "A slide layout with large title, supporting image, and numbered bullet points with descriptions.",
+      "json_schema": {
+        "title": "Numbered Bullets",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "image": { "type": "object", "properties": { "__image_url__": { "type": "string" }, "__image_prompt__": { "type": "string" } } },
+          "bulletPoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["title", "bulletPoints"]
+      }
+    },
+    {
+      "id": "general:quote-slide",
+      "name": "Quote",
+      "description": "A slide layout with a heading, inspirational quote, and background image.",
+      "json_schema": {
+        "title": "Quote",
+        "type": "object",
+        "properties": {
+          "heading": { "type": "string" },
+          "quote": { "type": "string" },
+          "image": { "type": "object", "properties": { "__image_url__": { "type": "string" }, "__image_prompt__": { "type": "string" } } }
+        },
+        "required": ["heading", "quote"]
+      }
+    },
+    {
+      "id": "general:table-info-slide",
+      "name": "Table with Info",
+      "description": "A slide layout with a title at the top, structured table in the middle, and descriptive text at the bottom.",
+      "json_schema": {
+        "title": "Table with Info",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "tableData": {
+            "type": "object",
+            "properties": {
+              "headers": { "type": "array", "items": { "type": "string" } },
+              "rows": { "type": "array", "items": { "type": "array", "items": { "type": "string" } } }
+            }
+          }
+        },
+        "required": ["title", "tableData"]
+      }
+    },
+    {
+      "id": "general:table-of-contents-slide",
+      "name": "Table of Contents",
+      "description": "A professional table of contents layout with numbered sections.",
+      "json_schema": {
+        "title": "Table of Contents",
+        "type": "object",
+        "properties": {
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": { "type": "number" },
+                "title": { "type": "string" },
+                "pageNumber": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["sections"]
+      }
+    },
+    {
+      "id": "general:team-slide",
+      "name": "Team Slide",
+      "description": "A slide layout showcasing team members with photos, names, positions, and descriptions.",
+      "json_schema": {
+        "title": "Team Slide",
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "position": { "type": "string" },
+                "description": { "type": "string" },
+                "image": { "type": "object", "properties": { "__image_url__": { "type": "string" }, "__image_prompt__": { "type": "string" } } }
+              }
+            }
+          }
+        },
+        "required": ["title", "members"]
+      }
+    }
+  ]
+}
