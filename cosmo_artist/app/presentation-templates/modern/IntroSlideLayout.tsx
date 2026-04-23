@@ -45,87 +45,104 @@ interface IntroSlideLayoutProps {
 const IntroPitchDeckSlide: React.FC<IntroSlideLayoutProps> = ({
   data: slideData,
 }) => {
-
   return (
-    <>
-      {/* Montserrat Font */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
-      <div
-        className="w-full max-w-[1280px] aspect-video mx-auto relative overflow-hidden"
-        style={{
-          fontFamily: "var(--font-main, sans-serif)",
-          backgroundColor: 'var(--bg-primary, #FFFFFF)',
-          color: 'var(--text-primary, #111827)',
-        }}
-      >
-        {/* Background Decorative Element */}
-        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full opacity-10 blur-[120px]" style={{ backgroundColor: 'var(--accent-primary, #1E4CD9)' }}></div>
+    <div
+      className="w-full h-full aspect-video relative overflow-hidden flex"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: 'var(--bg-primary, #000)',
+        color: 'var(--text-primary, #FFF)',
+      }}
+    >
+      {/* Dynamic Background Glow */}
+      <div 
+        className="absolute -top-1/4 -right-1/4 w-full h-full rounded-full opacity-20 blur-[150px] animate-pulse" 
+        style={{ backgroundColor: 'var(--accent-primary, #6366f1)' }}
+      ></div>
 
-        {/* Top Header */}
-        {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-8 z-10">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />}
-                {(slideData as any)?.__companyName__ && <span className="text-lg font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  {(slideData as any)?.__companyName__ || 'Company Name'}
-                </span>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content Area */}
-        <div
-          className="absolute left-20 right-[45%] top-[55%] -translate-y-1/2 z-10"
-        >
-          {slideData?.title && (
-            <div className="relative mb-8">
-              <h1
-                className="text-7xl font-bold editorial-title"
-                style={{ color: 'var(--text-primary)' }}
-                id="pitchdeck-title"
-              >
-                {slideData?.title}
-              </h1>
-              <div className="w-24 h-1 mt-4" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
-            </div>
+      {/* Left Sidebar - Title & Brand */}
+      <div className="relative z-20 w-[60%] h-full flex flex-col justify-between p-16 lg:p-24">
+        {/* Brand/Logo Section */}
+        <div className="flex items-center gap-4">
+          {(slideData as any)?._logo_url__ && (
+            <img 
+              src={(slideData as any)?._logo_url__} 
+              alt="logo" 
+              className="w-10 h-10 object-contain filter brightness-0 invert" 
+            />
           )}
-          <p className="text-xl leading-relaxed opacity-80 max-w-xl" style={{ color: 'var(--text-primary)' }}>
-            {slideData?.description}
-          </p>
-          
-          {slideData?.introCard?.enabled && (
-            <div className="mt-12 glass-card rounded-2xl p-6 shadow-xl flex items-center gap-6 max-w-md">
-              <div className="w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shadow-inner" style={{ backgroundColor: 'var(--accent-primary)', color: '#FFFFFF' }}>
-                {(slideData?.introCard?.name || "").split(" ").map(p => p.charAt(0)).join("").slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex flex-col">
-                <div className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{slideData?.introCard?.name}</div>
-                <div className="text-sm opacity-60" style={{ color: 'var(--text-primary)' }}>{slideData?.introCard?.date}</div>
-              </div>
-            </div>
-          )}
+          <span className="text-2xl font-black tracking-tighter premium-gradient-text">
+            {(slideData as any)?.__companyName__ || 'COSMO'}
+          </span>
         </div>
 
-        {/* Right Hero Image Section */}
-        {slideData?.image && slideData?.image?.__image_url__ && (
-          <div className="absolute top-0 bottom-0 right-0 w-[42%] z-0">
-            <div className="absolute inset-0 z-10" style={{ background: 'linear-gradient(to right, var(--bg-primary) 0%, transparent 40%)' }}></div>
-            <img
-              src={slideData?.image?.__image_url__}
-              alt={slideData?.image?.__image_prompt__ || slideData?.title || "intro-image"}
-              className="w-full h-full object-cover"
-              crossOrigin="anonymous"
-              referrerPolicy="no-referrer"
-            />
+        {/* Hero Title - Aggressive Editorial Style */}
+        <div className="flex flex-col gap-6">
+          <div className="relative">
+             <h1
+              className="text-[8rem] lg:text-[10rem] font-black leading-[0.8] editorial-title select-none opacity-10 absolute -left-12 -top-12 pointer-events-none"
+            >
+              {slideData?.title?.split(" ")[0]}
+            </h1>
+            <h1
+              className="text-8xl lg:text-9xl font-black leading-[0.85] editorial-title relative z-10"
+              style={{ color: 'var(--text-primary)' }}
+              id="pitchdeck-title"
+            >
+              {slideData?.title}
+            </h1>
+          </div>
+          <p className="text-xl lg:text-2xl font-light leading-relaxed opacity-60 max-w-lg mt-4">
+            {slideData?.description}
+          </p>
+        </div>
+
+        {/* Contact/Date Card */}
+        {slideData?.introCard?.enabled && (
+          <div className="glass-card rounded-xl p-6 flex items-center gap-5 max-w-sm">
+            <div 
+              className="w-14 h-14 rounded-lg flex items-center justify-center text-xl font-bold shadow-lg" 
+              style={{ backgroundColor: 'var(--accent-primary)', color: '#FFF' }}
+            >
+              {(slideData?.introCard?.name || "A").charAt(0).toUpperCase()}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                {slideData?.introCard?.name}
+              </span>
+              <span className="text-sm opacity-50" style={{ color: 'var(--text-primary)' }}>
+                {slideData?.introCard?.date}
+              </span>
+            </div>
           </div>
         )}
       </div>
-    </>
+
+      {/* Right Section - Hero Visual */}
+      <div className="relative w-[40%] h-full overflow-hidden">
+        {/* Cinematic Gradient Mask */}
+        <div 
+          className="absolute inset-0 z-10" 
+          style={{ 
+            background: 'linear-gradient(to right, var(--bg-primary) 0%, rgba(0,0,0,0) 30%), linear-gradient(to top, var(--bg-primary) 0%, transparent 20%)' 
+          }}
+        ></div>
+        
+        {slideData?.image?.__image_url__ ? (
+          <img
+            src={slideData?.image?.__image_url__}
+            alt={slideData?.image?.__image_prompt__ || "Hero"}
+            className="w-full h-full object-cover scale-110 hover:scale-100 transition-transform duration-[3s] ease-out"
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="w-full h-full bg-neutral-900 flex items-center justify-center">
+            <div className="w-24 h-24 rounded-full border-2 border-dashed border-neutral-700 animate-spin"></div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

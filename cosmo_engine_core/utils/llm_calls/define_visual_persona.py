@@ -8,16 +8,16 @@ from utils.safe_log import DEEP_LOGGER
 
 class VisualPersonaModel(BaseModel):
     theme_category: str = Field(
-        description="The aesthetic category (e.g., 'Modern Tech', 'Academic Strict', 'Creative Portfolio', 'Industrial Brutalism', 'Minimalist Elegance')"
+        description="The aesthetic category (e.g., 'Modern Tech', 'Luxury Editorial', 'Industrial Brutalism', 'Minimalist Elegance', 'Cyber Obsidian')"
     )
     curated_palette: str = Field(
-        description="Select ONE curated palette name based on the theme: 'midnight_glass', 'cyber_neon', 'clean_editorial', 'warm_minimal', 'slate_professional'"
+        description="Select ONE curated palette name based on the theme: 'midnight_glass', 'midnight_obsidian', 'clean_editorial', 'warm_minimal', 'industrial_brutalist', 'arctic_minimal'"
     )
     image_style: str = Field(
-        description="Guidance for Pexels image search style to ensure cohesion (e.g., '3d abstract render', 'high contrast macro photography', 'minimalist architecture', 'cinematic product shot')"
+        description="Guidance for Pexels image search style to ensure cohesion (e.g., '3d abstract obsidian render', 'cinematic architectural photography', 'high-fashion editorial shot', 'grainy industrial macro')"
     )
     typography_mood: str = Field(
-        description="The mood of the fonts (e.g., 'sans-serif bold', 'classic serif', 'monospace technical')"
+        description="The mood of the fonts (e.g., 'aggressive sans-serif', 'refined elegant serif', 'industrial monospace')"
     )
 
 def get_persona_messages(
@@ -28,25 +28,32 @@ def get_persona_messages(
     return [
         LLMSystemMessage(
             content=f"""
-                You are an elite Art Director and UI/UX Designer.
-                Your task is to analyze the presentation context and define a "Visual Persona".
+                You are a World-Class Creative Director from a top-tier design agency (like Pentagram or Huge).
+                Your task is to define a "Visual Persona" for a pitch deck that must LOOK EXPENSIVE and ELITE.
                 
-                # Style Guidelines:
-                - For high-end professional, academic, or corporate topics, prefer 'clean_editorial' (light) to ensure maximum readability and a premium "agency" feel.
-                - Only use 'midnight_glass' or 'cyber_neon' if the topic is explicitly about futuristic technology, AI, gaming, or night-life.
-                - Avoid generic corporate styles; aim for a "Gemma/Gamma.app" premium aesthetic.
+                # DESIGN PHILOSOPHY:
+                - AVOID generic corporate blue.
+                - EMBRACE "The New Luxury": high contrast, intentional negative space, and bold typography.
+                - For high-stakes tech/AI/Finance: Use 'midnight_obsidian' (Black & Gold) or 'midnight_glass' (Deep Navy).
+                - For Innovation/Architecture/Design: Use 'clean_editorial' (Pure White) or 'industrial_brutalist' (Raw & Bold).
+                - For Health/Lifestyle/Nature: Use 'warm_minimal' (Beige/Cream) or 'arctic_minimal' (Ice Blue).
 
-                # Curated Palettes available:
-                - 'clean_editorial': Pure white background, high contrast black text, elegant spacing (The default for professional depth).
-                - 'midnight_glass': Deep dark blues/blacks with vibrant glassmorphism (Use for AI/Future Tech).
-                - 'slate_professional': Light gray backgrounds with deep navy accents (Traditional but modern).
-                - 'warm_minimal': Cream/beige backgrounds, very soft and human.
+                # Curated Palettes:
+                - 'midnight_obsidian': Pure Black background, Gold accents, White text. Ultimate luxury.
+                - 'midnight_glass': Deepest Navy, Indigo glow, Frosted glass effects. High-end Tech.
+                - 'clean_editorial': Pure white, Swiss typography, Black accents. Professional & Sharp.
+                - 'industrial_brutalist': Dark gray/black, Safety Orange accents, Monospace fonts. Raw & Powerful.
+                - 'arctic_minimal': Soft cool grays, Sky Blue accents, airy and fresh.
+                - 'warm_minimal': Cream/Bone background, Deep Brown text. Human & Soft.
 
-                User Instructions (prioritize these): {instructions or "None"}
+                # Image Direction:
+                Be extremely specific. Instead of "business meeting", use "low-angle cinematic shot of a brutalist concrete building with sharp shadows".
+
+                User Instructions (CRITICAL): {instructions or "None"}
             """
         ),
         LLMUserMessage(
-            content=f"Title: {title}\n\nContent/Topic Summary:\n{content[:1000]}",
+            content=f"TITLE OF PRESENTATION: {title}\n\nCONTENT ANALYSIS:\n{content[:1500]}",
         ),
     ]
 

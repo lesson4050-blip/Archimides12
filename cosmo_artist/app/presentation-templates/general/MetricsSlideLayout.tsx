@@ -1,12 +1,14 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import * as z from "zod";
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 
 export const layoutId = 'metrics-slide'
 export const layoutName = 'Metrics'
-export const layoutDescription = 'A slide layout for showcasing key business metrics with large numbers and descriptive text boxes. This should only be used with metrics and numbers.'
+export const layoutDescription = 'A premium slide layout for showcasing key business metrics with large numbers and descriptive text boxes.'
 
 const metricsSlideSchema = z.object({
-    title: z.string().min(3).max(100).default('Company Traction').meta({
+    title: z.string().min(3).max(100).default('Key Performance Indicators').meta({
         description: "Main title of the slide",
     }),
     metrics: z.array(z.object({
@@ -19,21 +21,21 @@ const metricsSlideSchema = z.object({
         description: z.string().min(10).max(150).meta({
             description: "Detailed description of the metric. Explanation of the metric."
         }),
-    })).min(2).max(3).default([
+    })).min(1).max(4).default([
         {
             value: '150+',
-            label: 'Clients Onboarded',
-            description: 'Larana Inc. has successfully built a diverse client base, gaining trust across industries.'
+            label: 'Global Clients',
+            description: 'A diverse network of industry leaders trusting our ecosystem for mission-critical operations.'
         },
         {
-            value: '200+',
-            label: 'projects completed.',
-            description: 'Delivering over 200 projects, Larana Inc. consistently meets evolving client needs.'
+            value: '99.9%',
+            label: 'System Uptime',
+            description: 'Unmatched reliability powered by our decentralized architecture and predictive maintenance.'
         },
         {
-            value: '95%',
-            label: 'client satisfaction.',
-            description: 'With a strong focus on customer success, Larana Inc. has a 95% satisfaction rate.'
+            value: '2.4s',
+            label: 'Avg. Latency',
+            description: 'Industry-leading performance speeds that redefine the boundaries of real-time interaction.'
         }
     ]).meta({
         description: "List of key business metrics to display",
@@ -49,123 +51,135 @@ interface MetricsSlideLayoutProps {
 }
 
 const MetricsSlideLayout: React.FC<MetricsSlideLayoutProps> = ({ data: slideData }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
     const metrics = slideData?.metrics || []
 
-    // Function to determine layout classes based on number of metrics
-    const getLayoutClasses = (count: number) => {
-        if (count === 1) {
-            return 'grid grid-cols-1'
-        } else if (count === 2) {
-            return 'grid grid-cols-1 md:grid-cols-2'
-        } else if (count === 3) {
-            return 'grid grid-cols-1 md:grid-cols-3'
-        } else if (count === 4) {
-            return 'grid grid-cols-2 md:grid-cols-4'
-        } else if (count === 5) {
-            return 'grid grid-cols-2 md:grid-cols-3'
-        } else {
-            return 'grid grid-cols-2 md:grid-cols-3'
-        }
-    }
+    useGSAP(() => {
+        const tl = gsap.timeline();
+        
+        tl.from('.slide-bg-element', {
+            opacity: 0,
+            scale: 0.8,
+            duration: 1.5,
+            ease: 'power3.out'
+        });
 
-    // Function to get individual item classes
-    const getItemClasses = (count: number) => {
-        // All items use same classes now
-        return ''
-    }
+        tl.from('.slide-title', {
+            y: 30,
+            opacity: 0,
+            duration: 1,
+            ease: 'power4.out'
+        }, "-=1");
+
+        tl.from('.metric-card', {
+            y: 50,
+            opacity: 0,
+            duration: 0.8,
+            stagger: 0.2,
+            ease: 'back.out(1.4)'
+        }, "-=0.5");
+
+        tl.from('.metric-value', {
+            scale: 0.5,
+            opacity: 0,
+            duration: 1,
+            stagger: 0.2,
+            ease: 'elastic.out(1, 0.5)'
+        }, "-=0.8");
+    }, { scope: containerRef });
 
     return (
-        <>
-            {/* Import Google Fonts */}
-            <link
-                href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-                rel="stylesheet"
-            />
+        <div
+            ref={containerRef}
+            className="w-full h-full aspect-video bg-[#050505] relative overflow-hidden flex flex-col p-12 text-white"
+            style={{
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+        >
+            {/* Base styles for premium fonts */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap');
+                
+                .glass-card {
+                    background: rgba(255, 255, 255, 0.03);
+                    backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+                }
 
-            <div
-                className="w-full rounded-sm max-w-[1280px] shadow-lg max-h-[720px] aspect-video bg-white relative z-20 mx-auto overflow-hidden flex flex-col"
-                style={{
-                    fontFamily: 'var(--heading-font-family,Poppins)',
-                    background: "var(--background-color,#ffffff)"
-                }}
-            >
-                {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-                    <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
+                .glow-text {
+                    text-shadow: 0 0 20px rgba(147, 51, 234, 0.5);
+                }
 
-                                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                                    {(slideData as any)?.__companyName__ || 'Company Name'}
-                                </span>}
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {/* Decorative Wave Patterns */}
-                <div className="absolute top-0 left-0 w-64 h-full opacity-10 overflow-hidden">
-                    <svg className="w-full h-full" viewBox="0 0 200 400" fill="none">
-                        <path d="M0 100C50 150 100 50 150 100C175 125 200 100 200 100V0H0V100Z" fill="var(--primary-color,#9333ea)" opacity="0.3" />
-                        <path d="M0 200C75 250 125 150 200 200V150C150 175 100 150 50 175L0 200Z" fill="var(--primary-color,#9333ea)" opacity="0.2" />
-                        <path d="M0 300C100 350 150 250 200 300V250C125 275 75 250 25 275L0 300Z" fill="var(--primary-color,#9333ea)" opacity="0.1" />
-                    </svg>
+                .bg-grid {
+                    background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                                    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+                    background-size: 40px 40px;
+                }
+            ` }} />
+
+            {/* Background elements */}
+            <div className="absolute inset-0 bg-grid opacity-30" />
+            
+            <div className="slide-bg-element absolute -top-20 -right-20 w-96 h-96 bg-purple-600/20 rounded-full blur-[100px]" />
+            <div className="slide-bg-element absolute -bottom-20 -left-20 w-96 h-96 bg-blue-600/20 rounded-full blur-[100px]" />
+
+            {/* Header / Logo */}
+            <div className="relative z-10 flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                    {(slideData as any)?._logo_url__ && (
+                        <img src={(slideData as any)?._logo_url__} alt="logo" className="w-10 h-10 object-contain" />
+                    )}
+                    {(slideData as any)?.__companyName__ && (
+                        <span className="text-xl font-bold tracking-tight text-white/90 uppercase">
+                            {(slideData as any)?.__companyName__}
+                        </span>
+                    )}
                 </div>
+                <div className="h-[2px] flex-1 mx-8 bg-gradient-to-r from-purple-500/50 to-transparent opacity-30" />
+            </div>
 
-                <div className="absolute top-0 right-0 w-64 h-full opacity-10 overflow-hidden transform scale-x-[-1]">
-                    <svg className="w-full h-full" viewBox="0 0 200 400" fill="none">
-                        <path d="M0 100C50 150 100 50 150 100C175 125 200 100 200 100V0H0V100Z" fill="var(--primary-color,#9333ea)" opacity="0.3" />
-                        <path d="M0 200C75 250 125 150 200 200V150C150 175 100 150 50 175L0 200Z" fill="var(--primary-color,#9333ea)" opacity="0.2" />
-                        <path d="M0 300C100 350 150 250 200 300V250C125 275 75 250 25 275L0 300Z" fill="var(--primary-color,#9333ea)" opacity="0.1" />
-                    </svg>
-                </div>
+            {/* Main Content */}
+            <div className="relative z-10 flex-1 flex flex-col justify-center max-w-6xl mx-auto w-full">
+                <h1 className="slide-title text-5xl lg:text-7xl font-extrabold mb-16 tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-white/60" style={{ fontFamily: 'Outfit' }}>
+                    {slideData?.title}
+                </h1>
 
-
-
-                {/* Main Content */}
-                <div className="relative z-10 px-8 sm:px-12 lg:px-20 pt-10 pb-12 flex-1 flex flex-col justify-center">
-                    <div className="space-y-12">
-                        {/* Title */}
-                        <div className="text-center">
-                            <h1 style={{ color: "var(--background-text,#111827)" }} className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900">
-                                {slideData?.title || 'Company Traction'}
-                            </h1>
-                        </div>
-
-                        {/* Metrics Section */}
-                        <div className="flex justify-center">
-                            {/* Metrics Layout - Each metric grouped vertically */}
-                            <div className={`${getLayoutClasses(metrics.length)} gap-6 lg:gap-8 place-content-center place-items-center`}>
-                                {metrics.map((metric, index) => (
-                                    <div key={index} className={`text-center space-y-4 ${getItemClasses(metrics.length)}`}>
-                                        {/* Label */}
-                                        <div className="text-sm text-gray-600 font-medium" style={{ color: "var(--background-text,#ffffff)" }}>
-                                            {metric.label}
-                                        </div>
-
-                                        {/* Large Metric Value */}
-                                        <div style={{ color: "var(--primary-color,#9333ea)" }} className="text-4xl sm:text-5xl lg:text-6xl font-bold text-purple-600">
-                                            {metric.value}
-                                        </div>
-
-                                        {/* Description Box */}
-                                        <div
-                                            className="bg-purple-50 rounded-lg p-4 lg:p-5 text-center mt-4"
-                                            style={{ background: "var(--primary-color,#9333ea)" }}
-
-                                        >
-                                            <p style={{ color: "var(--primary-text,#ffffff)" }} className="text-xs sm:text-sm text-gray-700 leading-relaxed">
-                                                {metric.description}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
+                <div className={`grid gap-8 ${
+                    metrics.length === 1 ? 'grid-cols-1' :
+                    metrics.length === 2 ? 'grid-cols-2' :
+                    'grid-cols-3'
+                }`}>
+                    {metrics.map((metric, index) => (
+                        <div key={index} className="metric-card glass-card rounded-2xl p-8 flex flex-col relative group transition-all hover:bg-white/[0.05]">
+                            {/* Decorative Corner */}
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-purple-500/30 rounded-tl-2xl" />
+                            
+                            <div className="mb-6">
+                                <span className="text-sm font-semibold uppercase tracking-[0.2em] text-purple-400 opacity-80">
+                                    {metric.label}
+                                </span>
                             </div>
+
+                            <div className="metric-value text-6xl lg:text-7xl font-extrabold mb-6 glow-text tracking-tighter" style={{ fontFamily: 'Outfit' }}>
+                                {metric.value}
+                            </div>
+
+                            <p className="text-lg text-white/60 leading-relaxed font-medium">
+                                {metric.description}
+                            </p>
                         </div>
-                    </div>
+                    ))}
                 </div>
             </div>
-        </>
+
+            {/* Footer decoration */}
+            <div className="absolute bottom-12 right-12 flex items-center gap-4 opacity-40">
+                <div className="w-12 h-[1px] bg-white/30" />
+                <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Confidential</span>
+            </div>
+        </div>
     )
 }
 
-export default MetricsSlideLayout 
+export default MetricsSlideLayout

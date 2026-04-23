@@ -524,14 +524,18 @@ async def generate_presentation_handler(
     # If async_status_id is provided, we create a fresh session for the background task
     async with async_session_maker() as sql_session:
         try:
+            from utils.get_env import get_app_data_directory_env
+            
             # Re-fetch async_status within this session if needed
             async_status = None
             if async_status_id:
                 stmt = select(AsyncPresentationGenerationTaskModel).where(AsyncPresentationGenerationTaskModel.id == async_status_id)
                 async_status = (await sql_session.execute(stmt)).scalar_one_or_none()
+            
             # Initialize deep logging for this generation task
             app_data_dir = get_app_data_directory_env() or "data"
             log_dir = os.path.join(app_data_dir, "logs")
+            os.makedirs(log_dir, exist_ok=True)
             log_file_path = os.path.abspath(os.path.join(log_dir, f"gen_{presentation_id}.log"))
             
             DEEP_LOGGER.setup(log_file_path)

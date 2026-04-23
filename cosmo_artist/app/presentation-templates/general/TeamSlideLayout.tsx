@@ -1,10 +1,12 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import * as z from "zod";
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { ImageSchema } from '../defaultSchemes';
 
 export const layoutId = 'team-slide'
 export const layoutName = 'Team Slide'
-export const layoutDescription = 'A slide layout showcasing team members with photos, names, positions, and descriptions alongside company information.'
+export const layoutDescription = 'A premium slide layout showcasing team members with a high-end editorial aesthetic.'
 
 const teamMemberSchema = z.object({
     name: z.string().min(2).max(50).meta({
@@ -20,47 +22,38 @@ const teamMemberSchema = z.object({
 });
 
 const teamSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Our Team Members').meta({
+    title: z.string().min(3).max(40).default('The Brain Trust').meta({
         description: "Main title of the slide",
     }),
-    companyDescription: z.string().min(10).max(150).default('Ginyard International Co. is a leading provider of innovative digital solutions tailored for businesses. Our mission is to empower organizations to achieve their goals through cutting-edge technology and strategic partnerships.').meta({
+    companyDescription: z.string().min(10).max(150).default('Our team brings together decades of collective experience in engineering, design, and strategic operations to solve the world\'s most complex challenges.').meta({
         description: "Company description or team introduction text",
     }),
-    teamMembers: z.array(teamMemberSchema).min(2).max(4).default([
+    teamMembers: z.array(teamMemberSchema).min(1).max(4).default([
         {
-            name: 'Juliana Silva',
-            position: 'CEO',
-            description: 'Strategic leader with 15+ years experience in digital transformation and business growth.',
+            name: 'Alexander Vance',
+            position: 'Chief Architect',
+            description: 'Visionary engineer behind our core neural processing engine.',
             image: {
-                __image_url__: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-                __image_prompt__: 'Professional businesswoman CEO headshot'
+                __image_url__: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+                __image_prompt__: 'Professional male architect headshot'
             }
         },
         {
-            name: 'Daniel Gallego',
-            position: 'CTO',
-            description: 'Technology expert specializing in scalable solutions and innovative software architecture.',
+            name: 'Elena Rossi',
+            position: 'Head of Operations',
+            description: 'Scaling global infrastructure with precision and strategic foresight.',
             image: {
-                __image_url__: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-                __image_prompt__: 'Professional businessman CTO headshot'
+                __image_url__: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=400&q=80',
+                __image_prompt__: 'Professional female executive headshot'
             }
         },
         {
-            name: 'Ketut Susilo',
-            position: 'COO',
-            description: 'Operations leader focused on efficiency, process optimization, and team development.',
+            name: 'Marcus Thorne',
+            position: 'Strategy Director',
+            description: 'Bridging the gap between complex technology and market dominance.',
             image: {
-                __image_url__: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-                __image_prompt__: 'Professional businessman COO headshot'
-            }
-        },
-        {
-            name: 'Anna Robertson',
-            position: 'CMO',
-            description: 'Marketing strategist with expertise in brand development and customer engagement.',
-            image: {
-                __image_url__: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
-                __image_prompt__: 'Professional businesswoman CMO headshot'
+                __image_url__: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80',
+                __image_prompt__: 'Professional male strategist headshot'
             }
         }
     ]).meta({
@@ -77,106 +70,129 @@ interface TeamSlideLayoutProps {
 }
 
 const TeamSlideLayout: React.FC<TeamSlideLayoutProps> = ({ data: slideData }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
     const teamMembers = slideData?.teamMembers || []
 
-    // Function to determine grid classes based on number of team members
-    const getGridClasses = (count: number) => {
-        if (count <= 2) {
-            return 'grid-cols-1 gap-6'
-        } else if (count <= 4) {
-            return 'grid-cols-2 gap-6'
-        } else {
-            return 'grid-cols-2 lg:grid-cols-3 gap-4'
-        }
-    }
+    useGSAP(() => {
+        const tl = gsap.timeline();
+        
+        tl.from('.team-header', {
+            y: -30,
+            opacity: 0,
+            duration: 1,
+            ease: 'power3.out'
+        });
+
+        tl.from('.member-card', {
+            y: 50,
+            opacity: 0,
+            duration: 0.8,
+            stagger: 0.15,
+            ease: 'power4.out'
+        }, "-=0.5");
+
+        tl.from('.member-image-container', {
+            scale: 0.9,
+            opacity: 0,
+            duration: 1,
+            stagger: 0.15,
+            ease: 'back.out(1.7)'
+        }, "-=0.8");
+    }, { scope: containerRef });
 
     return (
-        <> <link
-            href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
+        <div
+            ref={containerRef}
+            className="w-full h-full aspect-video bg-[#080808] relative overflow-hidden flex flex-col p-16 text-white"
+            style={{
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+        >
+            <style dangerouslySetInnerHTML={{ __html: `
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap');
+                
+                .glass-card {
+                    background: rgba(255, 255, 255, 0.02);
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                }
 
+                .image-mask {
+                    clip-path: polygon(0 0, 100% 0, 100% 85%, 85% 100%, 0 100%);
+                }
+                
+                .accent-glow {
+                    filter: drop-shadow(0 0 15px rgba(147, 51, 234, 0.3));
+                }
+            ` }} />
 
-            <div
-                className="w-full rounded-sm max-w-[1280px] shadow-lg max-h-[720px] aspect-video bg-white relative z-20 mx-auto overflow-hidden"
-                style={{
-                    fontFamily: 'var(--heading-font-family,Poppins)',
-                    background: "var(--background-color,#ffffff)"
-                }}
-            >
-                {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-                    <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
+            {/* Background elements */}
+            <div className="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-purple-900/10 to-transparent opacity-50" />
+            <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px]" />
 
-                                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                                    {(slideData as any)?.__companyName__ || 'Company Name'}
-                                </span>}
-                            </div>
-                        </div>
+            {/* Main Content */}
+            <div className="relative z-10 flex h-full gap-16">
+                {/* Left Section: Header */}
+                <div className="team-header w-1/3 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-8">
+                        {(slideData as any)?._logo_url__ && (
+                            <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
+                        )}
+                        <span className="text-xs font-bold tracking-[0.4em] uppercase text-purple-500">
+                            Elite Force
+                        </span>
                     </div>
-                )}
-                {/* Decorative Wave Pattern */}
-                <div className="absolute bottom-0 left-0 w-80 h-40 opacity-10 overflow-hidden">
-                    <svg className="w-full h-full" viewBox="0 0 300 150" fill="none">
-                        <path d="M0 75C75 50 150 100 225 75C262.5 62.5 300 75 300 75V150H0V75Z" fill="var(--primary-color,#9333ea)" opacity="0.3" />
-                        <path d="M0 100C100 125 200 75 300 100V125C225 112.5 150 125 75 112.5L0 100Z" fill="var(--primary-color,#9333ea)" opacity="0.2" />
-                    </svg>
+
+                    <h1 className="text-6xl lg:text-7xl font-extrabold mb-8 tracking-tighter leading-[0.9]" style={{ fontFamily: 'Outfit' }}>
+                        {slideData?.title}
+                    </h1>
+
+                    <div className="w-16 h-1 bg-white mb-8" />
+
+                    <p className="text-lg text-white/50 leading-relaxed font-medium italic">
+                        "{slideData?.companyDescription}"
+                    </p>
                 </div>
 
-                {/* Main Content */}
-                <div className="relative z-10 flex h-full px-8 sm:px-12 lg:px-20 pt-12 pb-8">
-                    {/* Left Section - Title and Company Description */}
-                    <div className="flex-1 flex flex-col justify-center pr-8 space-y-6">
-                        {/* Title */}
-                        <h1 style={{ color: "var(--background-text,#111827)" }} className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
-                            {slideData?.title || 'Our Team Members'}
-                        </h1>
-
-                        {/* Purple accent line */}
-                        <div style={{ background: "var(--primary-color,#9333ea)" }} className="w-20 h-1 bg-purple-600"></div>
-
-                        {/* Company Description */}
-                        <p style={{ color: "var(--background-text,#4b5563)" }} className="text-base sm:text-lg text-gray-700 leading-relaxed">
-                            {slideData?.companyDescription || 'Ginyard International Co. is a leading provider of innovative digital solutions tailored for businesses. Our mission is to empower organizations to achieve their goals through cutting-edge technology and strategic partnerships.'}
-                        </p>
-                    </div>
-
-                    {/* Right Section - Team Members Grid */}
-                    <div className="flex-1 flex items-center justify-center pl-8">
-                        <div className={`grid ${getGridClasses(teamMembers.length)} w-full max-w-2xl`}>
-                            {teamMembers.map((member, index) => (
-                                <div key={index} className="text-center space-y-3">
-                                    {/* Member Photo */}
-                                    <div className="w-32 h-32 mx-auto rounded-lg overflow-hidden shadow-md" style={{ background: "var(--card-color,#e5e7eb)" }}>
+                {/* Right Section: Grid */}
+                <div className="flex-1 flex items-center justify-center">
+                    <div className={`grid ${teamMembers.length <= 2 ? 'grid-cols-2' : 'grid-cols-2'} gap-8 w-full`}>
+                        {teamMembers.map((member, index) => (
+                            <div key={index} className="member-card glass-card rounded-2xl p-6 flex items-start gap-6 group hover:bg-white/[0.05] transition-all duration-500">
+                                <div className="member-image-container relative flex-shrink-0">
+                                    <div className="image-mask w-24 h-24 overflow-hidden bg-white/10 rounded-xl accent-glow">
                                         <img
                                             src={member.image.__image_url__ || ''}
-                                            alt={member.image.__image_prompt__ || member.name}
-                                            className="w-full h-full object-cover"
+                                            alt={member.name}
+                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                                         />
                                     </div>
-
-                                    {/* Member Info */}
-                                    <div>
-                                        <h3 style={{ color: "var(--background-text,#111827)" }} className="text-lg font-semibold text-gray-900">
-                                            {member.name}
-                                        </h3>
-                                        <p style={{ color: "var(--background-text,#4b5563)" }} className="text-sm font-medium text-gray-600 italic mb-2">
-                                            {member.position}
-                                        </p>
-                                        <p style={{ color: "var(--background-text,#4b5563)" }} className="text-xs text-gray-600 leading-relaxed px-2">
-                                            {member.description}
-                                        </p>
-                                    </div>
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-purple-500 rounded-full border-2 border-[#080808]" />
                                 </div>
-                            ))}
-                        </div>
+
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-bold tracking-tight mb-1" style={{ fontFamily: 'Outfit' }}>
+                                        {member.name}
+                                    </h3>
+                                    <p className="text-sm font-bold text-purple-400 uppercase tracking-widest mb-3 opacity-80">
+                                        {member.position}
+                                    </p>
+                                    <p className="text-xs text-white/40 leading-relaxed line-clamp-3">
+                                        {member.description}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
-        </>
+
+            {/* Footer decoration */}
+            <div className="absolute bottom-12 right-12 flex items-center gap-4 opacity-20">
+                <span className="text-[10px] uppercase tracking-[0.5em] font-black">Archimedes Protocol Active</span>
+            </div>
+        </div>
     )
 }
 
-export default TeamSlideLayout 
+export default TeamSlideLayout

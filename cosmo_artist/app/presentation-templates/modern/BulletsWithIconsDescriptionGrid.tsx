@@ -115,82 +115,98 @@ const BulletWithIconsDescriptionGridSlideLayout = ({
   data: slideData,
 }: BulletWithIconsDescriptionGridSlideLayoutProps) => {
   const sections = slideData?.sections || [];
+  
   return (
-    <>
-      {/* Import Google Fonts */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
+    <div
+      className="w-full h-full aspect-video relative z-20 mx-auto overflow-hidden flex flex-col p-16 lg:p-20"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: "var(--bg-primary, #000)",
+        color: "var(--text-primary, #FFF)",
+      }}
+    >
+      {/* Background Accent Glow */}
+      <div 
+        className="absolute top-0 right-0 w-1/2 h-1/2 bg-accent-primary opacity-5 blur-[120px] pointer-events-none"
+        style={{ backgroundColor: 'var(--accent-primary)' }}
+      ></div>
 
-      <div
-        className="w-full rounded-sm max-w-[1280px] shadow-lg  aspect-video relative z-20 mx-auto overflow-hidden border-2 border-gray-800"
-        style={{
-          fontFamily: "var(--heading-font-family,Montserrat)",
-          backgroundColor: "var(--background-color, #FFFFFF)",
-        }}
-      >
-        {/* Header */}
-        {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
+      {/* Editorial Watermark */}
+      <div className="absolute -bottom-10 -left-10 text-[15rem] font-black opacity-[0.03] select-none pointer-events-none uppercase leading-none">
+        {slideData?.title?.split(" ")[0]}
+      </div>
 
-                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                  {(slideData as any)?.__companyName__ || 'Company Name'}
-                </span>}
-              </div>
+      {/* Header / Brand */}
+      <div className="flex items-center justify-between mb-12 relative z-10">
+        <div className="flex items-center gap-3">
+          {(slideData as any)?._logo_url__ && (
+            <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain filter brightness-0 invert" />
+          )}
+          <span className="text-xl font-bold tracking-tighter opacity-80">
+            {(slideData as any)?.__companyName__ || 'COSMO'}
+          </span>
+        </div>
+        <div className="h-[1px] flex-grow mx-8 bg-current opacity-10"></div>
+        <div className="text-sm font-mono opacity-40">SECTION 02 // ARCHIMEDES</div>
+      </div>
+
+      {/* Content Layout */}
+      <div className="flex flex-1 gap-16 items-start relative z-10">
+        {/* Left: Title and Main Description */}
+        <div className="w-[40%] flex flex-col">
+          <h1 className="text-6xl lg:text-7xl font-black mb-8 leading-[0.9] editorial-title premium-gradient-text uppercase">
+            {slideData?.title}
+          </h1>
+          <p className="text-lg lg:text-xl leading-relaxed opacity-60 font-light">
+            {slideData?.mainDescription}
+          </p>
+          
+          <div className="mt-auto pt-12">
+            <div className="flex gap-2">
+              <div className="w-12 h-[2px]" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
+              <div className="w-4 h-[2px] opacity-30" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Main Content */}
-        <div className="flex justify-center items-center h-full px-16 pb-16 gap-4">
-          {/* Title and Description */}
-          <div className="w-full flex flex-col items-start mb-4">
-            <h1 className="text-5xl font-bold mb-8 leading-tight text-left" style={{ color: 'var(--background-text, #1E4CD9)' }}>
-              {slideData?.title}
-            </h1>
-            <p className="text-lg leading-relaxed font-normal mb-12 max-w-lg text-left" style={{ color: 'var(--background-text, #334155)' }}>
-              {slideData?.mainDescription}
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 w-full">
-            {sections.map((section, idx) => (
-              <div
-                key={idx}
-                className="flex flex-col items-center text-center rounded-lg shadow px-3 py-4 "
-                style={{ backgroundColor: 'var(--card-color, #F5F8FE)' }}
-              >
-                <div className="mb-2">
+        {/* Right: Bento Grid of Sections */}
+        <div className="w-[60%] grid grid-cols-2 gap-6 h-full content-start">
+          {sections.map((section, idx) => (
+            <div
+              key={idx}
+              className="glass-card rounded-2xl p-6 lg:p-8 flex flex-col gap-4 group hover:scale-[1.02] transition-all duration-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="p-3 rounded-xl bg-white/5 group-hover:bg-accent-primary/20 transition-colors duration-500">
                   {section?.icon?.__icon_url__ && (
                     <RemoteSvgIcon
                       url={section.icon.__icon_url__}
                       strokeColor={"currentColor"}
-                      className="w-12 h-12 mb-2"
-                      color="var(--primary-color, #1E4CD9)"
+                      className="w-8 h-8"
+                      color="var(--accent-primary, #6366f1)"
                       title={section.icon.__icon_query__}
                     />
                   )}
                 </div>
-                <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--background-text, #234CD9)' }}>
+                <span className="text-[10px] font-mono opacity-20 group-hover:opacity-100 transition-opacity">0{idx + 1}</span>
+              </div>
+              
+              <div>
+                <h2 className="text-xl font-bold mb-2 tracking-tight group-hover:text-accent-primary transition-colors">
                   {section.title}
                 </h2>
-                <div className="w-8 h-1 mb-2" style={{ backgroundColor: 'var(--primary-color, #234CD9)' }}></div>
-                <p className="text-xs leading-snug" style={{ color: 'var(--background-text, #234CD9)' }}>
+                <p className="text-sm leading-relaxed opacity-50 group-hover:opacity-80 transition-opacity line-clamp-3">
                   {section.description}
                 </p>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-
-        {/* Bottom Border */}
-        <div className="absolute bottom-0 left-0 right-0 h-1" style={{ backgroundColor: 'var(--primary-color, #1E4CD9)' }}></div>
       </div>
-    </>
+    </div>
   );
 };
+
+export default BulletWithIconsDescriptionGridSlideLayout;
 
 export default BulletWithIconsDescriptionGridSlideLayout;

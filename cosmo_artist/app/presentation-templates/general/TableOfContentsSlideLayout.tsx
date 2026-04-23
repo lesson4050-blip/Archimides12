@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import * as z from "zod";
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 
 export const layoutId = 'table-of-contents-slide'
 export const layoutName = 'Table of Contents'
-export const layoutDescription = 'A professional table of contents layout with numbered sections, and page references. This should be right after introduction slide if ever used.'
+export const layoutDescription = 'A premium table of contents layout with a high-end architectural aesthetic and smooth animations.'
 
 const tableOfContentsSlideSchema = z.object({
     sections: z.array(z.object({
@@ -17,16 +19,12 @@ const tableOfContentsSlideSchema = z.object({
             description: "Page number for this section"
         })
     })).default([
-        { number: 1, title: "Problem", pageNumber: "03" },
-        { number: 2, title: "Solution", pageNumber: "04" },
-        { number: 3, title: "Product Overview", pageNumber: "05" },
-        { number: 4, title: "Market Size", pageNumber: "06" },
-        { number: 5, title: "Market Validation", pageNumber: "07" },
-        { number: 6, title: "Company Traction", pageNumber: "08" },
-        { number: 7, title: "Product Performance", pageNumber: "09" },
-        { number: 8, title: "Business Model", pageNumber: "10" },
-        { number: 9, title: "Competitive Advantage", pageNumber: "11" },
-        { number: 10, title: "Team Member", pageNumber: "12" }
+        { number: 1, title: "Executive Summary", pageNumber: "03" },
+        { number: 2, title: "Market Analysis", pageNumber: "05" },
+        { number: 3, title: "The Solution", pageNumber: "08" },
+        { number: 4, title: "Technical Roadmap", pageNumber: "12" },
+        { number: 5, title: "Business Model", pageNumber: "15" },
+        { number: 6, title: "The Team", pageNumber: "18" }
     ]).meta({
         description: "List of table of contents sections",
     })
@@ -41,118 +39,119 @@ interface TableOfContentsSlideLayoutProps {
 }
 
 const TableOfContentsSlideLayout: React.FC<TableOfContentsSlideLayoutProps> = ({ data: slideData }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
     const sections = slideData?.sections || []
-    const midPoint = Math.ceil(sections.length / 2)
-    const leftSections = sections.slice(0, midPoint)
-    const rightSections = sections.slice(midPoint)
+    
+    useGSAP(() => {
+        const tl = gsap.timeline();
+        
+        tl.from('.toc-title', {
+            x: -50,
+            opacity: 0,
+            duration: 1,
+            ease: 'power4.out'
+        });
+
+        tl.from('.toc-item', {
+            x: 30,
+            opacity: 0,
+            duration: 0.6,
+            stagger: 0.1,
+            ease: 'power3.out'
+        }, "-=0.6");
+
+        tl.from('.toc-line', {
+            height: 0,
+            opacity: 0,
+            duration: 1.2,
+            ease: 'power2.inOut'
+        }, "-=1");
+    }, { scope: containerRef });
 
     return (
-        <>
-            <link
-                href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-                rel="stylesheet"
-            />
+        <div
+            ref={containerRef}
+            className="w-full h-full aspect-video bg-[#fafafa] relative overflow-hidden flex flex-col p-16 text-[#0a0a0a]"
+            style={{
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+        >
+            <style dangerouslySetInnerHTML={{ __html: `
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap');
+                
+                .glass-number {
+                    background: rgba(0, 0, 0, 0.03);
+                    border: 1px solid rgba(0, 0, 0, 0.08);
+                }
 
-            <div
-                className="w-full rounded-sm max-w-[1280px] shadow-lg px-8 sm:px-12 lg:px-20 py-8 sm:py-12 lg:py-16 max-h-[720px] aspect-video bg-white relative z-20 mx-auto"
-                style={{
-                    fontFamily: 'var(--heading-font-family,Poppins)',
-                    background: "var(--background-color,#ffffff)"
-                }}
-            >
-                {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-                    <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
+                .architectural-grid {
+                    background-image: radial-gradient(#000000 0.5px, transparent 0.5px);
+                    background-size: 30px 30px;
+                    opacity: 0.05;
+                }
+            ` }} />
 
-                                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                                    {(slideData as any)?.__companyName__ || 'Company Name'}
-                                </span>}
-                            </div>
-                        </div>
-                    </div>
-                )}
+            {/* Background elements */}
+            <div className="absolute inset-0 architectural-grid" />
+            
+            <div className="absolute top-0 right-0 w-1/3 h-full bg-[#f0f0f0] z-0" />
+            <div className="toc-line absolute left-[4.5rem] top-32 bottom-32 w-[1px] bg-black/10 z-0" />
 
-                {/* Title Section */}
-                <div className="text-center mb-8 sm:mb-12 mt-6">
-                    <h1 style={{ color: "var(--background-text,#111827)" }} className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-4">
-                        Table of Contents
-                    </h1>
-                    {/* Decorative Wave */}
-                    <div className="flex justify-center">
-                        <svg width="80" height="20" viewBox="0 0 80 20" className="text-purple-600" style={{ color: "var(--primary-color,#9333ea)" }}>
-                            <path
-                                d="M0 10 Q20 0 40 10 T80 10"
-                                stroke="currentColor"
-                                strokeWidth="3"
-                                fill="none"
-                            />
-                        </svg>
-                    </div>
+            {/* Header */}
+            <div className="relative z-10 flex justify-between items-center mb-20">
+                <div className="flex items-center gap-3">
+                    {(slideData as any)?._logo_url__ && (
+                        <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain filter grayscale" />
+                    )}
+                    {(slideData as any)?.__companyName__ && (
+                        <span className="text-sm font-bold tracking-[0.3em] uppercase opacity-40">
+                            {(slideData as any)?.__companyName__}
+                        </span>
+                    )}
                 </div>
+            </div>
 
-                {/* Content Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
-                    {/* Left Column */}
-                    <div className="space-y-4 sm:space-y-6">
-                        {leftSections.map((section) => (
-                            <div key={section.number} className="flex items-center justify-between group">
-                                <div className="flex items-center space-x-4">
-                                    {/* Number Box */}
-                                    <div style={{ background: "var(--primary-color,#9333ea)", color: "var(--primary-text,#ffffff)" }} className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg sm:text-xl group-hover:bg-purple-700 transition-colors">
-                                        {section.number}
-                                    </div>
-                                    {/* Title */}
-                                    <span style={{ color: "var(--background-text,#111827)" }} className="text-lg sm:text-xl font-medium text-gray-800 group-hover:text-purple-600 transition-colors">
-                                        {section.title}
-                                    </span>
-                                </div>
-                                {/* Page Number */}
-                                <div className="text-right">
-                                    <span style={{ color: "var(--background-text,#4b5563)" }} className="text-lg sm:text-xl text-gray-600">
-                                        {section.pageNumber}
-                                    </span>
-                                    {/* Dotted line effect */}
-                                    <div style={{ color: "var(--background-text,#4b5563)" }} className="text-gray-300 text-sm mt-1">
-                                        .....
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+            {/* Main Content */}
+            <div className="relative z-10 flex-1 flex flex-col justify-start">
+                <div className="flex gap-24">
+                    {/* Left: Title */}
+                    <div className="w-1/3">
+                        <h1 className="toc-title text-6xl lg:text-7xl font-extrabold tracking-tighter leading-[0.9]" style={{ fontFamily: 'Outfit' }}>
+                            TABLE OF<br/>CONTENTS
+                        </h1>
+                        <div className="mt-12 h-1 w-20 bg-black" />
                     </div>
 
-                    {/* Right Column */}
-                    <div className="space-y-4 sm:space-y-6">
-                        {rightSections.map((section) => (
-                            <div key={section.number} className="flex items-center justify-between group">
-                                <div className="flex items-center space-x-4">
-                                    {/* Number Box */}
-                                    <div style={{ background: "var(--primary-color,#9333ea)", color: "var(--primary-text,#ffffff)" }} className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg sm:text-xl group-hover:bg-purple-700 transition-colors">
-                                        {section.number}
-                                    </div>
-                                    {/* Title */}
-                                    <span style={{ color: "var(--background-text,#111827)" }} className="text-lg sm:text-xl font-medium text-gray-800 group-hover:text-purple-600 transition-colors">
-                                        {section.title}
-                                    </span>
+                    {/* Right: List */}
+                    <div className="flex-1 space-y-4">
+                        {sections.map((section, index) => (
+                            <div key={index} className="toc-item group flex items-center gap-12 py-4 border-b border-black/5 hover:border-black/20 transition-all cursor-default">
+                                <div className="glass-number w-14 h-14 flex items-center justify-center rounded-lg text-sm font-bold opacity-30 group-hover:opacity-100 group-hover:bg-black group-hover:text-white transition-all">
+                                    {section.number.toString().padStart(2, '0')}
                                 </div>
-                                {/* Page Number */}
-                                <div className="text-right">
-                                    <span style={{ color: "var(--background-text,#4b5563)" }} className="text-lg sm:text-xl text-gray-600">
-                                        {section.pageNumber}
-                                    </span>
-                                    {/* Dotted line effect */}
-                                    <div style={{ color: "var(--background-text,#4b5563)" }} className="text-gray-300 text-sm mt-1">
-                                        .....
-                                    </div>
+                                
+                                <div className="flex-1">
+                                    <h3 className="text-2xl font-bold tracking-tight group-hover:translate-x-2 transition-transform duration-300" style={{ fontFamily: 'Outfit' }}>
+                                        {section.title}
+                                    </h3>
+                                </div>
+
+                                <div className="text-xl font-medium opacity-20 group-hover:opacity-100">
+                                    {section.pageNumber}
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
-        </>
+
+            {/* Pagination / Footer */}
+            <div className="absolute bottom-16 left-16 flex items-center gap-6 opacity-30">
+                <span className="text-xs font-bold tracking-widest uppercase">Agenda</span>
+                <div className="w-8 h-[1px] bg-black" />
+            </div>
+        </div>
     )
 }
 
-export default TableOfContentsSlideLayout 
+export default TableOfContentsSlideLayout

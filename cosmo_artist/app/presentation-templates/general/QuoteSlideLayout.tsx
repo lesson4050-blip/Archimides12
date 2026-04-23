@@ -1,24 +1,26 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import * as z from "zod";
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import { ImageSchema } from '../defaultSchemes';
 
 export const layoutId = 'quote-slide'
 export const layoutName = 'Quote'
-export const layoutDescription = 'A slide layout with a heading, inspirational quote, and background image with overlay for text visibility.'
+export const layoutDescription = 'A high-impact slide layout for powerful quotes and mission statements.'
 
 const quoteSlideSchema = z.object({
-    heading: z.string().min(3).max(60).default('Words of Wisdom').meta({
+    heading: z.string().min(3).max(60).default('Core Philosophy').meta({
         description: "Main heading of the slide",
     }),
-    quote: z.string().min(10).max(200).default('Success is not final, failure is not fatal: it is the courage to continue that counts. The future belongs to those who believe in the beauty of their dreams.').meta({
+    quote: z.string().min(10).max(200).default('The best way to predict the future is to invent it. Innovation is the only way to stay ahead of the curve.').meta({
         description: "The main quote text content",
     }),
-    author: z.string().min(2).max(50).default('Winston Churchill').meta({
+    author: z.string().min(2).max(50).default('Alan Kay').meta({
         description: "Author of the quote",
     }),
     backgroundImage: ImageSchema.default({
-        __image_url__: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2000&q=80',
-        __image_prompt__: 'Inspirational mountain landscape with dramatic sky and clouds'
+        __image_url__: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=2000&q=80',
+        __image_prompt__: 'Deep space nebula or high-tech data background'
     }).meta({
         description: "Background image for the slide",
     })
@@ -33,103 +35,106 @@ interface QuoteSlideLayoutProps {
 }
 
 const QuoteSlideLayout: React.FC<QuoteSlideLayoutProps> = ({ data: slideData }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useGSAP(() => {
+        const tl = gsap.timeline();
+        
+        tl.from('.bg-image', {
+            scale: 1.1,
+            opacity: 0,
+            duration: 2,
+            ease: 'power2.out'
+        });
+
+        tl.from('.quote-content', {
+            y: 40,
+            opacity: 0,
+            duration: 1.2,
+            ease: 'power4.out'
+        }, "-=1.5");
+
+        tl.from('.quote-author', {
+            x: -20,
+            opacity: 0,
+            duration: 1,
+            ease: 'power3.out'
+        }, "-=0.5");
+    }, { scope: containerRef });
+
     return (
-        <>
-            {/* Import Google Fonts */}
-            <link
-                href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-                rel="stylesheet"
+        <div
+            ref={containerRef}
+            className="w-full h-full aspect-video bg-black relative overflow-hidden flex flex-col items-center justify-center text-white"
+            style={{
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+        >
+            <style dangerouslySetInnerHTML={{ __html: `
+                @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;800&family=Plus+Jakarta+Sans:wght@300;400;500;700&display=swap');
+                
+                .vignette {
+                    background: radial-gradient(circle, transparent 20%, rgba(0,0,0,0.8) 100%);
+                }
+
+                .quote-mark {
+                    font-family: 'Outfit';
+                    line-height: 1;
+                }
+            ` }} />
+
+            {/* Background Image with Overlay */}
+            <div 
+                className="bg-image absolute inset-0 w-full h-full bg-cover bg-center grayscale opacity-40"
+                style={{ backgroundImage: `url('${slideData?.backgroundImage?.__image_url__}')` }}
             />
+            <div className="absolute inset-0 vignette z-10" />
+            <div className="absolute inset-0 bg-purple-900/10 z-0" />
 
-            <div
-                className="w-full rounded-sm max-w-[1280px] shadow-lg max-h-[720px] aspect-video bg-white relative z-20 mx-auto overflow-hidden"
-                style={{
-                    fontFamily: 'var(--heading-font-family,Poppins)',
-                    background: "var(--background-color,#ffffff)"
-                }}
-            >
-                {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-                    <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-1">
-
-                                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                                    {(slideData as any)?.__companyName__ || 'Company Name'}
-                                </span>}
-                            </div>
-                        </div>
-                    </div>
+            {/* Header / Logo */}
+            <div className="absolute top-12 left-12 z-20 flex items-center gap-4">
+                {(slideData as any)?._logo_url__ && (
+                    <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
                 )}
-                {/* Background Image */}
-                <div
-                    className="absolute inset-0 w-full h-full bg-cover bg-center bg-no-repeat"
-                    style={{
-                        backgroundImage: `url('${slideData?.backgroundImage?.__image_url__ || ''}')`,
-                    }}
-                />
-
-                {/* Background Overlay - low opacity primary accent */}
-                <div
-                    className="absolute inset-0"
-                    style={{ backgroundColor: 'var(--background-color, #000000)', opacity: 0.5 }}
-                ></div>
-
-                {/* Decorative Elements */}
-                <div className="absolute top-0 left-0 w-32 h-32 bg-purple-600/20 rounded-full blur-3xl"></div>
-                <div className="absolute bottom-0 right-0 w-40 h-40 bg-purple-400/20 rounded-full blur-3xl"></div>
-                <div className="absolute top-1/2 left-1/4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
-
-                {/* Main Content */}
-                <div className="relative z-10 px-8 sm:px-12 lg:px-20 pt-14 py-12 flex-1 flex flex-col justify-center h-full">
-                    <div className="text-center space-y-8 max-w-4xl mx-auto">
-
-                        {/* Heading */}
-                        <div className="space-y-4">
-                            <h1 style={{ color: "var(--background-text,#ffffff)" }} className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight">
-                                {slideData?.heading || 'Words of Wisdom'}
-                            </h1>
-                            {/* Purple accent line */}
-                            <div style={{ background: "var(--primary-color,#9333ea)" }} className="w-20 h-1 bg-purple-400 mx-auto"></div>
-                        </div>
-
-                        {/* Quote Section */}
-                        <div className="space-y-6">
-                            {/* Quote Icon */}
-                            <div className="flex justify-center">
-                                <svg
-                                    className="w-12 h-12 text-purple-300 opacity-80" style={{ color: "var(--primary-color,#9333ea)" }}
-                                    fill="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-                                </svg>
-                            </div>
-
-                            {/* Quote Text */}
-                            <blockquote style={{ color: "var(--background-text,#ffffff)" }} className="text-xl sm:text-2xl lg:text-3xl font-medium text-white leading-relaxed italic">
-                                "{slideData?.quote || 'Success is not final, failure is not fatal: it is the courage to continue that counts. The future belongs to those who believe in the beauty of their dreams.'}"
-                            </blockquote>
-
-                            {/* Author */}
-                            <div className="flex justify-center items-center space-x-4">
-                                <div style={{ background: "var(--primary-color,#9333ea)" }} className="w-16 h-px bg-purple-300"></div>
-                                <cite className="text-base sm:text-lg text-purple-200 font-semibold not-italic"
-                                    style={{ color: "var(--background-text,#ffffff)" }}
-                                >
-                                    {slideData?.author || 'Winston Churchill'}
-                                </cite>
-                                <div style={{ background: "var(--primary-color,#9333ea)" }} className="w-16 h-px bg-purple-300"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Bottom Decorative Border uses heading color */}
-                <div className="absolute bottom-0 left-0 right-0 h-2" style={{ backgroundColor: 'var(--background-text,#111827)' }}></div>
+                <div className="w-[1px] h-4 bg-white/20" />
+                <span className="text-[10px] font-black uppercase tracking-[0.6em] text-white/40">
+                    Proprietary
+                </span>
             </div>
-        </>
+
+            {/* Main Content */}
+            <div className="quote-content relative z-20 max-w-5xl px-16 text-center">
+                <div className="quote-mark text-9xl text-purple-500/30 absolute -top-12 -left-8 select-none">
+                    “
+                </div>
+                
+                <h2 className="text-sm font-black uppercase tracking-[0.4em] text-purple-400 mb-12 opacity-80">
+                    {slideData?.heading}
+                </h2>
+
+                <blockquote className="text-4xl lg:text-6xl font-extrabold leading-[1.1] mb-12 tracking-tight" style={{ fontFamily: 'Outfit' }}>
+                    {slideData?.quote}
+                </blockquote>
+
+                <div className="quote-author flex items-center justify-center gap-6">
+                    <div className="w-12 h-[1px] bg-white/30" />
+                    <cite className="text-xl font-bold tracking-tight not-italic text-white/70">
+                        {slideData?.author}
+                    </cite>
+                    <div className="w-12 h-[1px] bg-white/30" />
+                </div>
+            </div>
+
+            {/* Footer decoration */}
+            <div className="absolute bottom-12 left-0 right-0 z-20 flex justify-center">
+                <div className="flex gap-2">
+                    <div className="w-1 h-1 bg-white/20 rounded-full" />
+                    <div className="w-1 h-1 bg-white/60 rounded-full" />
+                    <div className="w-1 h-1 bg-white/20 rounded-full" />
+                </div>
+            </div>
+        </div>
     )
 }
 
-export default QuoteSlideLayout 
+export default QuoteSlideLayout
