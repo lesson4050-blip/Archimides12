@@ -212,6 +212,11 @@ class ArchimedesCosmoAgent:
             self.schedule_tool = ScheduleTool()
             self.register_tool("schedule", self.schedule_tool.execute)
             
+            # Phase 2: Trigger Tool
+            from backend.tools.trigger_tool import TriggerTool
+            self.trigger_tool = TriggerTool()
+            self.register_tool("trigger", self.trigger_tool.execute)
+            
             # Phase 1: Voice Tool
             from backend.tools.voice_tool import VoiceTool
             self.voice_tool = VoiceTool()
