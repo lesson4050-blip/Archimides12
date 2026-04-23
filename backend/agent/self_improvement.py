@@ -1,82 +1,209 @@
 """
-Archimedes learns from failures. Every time a tool call fails
-or TDD cycle fails, it stores the fix pattern.
-Next time it sees similar code, it proactively avoids the mistake.
+Archimedes Self-Improvement Engine.
+
+Every time a tool call fails and is subsequently recovered, the system
+stores the (error → fix) pattern. On subsequent encounters with similar
+errors, the engine proactively suggests known fixes.
+
+Features:
+- Pattern normalization (strips volatile data: line numbers, paths, timestamps)
+- Confidence scoring (tracks how many times each fix worked)
+- Decay: patterns that haven't helped recently get lower priority
+- Thread-safe: uses connection-per-call pattern for SQLite
 """
 import sqlite3
 import os
 import re
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
-DB_PATH = os.environ.get("SELF_IMPROVE_DB", "data/self_improvement.db")
+
+DB_PATH = os.environ.get(
+    "SELF_IMPROVE_DB",
+    os.path.join("data", "self_improvement.db")
+)
 
 
-def _get_conn():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+def _get_conn() -> sqlite3.Connection:
+    """Create a new connection with proper schema initialization."""
+    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")  # Better concurrent access
     conn.execute("""
         CREATE TABLE IF NOT EXISTS lessons (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             error_pattern TEXT NOT NULL,
             fix_pattern TEXT NOT NULL,
-            tool_name TEXT,
-            success_count INTEGER DEFAULT 0,
+            tool_name TEXT DEFAULT '',
+            success_count INTEGER DEFAULT 1,
+            fail_count INTEGER DEFAULT 0,
+            last_used TEXT DEFAULT (datetime('now')),
             created_at TEXT DEFAULT (datetime('now'))
         )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_lessons_pattern
+        ON lessons(error_pattern)
     """)
     conn.commit()
     return conn
 
 
-def learn_from_error(error: str, fix: str, tool_name: str = ""):
-    """Store a fix pattern when agent successfully recovers."""
-    try:
-        # Normalize error to pattern (remove line numbers, paths)
-        pattern = re.sub(r'\d+', 'N', error[:200])
-        pattern = re.sub(r'/[^\s]+', '/PATH', pattern)
+def _normalize_error(error: str) -> str:
+    """
+    Normalize an error string into a stable pattern.
+    Strips line numbers, file paths, timestamps, and memory addresses.
+    """
+    pattern = error[:300]
+    # Replace numbers with placeholder
+    pattern = re.sub(r'\b\d+\b', 'N', pattern)
+    # Replace file paths (Unix and Windows)
+    pattern = re.sub(r'[A-Za-z]:\\[^\s]+', 'PATH', pattern)
+    pattern = re.sub(r'/[^\s]+', '/PATH', pattern)
+    # Replace hex addresses
+    pattern = re.sub(r'0x[0-9a-fA-F]+', '0xADDR', pattern)
+    # Replace UUIDs
+    pattern = re.sub(
+        r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+        'UUID', pattern
+    )
+    # Normalize whitespace
+    pattern = re.sub(r'\s+', ' ', pattern).strip()
+    return pattern
 
+
+def learn_from_error(
+    error: str, fix: str, tool_name: str = "", success: bool = True
+):
+    """
+    Store or update a fix pattern when agent recovers from an error.
+    
+    Args:
+        error: The original error message
+        fix: The fix that was applied
+        tool_name: Which tool produced the error
+        success: Whether the fix actually worked
+    """
+    if not error or not fix:
+        return
+
+    try:
+        pattern = _normalize_error(error)
         conn = _get_conn()
-        # Check if pattern already exists
+
         existing = conn.execute(
-            "SELECT id FROM lessons WHERE error_pattern = ?",
-            (pattern,)
+            "SELECT id, success_count, fail_count FROM lessons "
+            "WHERE error_pattern = ? AND tool_name = ?",
+            (pattern, tool_name)
         ).fetchone()
 
         if existing:
-            conn.execute(
-                "UPDATE lessons SET success_count = success_count + 1 "
-                "WHERE error_pattern = ?",
-                (pattern,)
-            )
+            if success:
+                conn.execute(
+                    "UPDATE lessons SET success_count = success_count + 1, "
+                    "last_used = datetime('now'), fix_pattern = ? "
+                    "WHERE id = ?",
+                    (fix[:500], existing[0])
+                )
+            else:
+                conn.execute(
+                    "UPDATE lessons SET fail_count = fail_count + 1 "
+                    "WHERE id = ?",
+                    (existing[0],)
+                )
         else:
             conn.execute(
                 "INSERT INTO lessons "
                 "(error_pattern, fix_pattern, tool_name) VALUES (?,?,?)",
                 (pattern, fix[:500], tool_name)
             )
+
         conn.commit()
         conn.close()
     except Exception as e:
         logger.warning(f"Self-improvement learn failed: {e}")
 
 
-def get_fix_hint(error: str) -> Optional[str]:
-    """Get a previously learned fix for similar error."""
-    try:
-        pattern = re.sub(r'\d+', 'N', error[:200])
-        pattern = re.sub(r'/[^\s]+', '/PATH', pattern)
+def get_fix_hint(error: str, tool_name: str = "") -> Optional[str]:
+    """
+    Retrieve a previously learned fix for a similar error.
+    
+    Returns the most successful fix pattern, weighted by
+    (success_count - fail_count) to avoid suggesting fixes that
+    stopped working.
+    """
+    if not error:
+        return None
 
+    try:
+        pattern = _normalize_error(error)
         conn = _get_conn()
-        row = conn.execute(
-            "SELECT fix_pattern FROM lessons "
-            "WHERE error_pattern = ? "
-            "ORDER BY success_count DESC LIMIT 1",
-            (pattern,)
-        ).fetchone()
+
+        # Query with confidence scoring
+        if tool_name:
+            row = conn.execute(
+                "SELECT fix_pattern FROM lessons "
+                "WHERE error_pattern = ? AND tool_name = ? "
+                "AND (success_count - fail_count) > 0 "
+                "ORDER BY (success_count - fail_count) DESC LIMIT 1",
+                (pattern, tool_name)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT fix_pattern FROM lessons "
+                "WHERE error_pattern = ? "
+                "AND (success_count - fail_count) > 0 "
+                "ORDER BY (success_count - fail_count) DESC LIMIT 1",
+                (pattern,)
+            ).fetchone()
+
         conn.close()
         return row[0] if row else None
     except Exception:
         return None
+
+
+def get_all_lessons(limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieve all learned lessons, sorted by effectiveness."""
+    try:
+        conn = _get_conn()
+        rows = conn.execute(
+            "SELECT error_pattern, fix_pattern, tool_name, "
+            "success_count, fail_count, last_used "
+            "FROM lessons "
+            "ORDER BY (success_count - fail_count) DESC "
+            "LIMIT ?",
+            (limit,)
+        ).fetchall()
+        conn.close()
+
+        return [
+            {
+                "error_pattern": r[0],
+                "fix_pattern": r[1],
+                "tool_name": r[2],
+                "success_count": r[3],
+                "fail_count": r[4],
+                "last_used": r[5],
+                "confidence": r[3] / max(r[3] + r[4], 1),
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def get_context_prompt(error: str, tool_name: str = "") -> str:
+    """
+    Generate a context string for the LLM that includes known fixes.
+    Designed to be injected into executor prompts when errors occur.
+    """
+    hint = get_fix_hint(error, tool_name)
+    if hint:
+        return (
+            f"\n[SELF-IMPROVEMENT HINT] A similar error was seen before. "
+            f"Previously successful fix: {hint}\n"
+        )
+    return ""

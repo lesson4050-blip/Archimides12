@@ -28,6 +28,13 @@ class OrchestrationState:
     critic_retry_limit: int = 3
     current_retry_count: int = 0
     
+    # Execution flags
+    stream: bool = False
+    
+    # Performance tracking
+    confidence_score: float = 0.0
+    total_token_usage: int = 0
+    
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
@@ -42,3 +49,16 @@ class OrchestrationState:
     def get_context_manager_data(self) -> List[Dict[str, Any]]:
         """Extract history for ContextManager sync."""
         return self.history
+
+    def reset_for_subtask(self):
+        """Reset per-subtask state without clearing global context.
+        
+        Call this between subtask iterations to prevent cross-contamination
+        of critic verdicts and retry counts.
+        """
+        self.current_retry_count = 0
+        self.metadata.pop("critic_verdict", None)
+        self.metadata.pop("critic_scores", None)
+        self.metadata.pop("critic_issues", None)
+        self.updated_at = datetime.datetime.now().isoformat()
+

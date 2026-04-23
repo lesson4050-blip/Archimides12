@@ -2,17 +2,60 @@ import asyncio
 import httpx
 import hashlib
 import logging
-from typing import Dict, Any
+import sqlite3
+import os
+import json
+from typing import Dict, Any, List, Tuple
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+DB_PATH = os.environ.get(
+    "MONITOR_DB",
+    os.path.join("data", "monitors.db")
+)
+
+
+def _get_conn() -> sqlite3.Connection:
+    """Create a new connection with proper schema initialization."""
+    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monitors (
+            monitor_id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            interval_minutes INTEGER DEFAULT 60,
+            on_change_task TEXT,
+            session_id TEXT,
+            last_hash TEXT,
+            last_checked TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    return conn
+
+
 class MonitorTool:
-    """24/7 мониторинг URL с автоматическим запуском задач при изменении."""
+    """24/7 мониторинг URL с автоматическим запуском задач при изменении. Сохраняется в БД."""
     
     def __init__(self):
-        self._monitors: Dict[str, Dict] = {}
         self._tasks: Dict[str, asyncio.Task] = {}
+        # Resurrect monitors on startup
+        self._resurrect_monitors()
+        
+    def _resurrect_monitors(self):
+        try:
+            conn = _get_conn()
+            rows = conn.execute("SELECT monitor_id FROM monitors").fetchall()
+            conn.close()
+            for row in rows:
+                mid = row[0]
+                if mid not in self._tasks:
+                    self._tasks[mid] = asyncio.create_task(self._watch(mid))
+        except Exception as e:
+            logger.error(f"Failed to resurrect monitors: {e}")
     
     def get_definition(self) -> Dict[str, Any]:
         return {
@@ -41,69 +84,132 @@ class MonitorTool:
             if not url:
                 return {"success": False, "error": "url required for 'add' action"}
             mid = f"mon_{abs(hash(url))}_{int(datetime.now().timestamp())}"
-            self._monitors[mid] = {
-                "url": url, "interval_minutes": interval_minutes,
-                "on_change_task": on_change_task,
-                "session_id": kwargs.get("session_id", ""),
-                "last_hash": None, "last_checked": None
-            }
-            self._tasks[mid] = asyncio.create_task(self._watch(mid))
-            return {"success": True, "output": f"Monitor {mid} started for {url}"}
+            
+            try:
+                conn = _get_conn()
+                conn.execute(
+                    "INSERT INTO monitors (monitor_id, url, interval_minutes, on_change_task, session_id) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (mid, url, interval_minutes, on_change_task, kwargs.get("session_id", ""))
+                )
+                conn.commit()
+                conn.close()
+                
+                self._tasks[mid] = asyncio.create_task(self._watch(mid))
+                return {"success": True, "output": f"Monitor {mid} started for {url}"}
+            except Exception as e:
+                return {"success": False, "error": f"DB Error: {str(e)}"}
         
         elif action == "list":
-            if not self._monitors:
-                return {"success": True, "output": "No active monitors."}
-            lines = [f"{mid}: {m['url']} every {m['interval_minutes']}min"
-                     for mid, m in self._monitors.items()]
-            return {"success": True, "output": "\n".join(lines)}
+            try:
+                conn = _get_conn()
+                rows = conn.execute(
+                    "SELECT monitor_id, url, interval_minutes, last_checked "
+                    "FROM monitors"
+                ).fetchall()
+                conn.close()
+                
+                if not rows:
+                    return {"success": True, "output": "No active monitors."}
+                
+                lines = [f"{r[0]}: {r[1]} every {r[2]}min (Last check: {r[3] or 'never'})" for r in rows]
+                return {"success": True, "output": "\n".join(lines)}
+            except Exception as e:
+                return {"success": False, "error": f"DB Error: {str(e)}"}
         
         elif action == "remove":
+            if not monitor_id:
+                return {"success": False, "error": "monitor_id required for 'remove'"}
             if monitor_id in self._tasks:
                 self._tasks[monitor_id].cancel()
                 del self._tasks[monitor_id]
-            self._monitors.pop(monitor_id, None)
-            return {"success": True, "output": f"Monitor {monitor_id} removed."}
+                
+            try:
+                conn = _get_conn()
+                conn.execute("DELETE FROM monitors WHERE monitor_id = ?", (monitor_id,))
+                conn.commit()
+                conn.close()
+                return {"success": True, "output": f"Monitor {monitor_id} removed."}
+            except Exception as e:
+                return {"success": False, "error": f"DB Error: {str(e)}"}
         
         elif action == "check_now":
-            if monitor_id not in self._monitors:
-                return {"success": False, "error": "Monitor not found"}
+            if not monitor_id:
+                return {"success": False, "error": "monitor_id required for 'check_now'"}
             changed, content = await self._fetch_and_compare(monitor_id)
+            if content.startswith("Error:"):
+                 return {"success": False, "error": content}
             return {"success": True, "output": f"Changed: {changed}", "content": content[:500]}
             
         return {"success": False, "error": f"Unknown action: {action}"}
 
-    async def _fetch_and_compare(self, mid: str):
-        m = self._monitors[mid]
+    async def _fetch_and_compare(self, mid: str) -> Tuple[bool, str]:
         try:
+            conn = _get_conn()
+            row = conn.execute(
+                "SELECT url, last_hash FROM monitors WHERE monitor_id = ?", 
+                (mid,)
+            ).fetchone()
+            if not row:
+                conn.close()
+                return False, "Error: Monitor not found"
+            
+            url, last_hash = row
+            
             async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(m["url"], headers={"User-Agent": "Mozilla/5.0"})
+                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
                 content = resp.text
                 current_hash = hashlib.md5(content.encode()).hexdigest()
-                changed = m["last_hash"] is not None and current_hash != m["last_hash"]
-                m["last_hash"] = current_hash
-                m["last_checked"] = datetime.now().isoformat()
+                
+                changed = last_hash is not None and current_hash != last_hash
+                
+                conn.execute(
+                    "UPDATE monitors SET last_hash = ?, last_checked = ? WHERE monitor_id = ?",
+                    (current_hash, datetime.now().isoformat(), mid)
+                )
+                conn.commit()
+                conn.close()
+                
                 return changed, content[:2000]
         except Exception as e:
-            logger.error(f"Monitor fetch error for {m['url']}: {e}")
-            return False, str(e)
+            logger.error(f"Monitor fetch error for {mid}: {e}")
+            return False, f"Error: {str(e)}"
 
     async def _watch(self, mid: str):
-        while mid in self._monitors:
-            m = self._monitors[mid]
-            changed, _ = await self._fetch_and_compare(mid)
-            if changed and m.get("on_change_task"):
-                logger.info(f"Monitor {mid}: change detected — {m['on_change_task']}")
-                try:
-                    from backend.websocket.handler import manager
-                    session_id = m.get("session_id", "")
-                    if session_id and session_id in manager.agent_loops:
-                        agent = manager.agent_loops[session_id]
-                        async def sender(event):
-                            await manager.send_event(session_id, event)
-                        asyncio.create_task(agent.process_task(
-                            m["on_change_task"],
-                            websocket_send=sender
-                        ))
-                except Exception as e:
-                    logger.error(f"Monitor dispatch error: {e}")
-            await asyncio.sleep(m["interval_minutes"] * 60)
+        while True:
+            try:
+                conn = _get_conn()
+                row = conn.execute(
+                    "SELECT interval_minutes, on_change_task, session_id "
+                    "FROM monitors WHERE monitor_id = ?", 
+                    (mid,)
+                ).fetchone()
+                conn.close()
+                
+                if not row:
+                    break # Monitor was deleted
+                    
+                interval_minutes, on_change_task, session_id = row
+                
+                changed, _ = await self._fetch_and_compare(mid)
+                if changed and on_change_task:
+                    logger.info(f"Monitor {mid}: change detected — {on_change_task}")
+                    try:
+                        from backend.websocket.handler import manager
+                        if session_id and session_id in manager.agent_loops:
+                            agent = manager.agent_loops[session_id]
+                            async def sender(event):
+                                await manager.send_event(session_id, event)
+                            asyncio.create_task(agent.process_task(
+                                on_change_task,
+                                websocket_send=sender
+                            ))
+                    except Exception as e:
+                        logger.error(f"Monitor dispatch error: {e}")
+                
+                await asyncio.sleep(interval_minutes * 60)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Monitor watch error {mid}: {e}")
+                await asyncio.sleep(60) # Backoff on error

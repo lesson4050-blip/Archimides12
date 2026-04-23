@@ -54,18 +54,60 @@ ROUTING_RULES = [
 
 
 def classify_task(text: str) -> Tuple[str, str]:
-    """Returns (complexity, strategy) using semantic routing."""
+    """
+    Returns (complexity, strategy) using multi-signal classification.
+    
+    Signal 1: Regex pattern match (fast path for obvious cases)
+    Signal 2: Multi-signal heuristic for ambiguous cases
+    """
     text_lower = text.lower().strip()
+    
+    # Ultra-short messages are always direct
     if len(text_lower) < 15:
         return "simple", "direct"
+    
+    # Signal 1: Regex pattern match
     for pattern, complexity, strategy in ROUTING_RULES:
         if re.search(pattern, text_lower, re.IGNORECASE):
             return complexity, strategy
-    if len(text_lower) > 150:
+    
+    # Signal 2: Multi-signal heuristic for unmatched tasks
+    signals = {
+        "has_code_markers": bool(re.search(
+            r'[{}\[\]();=]|```|def |class |import |function |const |var ',
+            text
+        )),
+        "has_tool_keywords": bool(re.search(
+            r'(файл|file|запуст|run|выполн|exec|установ|install|pip |npm )',
+            text_lower
+        )),
+        "has_url": bool(re.search(r'https?://', text)),
+        "is_question": text_lower.rstrip().endswith('?') or text_lower.startswith(('что ', 'как ', 'где ', 'why ', 'how ', 'what ')),
+        "is_long": len(text_lower) > 150,
+        "is_medium": len(text_lower) > 50,
+        "has_multiple_steps": bool(re.search(
+            r'(\d+[\.\)]\s|\bа также\b|\bи потом\b|\bthen\b|\bafter that\b|шаг\s*\d)',
+            text_lower
+        )),
+    }
+    
+    complexity_score = sum([
+        signals["has_code_markers"] * 3,
+        signals["has_tool_keywords"] * 2,
+        signals["has_url"] * 1,
+        signals["is_long"] * 2,
+        signals["is_medium"] * 1,
+        signals["has_multiple_steps"] * 3,
+    ])
+    
+    if complexity_score >= 5:
         return "complex", "swarm_code"
-    if len(text_lower) > 50:
+    elif complexity_score >= 3 or signals["is_medium"]:
         return "medium", "single"
-    return "simple", "direct"
+    elif signals["is_question"]:
+        return "simple", "direct"
+    else:
+        return "simple", "direct"
 
 
 # Strategy to swarm agent types mapping
@@ -108,9 +150,9 @@ class AgentOrchestrator:
             session_id=session_id,
             task_description=task_description,
             mode=mode,
-            task_hint=task_hint
+            task_hint=task_hint,
+            stream=stream,
         )
-        state.stream = stream  # Enable streaming in executor
         
         # Add initial greeting/task to history
         state.add_message("user", task_description)
@@ -209,6 +251,9 @@ class AgentOrchestrator:
             for i, subtask in enumerate(all_subtasks):
                 state.current_step_index = i
                 
+                # Reset per-subtask state to prevent cross-contamination
+                state.reset_for_subtask()
+                
                 # Subtask loop (includes critic retries)
                 while True:
                     current_target = subtask.get("description", state.task_description)
@@ -231,23 +276,39 @@ class AgentOrchestrator:
                         # Ensure critic has something to review
                         state = await self.critic.process(state, websocket_send)
                         
-                        # BUG 4: If critic didn't set verdict, default to PASS
+                        # Safety: If critic didn't set verdict, default to RETRY
+                        # (not PASS — we don't want broken outputs to slip through)
                         if not state.metadata.get("critic_verdict"):
-                            state.metadata["critic_verdict"] = "PASS"
+                            if state.current_retry_count >= state.critic_retry_limit:
+                                state.metadata["critic_verdict"] = "LIMIT_REACHED"
+                            else:
+                                state.metadata["critic_verdict"] = "RETRY"
+                                state.current_retry_count += 1
                     else:
                         state = await self.executor.process(state, websocket_send)
                         state = await self.critic.process(state, websocket_send)
+                        
+                        # Same safety guard for non-swarm path
+                        if not state.metadata.get("critic_verdict"):
+                            if state.current_retry_count >= state.critic_retry_limit:
+                                state.metadata["critic_verdict"] = "LIMIT_REACHED"
+                            else:
+                                state.metadata["critic_verdict"] = "RETRY"
+                                state.current_retry_count += 1
                     
                     verdict = state.metadata.get("critic_verdict")
                     
-                    if verdict == "PASS" or verdict == "LIMIT_REACHED" or verdict == "ERROR_BYPASS":
+                    if verdict in ("PASS", "LIMIT_REACHED", "ERROR_BYPASS"):
                         # Subtask successful or best effort reached
                         break
                     elif verdict == "RETRY":
                         # Continue loop to re-execute with critic feedback
                         continue
                     else:
-                        # Unexpected state, break to avoid infinite loop
+                        # Unexpected state — safety break
+                        logger.warning(
+                            f"Unexpected critic verdict: {verdict}. Breaking loop."
+                        )
                         break
                     
         return await self._get_final_response(state, websocket_send)

@@ -42,27 +42,25 @@ class VoiceTool:
         try:
             if not text:
                 return {"success": False, "error": "text is required for tts"}
-            path = path or "/home/ubuntu/workspace/output.mp3"
+            
+            # OS-agnostic default path
+            if not path:
+                import tempfile
+                path = os.path.join(
+                    tempfile.gettempdir(), "archimedes_tts_output.mp3"
+                )
             
             tts = gTTS(text=text, lang=language, slow=False)
-            tts.save("temp_tts.mp3")
             
-            from backend.sandbox.singleton import sandbox_manager
-            with open("temp_tts.mp3", "rb") as f:
-                content = f.read()
+            # Write directly to target path (avoid shell base64 piping)
+            tts.save(path)
             
-            import base64
-            b64 = base64.b64encode(content).decode()
-            cmd = f"echo '{b64}' | base64 -d > {path}"
-            await sandbox_manager.executor.run_command(
-                kwargs.get("session_id", ""), cmd
-            )
-            try:
-                os.remove("temp_tts.mp3")
-            except Exception:
-                pass
-            
-            return {"success": True, "output": f"Audio saved to {path}", "path": path, "engine": "gTTS"}
+            return {
+                "success": True,
+                "output": f"Audio saved to {path}",
+                "path": path,
+                "engine": "gTTS"
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 

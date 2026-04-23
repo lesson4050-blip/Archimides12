@@ -1,6 +1,6 @@
 # ⚡ Archimedes AI Agent
 
-> **The autonomous AI agent that outperforms Manus AI — built by one person, with zero budget.**
+> **A production-grade, autonomous AI agent framework with self-correction, multi-agent swarm logic, and native MCP tool integration.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-violet.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
@@ -13,13 +13,7 @@
 
 Archimedes is a fully autonomous AI agent platform. It does not just answer questions — it plans, executes, debugs, and delivers results using real tools: browser automation, code execution, file management, web search, and presentation generation.
 
-| Metric | Archimedes | Manus AI | Devin | Claude Code |
-|--------|-----------|----------|-------|-------------|
-| **Overall Score** | **87%** | 85% | 72% | 68% |
-| Long-term Memory | **95%** | 90% | 45% | 30% |
-| MCP Ecosystem | **98%** | 40% | 20% | 80% |
-| TDD Code Quality | **85%** | 60% | 80% | 95% |
-| Budget | **$0** | $100M+ | $175M | Anthropic |
+Through recent production hardening, Archimedes features robust quality gates, context isolation, and a multi-dimensional swarm synthesis engine to prevent task degradation and ensure high-reliability outputs.
 
 ---
 
@@ -41,7 +35,7 @@ User Request
 │              Tool Layer                 │
 │  Browser · Shell · File · Search        │
 │  COSMO Presentation · Image Gen         │
-│  MCP Auto-Tooling (98% ecosystem)       │
+│  Native MCP Ecosystem Integration       │
 └─────────────────────────────────────────┘
 │
 ▼
@@ -58,8 +52,8 @@ User Request
 ### 🧠 GraphRAG Memory
 Builds a knowledge graph of everything the agent learns. Not just facts — relationships. "This auth module depends on that DB service, and the user prefers JWT because we discussed it 3 weeks ago."
 
-### 🔌 MCP Auto-Tooling (98% vs Manus 40%)
-When the agent lacks a tool, it finds the right MCP server on npm, installs it, and starts using it — all automatically. No human intervention.
+### 🔌 Native MCP Tooling
+Deep integration with the Model Context Protocol (MCP) allows Archimedes to securely access local file systems, databases, GitHub repositories, and execution environments natively.
 
 ### 🐝 Micro-Agent Swarm
 Complex tasks spawn specialized agents that debate: Coder writes, Critic audits for vulnerabilities, Tester verifies. You get the synthesized best result, not the first attempt.

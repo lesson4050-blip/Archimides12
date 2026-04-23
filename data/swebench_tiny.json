@@ -1,0 +1,14 @@
+[
+  {
+    "instance_id": "toy_project_001",
+    "problem_statement": "The calculator's add function throws an error when adding floats instead of integers. Fix the type handling.",
+    "repo": "lesson4050-blip/Archimides12",
+    "base_commit": "main"
+  },
+  {
+    "instance_id": "toy_project_002",
+    "problem_statement": "Update the README to include a 'License' section.",
+    "repo": "lesson4050-blip/Archimides12",
+    "base_commit": "main"
+  }
+]

@@ -240,8 +240,8 @@ class ContextManager:
             if system_prompt:
                 new_history.append(system_prompt)
             new_history.append({
-                "role": "system",
-                "content": f"[Previous conversation summary — {len(to_summarize)} messages condensed]: {summary_text}"
+                "role": "assistant",
+                "content": f"[Conversation summary — {len(to_summarize)} messages condensed]: {summary_text}"
             })
             new_history.extend(recent)
 

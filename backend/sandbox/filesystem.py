@@ -18,24 +18,33 @@ class SandboxFilesystem:
     def __init__(self, manager: 'SandboxManager'):
         self.manager = manager
 
-    async def read_file(self, session_id: str, path: str) -> Dict[str, Any]:
+    async def read_file(self, session_id: str, path: str, start_line: int = None, end_line: int = None) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
             return {"success": False, "error": "Sandbox container not available."}
             
         try:
             # Use cat via exec_run to read
-            # Alternatively use container.get_archive if binary, 
-            # but for text file tool cat is simpler.
             import shlex
             safe_path = shlex.quote(path)
+            
+            if start_line is not None and end_line is not None:
+                cmd = f"sed -n '{start_line},{end_line}p' {safe_path}"
+            elif start_line is not None:
+                cmd = f"tail -n +{start_line} {safe_path}"
+            elif end_line is not None:
+                cmd = f"head -n {end_line} {safe_path}"
+            else:
+                cmd = f"cat {safe_path}"
+                
             loop = asyncio.get_running_loop()
-            exec_res = await loop.run_in_executor(None, lambda: container.exec_run(f"cat {safe_path}", user="ubuntu"))
+            exec_res = await loop.run_in_executor(None, lambda: container.exec_run(cmd, user="ubuntu"))
             
             if exec_res.exit_code == 0:
+                content = exec_res.output.decode("utf-8", errors="replace")
                 return {
                     "success": True,
-                    "content": exec_res.output.decode("utf-8", errors="replace")
+                    "content": content
                 }
             else:
                 return {

@@ -260,23 +260,35 @@ class MicroAgentSwarm:
         reviews = await asyncio.gather(*review_tasks, return_exceptions=True)
         reviews = [r for r in reviews if isinstance(r, str)]
 
-        # Phase 3: Synthesize
+        # Phase 3: Structured Voting & Synthesis
         if not reviews:
             return primary_result
 
+        # Build structured voting prompt
         synthesis_prompt = (
-            f"Task: {task}\n\n"
-            f"Primary solution by {primary.role}:\n{primary_result}\n\n"
+            f"You are a senior technical lead synthesizing multi-agent work.\n\n"
+            f"TASK: {task}\n\n"
+            f"=== PRIMARY SOLUTION by [{primary.role.upper()}] ===\n"
+            f"{primary_result[:2500]}\n\n"
         )
         for reviewer, review in zip(agents[1:], reviews):
             synthesis_prompt += (
-                f"Review by {reviewer.role}:\n{review}\n\n"
+                f"=== REVIEW by [{reviewer.role.upper()}] ===\n"
+                f"{review[:1500]}\n\n"
             )
         synthesis_prompt += (
-            "Score each solution 1-10 on: correctness, completeness, "
-            "efficiency. Then synthesize the BEST final answer "
-            "incorporating the highest-scored elements. "
-            "Output only the final answer, no scores."
+            "INSTRUCTIONS:\n"
+            "1. Identify CRITICAL issues raised by reviewers\n"
+            "2. Determine which parts of the primary solution are correct\n"
+            "3. Apply ALL valid fixes from reviewer feedback\n"
+            "4. Produce the FINAL, production-ready answer that:\n"
+            "   - Incorporates the best elements from all agents\n"
+            "   - Fixes all critical/high issues identified\n"
+            "   - Preserves correct parts of the primary solution\n"
+            "   - Is complete and ready for direct use\n\n"
+            "Output ONLY the final synthesized answer. "
+            "No commentary, no scores, no explanations about your process.\n"
+            "Respond in RUSSIAN."
         )
 
         synth_response = await self.router.generate(

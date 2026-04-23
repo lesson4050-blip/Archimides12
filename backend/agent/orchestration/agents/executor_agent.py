@@ -55,6 +55,11 @@ class ExecutorAgent(BaseAgent):
         self.max_steps = getattr(settings, "AGENT_MAX_ITERATIONS", 25)
 
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
+        # Clear previous critic verdict to prevent cross-subtask pollution
+        state.metadata.pop("critic_verdict", None)
+        state.metadata.pop("critic_scores", None)
+        state.metadata.pop("critic_issues", None)
+        
         # Determine target task
         if state.mode == AgentMode.FAST:
             current_target = state.task_description
@@ -160,11 +165,16 @@ class ExecutorAgent(BaseAgent):
             # Section 2B: Support streaming mode
             use_stream = getattr(state, 'stream', False)
             if use_stream:
+                # Proper async wrapper for streaming callback
+                async def _stream_token(t):
+                    if websocket_send:
+                        await websocket_send(t)
+
                 response = await self.router.generate_stream(
                     messages=messages,
                     tools=self.tool_registry.get_all_tool_definitions(),
                     task_hint="think",
-                    on_token=lambda t: websocket_send(t) if websocket_send else None
+                    on_token=_stream_token
                 )
             else:
                 response = await self.router.generate(

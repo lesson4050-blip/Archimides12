@@ -23,6 +23,23 @@ volumes:
   postgres_data:
     driver: local
 
+  archimedes-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: archimedes-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - DATABASE_URL=postgresql+asyncpg://archimedes:archimedes@postgres:5432/archimedes
+    depends_on:
+      - postgres
+    volumes:
+      - ./data:/app/data
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
   cosmo-artist:
     build:
       context: ./cosmo_artist
@@ -34,7 +51,7 @@ volumes:
       - PORT=3005
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-      - NEXT_PUBLIC_SERVER_URL=http://cosmo-engine:5051
+      - NEXT_PUBLIC_SERVER_URL=http://archimedes-backend:8000
     depends_on:
       - postgres
     restart: unless-stopped

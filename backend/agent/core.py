@@ -242,6 +242,15 @@ class ArchimedesCosmoAgent:
             # Phase 2: Conditional Triggers (Removed)
             
             
+            # AST Navigation Tool
+            from backend.tools.ast_tool import ASTTool
+            self.ast_tool = ASTTool()
+            self.tool_registry.register("ast_navigator", self.ast_tool.execute)
+            
+            # Log Analyzer Tool
+            from backend.tools.log_analyzer_tool import LogAnalyzerTool
+            self.log_analyzer = LogAnalyzerTool()
+            self.tool_registry.register("log_analyzer", self.log_analyzer.execute)
             
             # COSMO Presentation — native slide generator
             from backend.tools.cosmo_tool import CosmoPresentationTool
@@ -268,7 +277,22 @@ class ArchimedesCosmoAgent:
             self.mcp_tool = MCPTool(self.mcp_client, sync_callback=self.sync_mcp_tools)
             self.register_tool("mcp_connect", self.mcp_tool.execute)
             
-            # TODO: Add other tools later
+            # 4 Super Weapon Tools
+            from backend.tools.repo_map_tool import RepoMapTool
+            self.repo_map_tool = RepoMapTool()
+            self.tool_registry.register("repo_map", self.repo_map_tool.execute)
+            
+            from backend.tools.linter_tool import LinterTool
+            self.linter_tool = LinterTool()
+            self.tool_registry.register("fast_linter", self.linter_tool.execute)
+            
+            from backend.tools.git_forensics_tool import GitForensicsTool
+            self.git_forensics_tool = GitForensicsTool()
+            self.tool_registry.register("git_forensics", self.git_forensics_tool.execute)
+            
+            from backend.tools.repl_tool import ReplTool
+            self.repl_tool = ReplTool()
+            self.tool_registry.register("python_repl", self.repl_tool.execute)
 
             # Core Tool Registration
             self.file_tool = FileTool(sandbox_manager.filesystem)

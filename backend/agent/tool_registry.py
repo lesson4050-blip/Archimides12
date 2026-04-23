@@ -11,7 +11,7 @@ class ToolRegistry:
     def register_tool(self, definition: Dict[str, Any], func: Callable):
         name = definition["function"]["name"]
         self.tools[name] = func
-        self.tool_definitions.append(definition)
+        self._upsert_definition(definition)
         logger.info(f"Registered tool: {name}")
 
     def register(self, name: str, tool_instance: Any):
@@ -66,8 +66,21 @@ class ToolRegistry:
         callback = actual_instance.execute if hasattr(actual_instance, "execute") else tool_instance
         
         self.tools[name] = callback
-        self.tool_definitions.append(definition)
+        self._upsert_definition(definition)
         logger.info(f"Registered simplified tool: {name}")
+
+    def _upsert_definition(self, definition: Dict[str, Any]):
+        """Insert or replace a tool definition by name (prevents duplicates)."""
+        name = definition.get("function", {}).get("name", "")
+        if not name:
+            self.tool_definitions.append(definition)
+            return
+        # Remove any existing definition with the same name
+        self.tool_definitions = [
+            d for d in self.tool_definitions
+            if d.get("function", {}).get("name") != name
+        ]
+        self.tool_definitions.append(definition)
 
     def get_all_tool_definitions(self) -> List[Dict[str, Any]]:
         return self.tool_definitions
@@ -191,5 +204,5 @@ class ToolRegistry:
         """Register a tool that comes from an external MCP server."""
         name = definition["function"]["name"]
         self.tools[name] = callback
-        self.tool_definitions.append(definition)
+        self._upsert_definition(definition)
         logger.info(f"Registered MCP tool: {name}")
