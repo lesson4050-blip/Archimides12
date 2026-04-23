@@ -123,3 +123,9 @@ cosmo_engine_core/api_resp.json
 # Symlinks
 skills
 skills/
+
+# Runtime data
+cosmo_engine_core/container.db
+cosmo_engine_core/presenton.db
+cosmo_engine_core/placeholder
+archimedes_cosmo*/
