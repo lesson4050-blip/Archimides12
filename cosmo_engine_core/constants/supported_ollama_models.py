@@ -156,6 +156,11 @@ SUPPORTED_QWEN_MODELS = {
         value="qwen3:235b",
         size="142GB",
     ),
+    "qwen2.5:14b": OllamaModelMetadata(
+        label="Qwen 2.5:14b",
+        value="qwen2.5:14b",
+        size="9GB",
+    ),
 }
 
 SUPPORTED_GPT_OSS_MODELS = {

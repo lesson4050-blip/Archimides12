@@ -298,9 +298,36 @@ class AgentOrchestrator:
                     
                     verdict = state.metadata.get("critic_verdict")
                     
-                    if verdict in ("PASS", "LIMIT_REACHED", "ERROR_BYPASS"):
+                    if verdict in ("PASS", "ERROR_BYPASS"):
                         # Subtask successful or best effort reached
                         break
+                    elif verdict == "LIMIT_REACHED":
+                        # Sprint 2.1: Recursive Self-Correction (Rescue Pass)
+                        if not state.metadata.get("rescue_attempted", False):
+                            logger.info(f"[{state.session_id}] Triggering Recursive Self-Correction Rescue Pass.")
+                            state.metadata["rescue_attempted"] = True
+                            
+                            issues = state.metadata.get("critic_issues", [])
+                            issues_text = "\n".join(issues)
+                            
+                            rescue_prompt = (
+                                "SYSTEM CRITICAL: You have reached the maximum retry limit for this task. "
+                                "The Quality Critic still rejects your output for the following reasons:\n"
+                                f"{issues_text}\n\n"
+                                "RECURSIVE SELF-CORRECTION PROTOCOL INITIATED:\n"
+                                "1. You MUST use a search tool (like Exa/Tavily) to research these specific errors/issues.\n"
+                                "2. Analyze the search results to find a definitive fix.\n"
+                                "3. Apply the fix and provide your final corrected output.\n"
+                                "Failure is not an option. Find the solution."
+                            )
+                            state.add_message("user", rescue_prompt)
+                            # Reset retry count for one final attempt cycle
+                            state.current_retry_count = 0
+                            continue
+                        else:
+                            # Rescue already attempted and failed
+                            logger.warning(f"[{state.session_id}] Rescue pass failed. Moving on.")
+                            break
                     elif verdict == "RETRY":
                         # Continue loop to re-execute with critic feedback
                         continue

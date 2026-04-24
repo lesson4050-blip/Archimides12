@@ -53,6 +53,9 @@ class ExecutorAgent(BaseAgent):
         self.tool_registry = tool_registry
         self.context_manager = context_manager
         self.max_steps = getattr(settings, "AGENT_MAX_ITERATIONS", 25)
+        
+        from backend.agent.intelligence.intelligence_router import IntelligenceRouter
+        self.intelligence = IntelligenceRouter(router)
 
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
         # Clear previous critic verdict to prevent cross-subtask pollution
@@ -95,18 +98,42 @@ class ExecutorAgent(BaseAgent):
         # Track previous error for self-improvement
         prev_error = None
 
+        # Sprint 4.1: Skill Engine — check for matching skill before execution
+        _tool_call_log = []  # Collect tool calls for skill compression
+        try:
+            from backend.agent.skill_engine import find_matching_skill, get_skill_prompt
+            matching_skill = find_matching_skill(current_target)
+            if matching_skill:
+                skill_hint = get_skill_prompt(matching_skill)
+                self.context_manager.add_message("system", skill_hint)
+                await self.log_thought(
+                    f"🧠 Found matching skill ({matching_skill['trigger']['intent_hash']}), "
+                    f"replaying with {matching_skill.get('total_steps', '?')} steps",
+                    websocket_send
+                )
+        except Exception as e:
+            logger.debug(f"Skill lookup skipped: {e}")
+
         # Loop for tool execution
         for step in range(self.max_steps):
-            # Loop detection
+            # Loop detection & Dynamic Strategy Switching (Sprint 2.2)
+            excluded_tools = getattr(state, "excluded_tools", [])
             if not hasattr(state, '_recent_tool_calls'):
                 state._recent_tool_calls = []
             if len(state._recent_tool_calls) >= 3:
                 last3 = state._recent_tool_calls[-3:]
                 if len(set(last3)) == 1:
+                    repeating_tool = eval(last3[0]).get("name") if last3[0].startswith("{") else last3[0].split("{")[0]
+                    
                     self.context_manager.add_message("user",
-                        "SYSTEM: You are repeating the same action. "
-                        "Try a completely different approach or call "
-                        "message(type='result') with what you have.")
+                        f"SYSTEM CRITICAL: You have repeatedly failed using the '{repeating_tool}' tool. "
+                        f"This strategy is blocked. You MUST switch to an alternative strategy immediately."
+                    )
+                    
+                    if not hasattr(state, "excluded_tools"):
+                        state.excluded_tools = []
+                    state.excluded_tools.append(repeating_tool)
+                    
                     state._recent_tool_calls = []
 
             messages = self.context_manager.get_messages_with_cache()
@@ -162,28 +189,27 @@ class ExecutorAgent(BaseAgent):
             except Exception:
                 pass
 
-            # Section 2B: Support streaming mode
+            # Section 2B: Support streaming mode with Intelligence Router
             use_stream = getattr(state, 'stream', False)
-            if use_stream:
-                # Proper async wrapper for streaming callback
+            on_token = None
+            if use_stream and websocket_send:
                 async def _stream_token(t):
-                    if websocket_send:
-                        await websocket_send(t)
+                    await websocket_send(t)
+                on_token = _stream_token
 
-                response = await self.router.generate_stream(
-                    messages=messages,
-                    tools=self.tool_registry.get_all_tool_definitions(),
-                    task_hint="think",
-                    on_token=_stream_token
-                )
-            else:
-                response = await self.router.generate(
-                    messages=messages,
-                    tools=self.tool_registry.get_all_tool_definitions(),
-                    task_hint="think"
-                )
+            # Get tools and apply exclusion list (Sprint 2.2)
+            all_tools = self.tool_registry.get_all_tool_definitions()
+            active_tools = [t for t in all_tools if t["function"]["name"] not in getattr(state, "excluded_tools", [])]
 
-            thought = response.get("thought", "")
+            response = await self.intelligence.generate(
+                messages=messages,
+                task=current_target,
+                force_mode="simple",  # Keep simple mode for main agent loop to prevent latency
+                tools=active_tools,
+                on_token=on_token
+            )
+
+            thought = response.get("thinking", response.get("thought", ""))
             if thought:
                 await self.log_thought(thought, websocket_send)
             
@@ -191,7 +217,10 @@ class ExecutorAgent(BaseAgent):
             if tool_call:
                 t_name = tool_call["name"]
                 t_params = tool_call["params"]
-                state._recent_tool_calls.append(str(t_name) + str(t_params))
+                
+                # Store call signature safely for loop detection
+                call_sig = f"{t_name}:{str(t_params)}"
+                state._recent_tool_calls.append(call_sig)
 
                 
                 call_id = f"call_{str(uuid.uuid4())[:8]}"
@@ -200,8 +229,18 @@ class ExecutorAgent(BaseAgent):
                     "type": "function",
                     "function": { "name": t_name, "arguments": t_params }
                 }
+
+                # Phase 1.2: Pre-flight Command Safety Check
+                from backend.agent.self_improvement import check_tool_safety
+                is_safe, safety_warning = check_tool_safety(t_name, t_params)
                 
-                tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
+                if not is_safe:
+                    tool_res = {
+                        "success": False,
+                        "error": f"PRE-FLIGHT REJECTION: {safety_warning}. Please revise your approach."
+                    }
+                else:
+                    tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
                 
                 from backend.utils.structured_logger import log_model_response
                 log_model_response(
@@ -213,9 +252,24 @@ class ExecutorAgent(BaseAgent):
 
                 success = tool_res.get("success", True)
                 output = str(tool_res.get("output", tool_res.get("content", "OK")))
+
+                # Sprint 4.1: Track tool calls for skill compression
+                _tool_call_log.append({
+                    "name": t_name,
+                    "params": t_params,
+                    "success": success,
+                    "error_recovered": prev_error is not None and success,
+                    "error_pattern": prev_error[:100] if prev_error else "",
+                    "fix_applied": f"{t_name}({list(t_params.keys())})" if prev_error and success else "",
+                })
+
                 if not success:
                     output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
                     prev_error = output  # Track for self-improvement
+
+                    # Log raw error to DB
+                    from backend.agent.self_improvement import log_error
+                    log_error(output, t_name, state.session_id)
 
                     # Track confidence: failure drops score
                     if not hasattr(state, 'confidence_score'):
@@ -394,6 +448,24 @@ class ExecutorAgent(BaseAgent):
                     await websocket_send({"type": "message_info", "content": f"Результат шага: {res_text}"})
                 
                 state.results.append({"step": state.current_step_index, "output": res_text or "Done."})
+
+                # Sprint 4.1: Compress successful workflow into a reusable skill
+                if len(_tool_call_log) >= 3:
+                    try:
+                        from backend.agent.skill_engine import compress_skill
+                        skill_file = compress_skill(
+                            task_description=current_target,
+                            tool_calls=_tool_call_log,
+                            final_result=res_text or "",
+                            session_id=state.session_id,
+                        )
+                        if skill_file:
+                            await self.log_thought(
+                                f"📦 Compressed workflow into skill: {skill_file}",
+                                websocket_send
+                            )
+                    except Exception as e:
+                        logger.debug(f"Skill compression skipped: {e}")
                 
                 # Save key learnings to Memory Bank
                 if res_text and len(res_text) > 100:

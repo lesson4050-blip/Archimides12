@@ -401,6 +401,89 @@ async def execute_action(page, context, data: dict) -> dict:
             except Exception:
                 return {"success": False, "error": f"Timeout waiting for '{selector}'"}
 
+        elif action == "click_coordinates":
+            x = data.get("x")
+            y = data.get("y")
+            if x is None or y is None:
+                return {"success": False, "error": "x and y coordinates required"}
+            
+            try:
+                await page.mouse.click(float(x), float(y))
+                await asyncio.sleep(1)
+                await page.wait_for_load_state("domcontentloaded", timeout=5000)
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+            
+            title = await page.title()
+            content = await _get_main_content(page)
+            cleaned = _clean_text(content)
+            
+            screenshot_path = "/tmp/browser_current.png"
+            try:
+                await page.screenshot(path=screenshot_path, full_page=False)
+            except Exception:
+                screenshot_path = None
+            
+            return {
+                "success": True,
+                "url": page.url,
+                "title": title,
+                "content": _truncate_smart(cleaned),
+                "screenshot_path": screenshot_path,
+                "message": f"Clicked at coordinates ({x}, {y})"
+            }
+
+        elif action == "inject_js":
+            script = data.get("script", "")
+            if not script:
+                return {"success": False, "error": "script required"}
+            
+            try:
+                result = await page.evaluate(script)
+                return {
+                    "success": True,
+                    "result": result,
+                    "message": "JS executed successfully"
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        elif action == "get_dom_tree":
+            try:
+                tree = await page.evaluate("""() => {
+                    function serialize(node) {
+                        if (node.nodeType === 3) return node.textContent.trim() ? node.textContent.trim() : null;
+                        if (node.nodeType !== 1) return null;
+                        
+                        let tag = node.tagName.toLowerCase();
+                        if (['script', 'style', 'noscript', 'meta', 'link'].includes(tag)) return null;
+                        
+                        let res = { tag: tag };
+                        if (node.id) res.id = node.id;
+                        if (node.className && typeof node.className === 'string') res.class = node.className;
+                        
+                        ['href', 'src', 'alt', 'title', 'type', 'name', 'value', 'placeholder'].forEach(attr => {
+                            if (node.hasAttribute(attr)) res[attr] = node.getAttribute(attr);
+                        });
+                        
+                        let children = [];
+                        for (let child of node.childNodes) {
+                            let serialized = serialize(child);
+                            if (serialized) children.push(serialized);
+                        }
+                        if (children.length > 0) res.children = children;
+                        return res;
+                    }
+                    return serialize(document.body);
+                }""")
+                return {
+                    "success": True,
+                    "dom_tree": tree,
+                    "message": "DOM tree extracted"
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
         elif action == "current_state":
             # Lightweight state check — no content, just metadata
             elements = await _get_interactive_elements(page)

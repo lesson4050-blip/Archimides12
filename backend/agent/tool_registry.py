@@ -1,5 +1,8 @@
 from typing import Dict, Any, List, Optional, Callable
 import logging
+import os
+import importlib
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -7,6 +10,99 @@ class ToolRegistry:
     def __init__(self):
         self.tools: Dict[str, Callable] = {}
         self.tool_definitions: List[Dict[str, Any]] = []
+
+    def auto_discover_tools(
+        self,
+        tools_dir: str = "backend/tools",
+        exclude: Optional[List[str]] = None
+    ) -> int:
+        """
+        Sprint 4.2: Dynamic Tool Registry.
+        
+        Scans all Python files in the tools directory for classes that have
+        both `get_definition()` and `execute()` methods. Auto-registers
+        any that aren't already registered.
+        
+        Args:
+            tools_dir: Path to scan for tool modules
+            exclude: List of module names to skip (e.g., ['__init__', 'base_tool'])
+            
+        Returns:
+            Number of newly discovered and registered tools
+        """
+        exclude = exclude or ["__init__", "base_tool"]
+        discovered = 0
+        
+        if not os.path.isdir(tools_dir):
+            logger.warning(f"Tools directory not found: {tools_dir}")
+            return 0
+        
+        for filename in os.listdir(tools_dir):
+            if not filename.endswith(".py"):
+                continue
+            
+            module_name = filename[:-3]  # strip .py
+            if module_name in exclude:
+                continue
+            
+            # Convert path to importable module string
+            module_path = tools_dir.replace("/", ".").replace("\\", ".") + f".{module_name}"
+            
+            try:
+                module = importlib.import_module(module_path)
+            except Exception as e:
+                logger.debug(f"Skipping {module_path}: {e}")
+                continue
+            
+            # Scan for tool classes in the module
+            for attr_name in dir(module):
+                attr = getattr(module, attr_name)
+                if not inspect.isclass(attr):
+                    continue
+                if attr.__module__ != module.__name__:
+                    continue  # Skip imported classes
+                    
+                has_def = hasattr(attr, "get_definition") and callable(getattr(attr, "get_definition"))
+                has_exec = hasattr(attr, "execute") and callable(getattr(attr, "execute"))
+                
+                if not (has_def and has_exec):
+                    continue
+                
+                # Try to get the tool name from its definition
+                try:
+                    instance = attr.__new__(attr)
+                    # Some tools need constructor args — skip those gracefully
+                    try:
+                        instance.__init__()
+                    except TypeError:
+                        continue
+                    
+                    definition = instance.get_definition()
+                    tool_name = definition.get("function", {}).get("name", "")
+                    
+                    if not tool_name:
+                        continue
+                    
+                    # Skip if already registered
+                    if tool_name in self.tools:
+                        continue
+                    
+                    self.register(tool_name, instance.execute)
+                    discovered += 1
+                    logger.info(
+                        f"Auto-discovered tool: {tool_name} "
+                        f"from {module_path}.{attr_name}"
+                    )
+                    
+                except Exception as e:
+                    logger.debug(
+                        f"Could not auto-register {attr_name} "
+                        f"from {module_path}: {e}"
+                    )
+        
+        if discovered:
+            logger.info(f"Dynamic Tool Registry: {discovered} new tools discovered")
+        return discovered
 
     def register_tool(self, definition: Dict[str, Any], func: Callable):
         name = definition["function"]["name"]

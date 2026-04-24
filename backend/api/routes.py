@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from fastapi.responses import FileResponse
 from backend.auth.dependencies import get_current_user, require_admin
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
@@ -417,6 +418,121 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(get_cur
     except Exception as e:
         logger.error(f"Ошибка при загрузке файла: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Sprint 5.1: Artifact Gallery API ────────────────────────────
+
+@router.get("/workspace/artifacts", summary="Список всех артефактов")
+async def list_artifacts(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Сканирует workspace/ и data/artifacts/ для формирования
+    полного списка артефактов агента (файлы, изображения, презентации, код).
+    """
+    artifact_dirs = [
+        Path("workspace"),
+        Path("data/artifacts"),
+        Path("data/skills"),
+    ]
+    
+    artifacts = []
+    seen_names: set = set()
+    
+    for base_dir in artifact_dirs:
+        if not base_dir.exists():
+            continue
+        for root, _, filenames in os.walk(base_dir):
+            for name in filenames:
+                # Skip hidden files and metadata sidecars
+                if name.startswith(".") or name.endswith(".meta.json"):
+                    continue
+                
+                file_path = Path(root) / name
+                rel_path = str(file_path).replace("\\", "/")
+                
+                # Deduplicate by name
+                unique_key = f"{name}_{file_path.stat().st_size}"
+                if unique_key in seen_names:
+                    continue
+                seen_names.add(unique_key)
+                
+                stat = file_path.stat()
+                ext = file_path.suffix.lstrip(".").lower()
+                
+                # Determine preview URL for images
+                preview_url = None
+                if ext in ("png", "jpg", "jpeg", "gif", "webp", "svg"):
+                    preview_url = f"/api/v1/workspace/file/download?path={rel_path}"
+                
+                artifacts.append({
+                    "name": name,
+                    "path": rel_path,
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "type": ext,
+                    "preview_url": preview_url,
+                })
+    
+    # Sort by modification date (newest first)
+    artifacts.sort(key=lambda x: x["modified"], reverse=True)
+    
+    return {
+        "status": "success",
+        "artifacts": artifacts,
+        "total": len(artifacts),
+    }
+
+
+@router.get("/workspace/file/download", summary="Скачать файл из workspace или data")
+async def download_workspace_file(path: str, user: dict = Depends(get_current_user)):
+    """
+    Возвращает файл как бинарный ответ для скачивания.
+    Поддерживает пути из workspace/ и data/.
+    """
+    clean_path = path.strip("/")
+    
+    # Remove container-style prefixes
+    for prefix in ["home/ubuntu/workspace/", "workspace/"]:
+        if clean_path.startswith(prefix):
+            clean_path = clean_path[len(prefix):]
+    
+    # Try multiple base directories
+    candidates = [
+        Path(clean_path),                  # raw path
+        Path("workspace") / clean_path,    # workspace-relative
+        Path("data/artifacts") / clean_path,
+    ]
+    
+    file_path = None
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.exists() and resolved.is_file():
+            file_path = resolved
+            break
+    
+    if not file_path:
+        raise HTTPException(status_code=404, detail=f"File not found: {clean_path}")
+    
+    # Security: block access outside project
+    project_root = Path(".").resolve()
+    if not str(file_path).startswith(str(project_root)):
+        raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
+    
+    # Determine MIME type
+    ext = file_path.suffix.lstrip(".").lower()
+    mime_map = {
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "gif": "image/gif", "webp": "image/webp", "svg": "image/svg+xml",
+        "pdf": "application/pdf", "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "json": "application/json", "csv": "text/csv",
+        "mp3": "audio/mpeg", "wav": "audio/wav", "mp4": "video/mp4",
+    }
+    media_type = mime_map.get(ext, "application/octet-stream")
+    
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=file_path.name,
+    )
 
 
 @router.get("/tasks/{session_id}/progress", summary="Real-time task progress")

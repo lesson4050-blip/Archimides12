@@ -41,11 +41,14 @@ class BrowserTool:
                                 "navigate",    # Go to URL, returns content + elements
                                 "extract",     # Get page text, optionally filtered by query
                                 "click",       # Click by visible text or CSS selector
+                                "click_coordinates",  # Click at exact x,y pixel position
                                 "type",        # Type into input field
                                 "type_and_submit",  # Type + press Enter
                                 "scroll",      # Scroll page
                                 "screenshot",  # Take screenshot
                                 "get_elements", # List all interactive elements
+                                "get_dom_tree", # Full structured DOM tree (for SPA analysis)
+                                "inject_js",   # Execute arbitrary JavaScript on the page
                                 "wait_for",    # Wait for element to appear
                                 "current_state", # Get URL/title/elements (no content)
                                 "vision_analyze", # Analyze current page visually
@@ -86,6 +89,22 @@ class BrowserTool:
                         "timeout_ms": {
                             "type": "integer",
                             "description": "Timeout for wait_for action in ms"
+                        },
+                        "x": {
+                            "type": "number",
+                            "description": "X pixel coordinate for click_coordinates action"
+                        },
+                        "y": {
+                            "type": "number",
+                            "description": "Y pixel coordinate for click_coordinates action"
+                        },
+                        "script": {
+                            "type": "string",
+                            "description": "JavaScript code to execute for inject_js action"
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "Question for vision_analyze action"
                         }
                     },
                     "required": ["action"]

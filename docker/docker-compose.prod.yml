@@ -1,0 +1,194 @@
+# ============================================================
+# Archimedes COSMO — 1-Click Production Deployment
+# Sprint 5.2: Complete Docker Compose Stack
+# ============================================================
+#
+# Usage:
+#   docker compose -f docker/docker-compose.prod.yml up -d
+#
+# Services:
+#   - archimedes-backend  (FastAPI + Agent Core)    :8000
+#   - archimedes-frontend (Next.js Dashboard)       :3000
+#   - cosmo-artist        (Presentation Renderer)   :3005
+#   - archimedes-sandbox  (Isolated Execution Env)  :6080 (VNC)
+#   - ollama              (Local LLM Engine)        :11434
+#   - postgres            (Production Database)     :5432
+# ============================================================
+
+services:
+
+  # ─── Backend API + Agent Core ──────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: archimedes-backend
+    hostname: backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DATABASE_URL=postgresql+asyncpg://archimedes:${POSTGRES_PASSWORD:-archimedes}@postgres:5432/archimedes
+      - DATABASE_URL_SQLITE=sqlite+aiosqlite:///./data/archemidas.db
+      - COSMO_ARTIST_URL=http://cosmo-artist:3005
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+    volumes:
+      - ../data:/app/data
+      - ../workspace:/app/workspace
+      - backend-logs:/app/logs
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/api/v1/health"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  # ─── Next.js Dashboard ────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    container_name: archimedes-frontend
+    hostname: frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-8000}
+      - NEXT_PUBLIC_WS_URL=ws://localhost:${BACKEND_PORT:-8000}/ws
+      - NEXT_TELEMETRY_DISABLED=1
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── COSMO Presentation Renderer ──────────────────────
+  cosmo-artist:
+    build:
+      context: ../cosmo_artist
+      dockerfile: Dockerfile.artist
+    container_name: cosmo-artist
+    hostname: cosmo-artist
+    ports:
+      - "${ARTIST_PORT:-3005}:3005"
+    environment:
+      - PORT=3005
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_SERVER_URL=http://backend:8000
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── Isolated Sandbox (Code Execution + Browser) ──────
+  sandbox:
+    build:
+      context: ..
+      dockerfile: docker/sandbox.Dockerfile
+    container_name: archimedes-sandbox
+    hostname: sandbox
+    ports:
+      - "${VNC_PORT:-6080}:6080"   # noVNC web access
+    environment:
+      - DISPLAY=:1
+    volumes:
+      - ../workspace:/home/ubuntu/workspace
+      - sandbox-data:/home/ubuntu/.browser_session
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    # Start Xvfb + VNC + noVNC + openbox
+    command: >
+      bash -c "
+        Xvfb :1 -screen 0 1280x900x24 &
+        sleep 1
+        openbox &
+        x11vnc -display :1 -nopw -listen 0.0.0.0 -forever -shared &
+        websockify --web=/usr/share/novnc/ 6080 localhost:5900 &
+        echo 'Sandbox ready on :6080'
+        sleep infinity
+      "
+
+  # ─── Ollama LLM Engine ────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: archimedes-ollama
+    hostname: ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+      - OLLAMA_KEEP_ALIVE=24h
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─── PostgreSQL Database ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: archimedes-postgres
+    hostname: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: archimedes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-archimedes}
+      POSTGRES_DB: archimedes
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U archimedes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ─── Volumes ──────────────────────────────────────────
+volumes:
+  postgres-data:
+    driver: local
+  ollama-models:
+    driver: local
+  backend-logs:
+    driver: local
+  sandbox-data:
+    driver: local
+
+# ─── Network ─────────────────────────────────────────
+networks:
+  archimedes-net:
+    driver: bridge

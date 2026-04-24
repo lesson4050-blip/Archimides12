@@ -52,9 +52,9 @@ AUTO-FAIL if ANY are true:
 - Response claims to do X but the output clearly does NOT do X
 
 VERDICT RULES:
-- If ALL scores >= 6 and no auto-fail triggers: output "VERDICT: PASS"
-- If ANY score < 4 or auto-fail triggered: output "VERDICT: FAIL"
-- Otherwise: output "VERDICT: PASS" (accept imperfect but genuine work)
+- If ALL scores >= 8 and no auto-fail triggers: output "VERDICT: PASS"
+- If ANY score < 8 or auto-fail triggered: output "VERDICT: FAIL"
+- Otherwise: output "VERDICT: FAIL" (imperfect results are not allowed)
 
 For FAIL, list each issue as "ISSUE: [specific, actionable problem]"
 Include the dimension scores as "SCORES: correctness=N, completeness=N, language=N, quality=N"

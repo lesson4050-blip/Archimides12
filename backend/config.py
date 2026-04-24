@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "gemma4:26b"
     
     TAVILY_API_KEY: str = ""
+    EXA_API_KEY: str = ""
     
     # Image Generation
     IMAGE_CRITIQUE_MODEL: str = "gemini-2.5-flash"

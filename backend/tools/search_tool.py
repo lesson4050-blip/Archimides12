@@ -30,8 +30,8 @@ class SearchTool:
                         },
                         "search_depth": {
                             "type": "string",
-                            "enum": ["basic", "advanced"],
-                            "description": "basic=faster, advanced=more results"
+                            "enum": ["basic", "advanced", "neural"],
+                            "description": "basic=faster, advanced=more results, neural=Tavily+Exa"
                         },
                         "max_results": {
                             "type": "integer",
@@ -64,6 +64,28 @@ class SearchTool:
                 "success": True, 
                 "output": result_text,
                 "note": "Multi-hop search completed."
+            }
+
+        if search_depth == "neural":
+            import asyncio
+            tavily_task = asyncio.create_task(self._search_tavily(query, "advanced", max_results))
+            exa_task = asyncio.create_task(self._search_exa(query, max_results))
+            
+            tavily_res, exa_res = await asyncio.gather(tavily_task, exa_task)
+            
+            output_parts = []
+            if tavily_res.get("success"):
+                output_parts.append("--- TAVILY (QUICK FACTS) ---\n" + tavily_res.get("output", ""))
+            if exa_res.get("success"):
+                output_parts.append("--- EXA (DEEP PARSING) ---\n" + exa_res.get("output", ""))
+                
+            if not output_parts:
+                return {"success": False, "error": "Both Tavily and Exa failed in Neural search."}
+                
+            return {
+                "success": True,
+                "output": "\n\n".join(output_parts),
+                "note": "Neural Research Engine completed (Tavily + Exa)"
             }
 
         # Try Tavily first
@@ -275,4 +297,48 @@ Do not output any reasoning, just 'DONE' or the new query.
 
         except Exception as e:
             logger.error(f"DuckDuckGo search error: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _search_exa(
+        self, query: str, max_results: int
+    ) -> Dict[str, Any]:
+        """
+        Deep document parsing via Exa API.
+        """
+        if not settings.EXA_API_KEY:
+            return {"success": False, "error": "EXA_API_KEY is missing from config."}
+            
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    "https://api.exa.ai/search",
+                    headers={"x-api-key": settings.EXA_API_KEY},
+                    json={
+                        "query": query,
+                        "numResults": max_results,
+                        "contents": {"text": True}
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                results = data.get("results", [])
+                
+                formatted = []
+                for i, r in enumerate(results):
+                    # Get up to 2000 chars of deep content per result
+                    text = r.get("text", "")[:2000]
+                    formatted.append(
+                        f"[{i+1}] {r.get('title', 'No title')}\n"
+                        f"URL: {r.get('url', '')}\n"
+                        f"CONTENT:\n{text}..."
+                    )
+                
+                return {
+                    "success": True,
+                    "output": "\n\n".join(formatted),
+                    "results": results,
+                    "source": "exa"
+                }
+        except Exception as e:
+            logger.error(f"Exa search error: {e}")
             return {"success": False, "error": str(e)}

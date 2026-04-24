@@ -24,7 +24,10 @@ class IconFinderService:
                 self.collection_name, embedding_function=self.embedding_function
             )
         except Exception:
-            with open("assets/icons.json", "r") as f:
+            import os
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            icons_path = os.path.join(base_dir, "assets", "icons.json")
+            with open(icons_path, "r") as f:
                 icons = json.load(f)
 
             documents = []

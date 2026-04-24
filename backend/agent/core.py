@@ -277,6 +277,12 @@ class ArchimedesCosmoAgent:
             self.mcp_tool = MCPTool(self.mcp_client, sync_callback=self.sync_mcp_tools)
             self.register_tool("mcp_connect", self.mcp_tool.execute)
             
+            # Sprint 3.3: Rich Media Tool
+            from backend.tools.media_tool import MediaTool
+            self.media_tool = MediaTool()
+            self.register_tool("media", self.media_tool.execute)
+            logger.info("Media Tool registered (image gen, diagrams, downloads)")
+
             # 4 Super Weapon Tools
             from backend.tools.repo_map_tool import RepoMapTool
             self.repo_map_tool = RepoMapTool()
@@ -314,6 +320,15 @@ class ArchimedesCosmoAgent:
             self.register_tool("message", _dummy_message)
             
             logger.info("CORE: Все расширенные инструменты успешно загружены")
+            
+            # Sprint 4.2: Dynamic Tool Registry — auto-discover any new tools
+            try:
+                new_count = self.tool_registry.auto_discover_tools("backend/tools")
+                if new_count > 0:
+                    logger.info(f"CORE: Auto-discovered {new_count} additional tools")
+            except Exception as e:
+                logger.debug(f"Auto-discovery skipped: {e}")
+                
         except Exception as e:
             logger.error(f"ERROR: Ошибка при инициализации инструментов: {e}")
 
