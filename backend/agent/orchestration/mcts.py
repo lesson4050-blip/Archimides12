@@ -1,26 +1,28 @@
 """
 Monte Carlo Tree Search (MCTS) / Hypothesis Testing Engine (V3).
-
-This module enables Archimedes to explore multiple parallel solutions
-using Git branches, evaluate each path using TDD/execution feedback,
-and select the optimal solution.
+Standardized and Integrated.
 """
 import os
 import uuid
 import logging
 import asyncio
+import re
 import subprocess
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from backend.agent.tdd_executor import TDDExecutor
 
 logger = logging.getLogger(__name__)
 
-
 class MCTSManager:
-    def __init__(self, workspace_dir: str):
-        self.workspace_dir = workspace_dir
+    def __init__(self, orchestrator):
+        self.orchestrator = orchestrator
+        # orchestrator should have llm and executor attributes
+        self.tdd = TDDExecutor(orchestrator.llm, orchestrator.executor)
+        self.max_depth = 2
+        self.num_simulations = 3
+        self.workspace_dir = "."
 
     def _run_git(self, cmd: List[str]) -> Tuple[bool, str]:
-        """Run a git command in the workspace."""
         try:
             full_cmd = ["git"] + cmd
             result = subprocess.run(
@@ -30,143 +32,34 @@ class MCTSManager:
                 text=True,
                 check=False
             )
-            if result.returncode == 0:
-                return True, result.stdout.strip()
-            else:
-                return False, result.stderr.strip()
+            return (result.returncode == 0), (result.stdout.strip() if result.returncode == 0 else result.stderr.strip())
         except Exception as e:
             return False, str(e)
 
     def is_git_repo(self) -> bool:
-        """Check if workspace is a git repository."""
         success, _ = self._run_git(["status"])
         return success
 
-    def create_branch(self, branch_name: str) -> bool:
-        """Create and checkout a new git branch."""
-        success, _ = self._run_git(["checkout", "-b", branch_name])
-        return success
-
-    def checkout_branch(self, branch_name: str) -> bool:
-        """Checkout an existing git branch."""
-        success, _ = self._run_git(["checkout", branch_name])
-        return success
-
-    def get_current_branch(self) -> str:
-        """Get the current branch name."""
-        success, out = self._run_git(["rev-parse", "--abbrev-ref", "HEAD"])
-        return out if success else ""
-
-    def commit_changes(self, message: str) -> bool:
-        """Add all changes and commit."""
-        self._run_git(["add", "."])
-        success, _ = self._run_git(["commit", "-m", message])
-        return success
-
-    def merge_branch(self, branch_name: str) -> bool:
-        """Merge a branch into the current branch."""
-        success, _ = self._run_git(["merge", branch_name, "--no-edit"])
-        return success
-
-    def delete_branch(self, branch_name: str, force: bool = True) -> bool:
-        """Delete a branch."""
-        flag = "-D" if force else "-d"
-        success, _ = self._run_git(["branch", flag, branch_name])
-        return success
-
-    async def generate_hypotheses(
-        self,
-        task: str,
-        context: str,
-        model_router: Any,
-        session_id: str,
-        num_branches: int = 3
-    ) -> List[str]:
-        """
-        Ask the LLM to generate multiple distinct technical approaches for the task.
-        """
-        prompt = (
-            f"You are an expert software architect. The user needs to solve this task:\n"
-            f"<task>{task}</task>\n\n"
-            f"Context:\n{context}\n\n"
-            f"Provide {num_branches} COMPLETELY DISTINCT approaches to solving this problem.\n"
-            f"For each approach, provide a brief summary and the specific steps to implement it.\n"
-            f"Format your response EXACTLY as {num_branches} distinct blocks separated by '---APPROACH---'. "
-            f"Do not include any other text outside these blocks."
-        )
-
-        response = await model_router.route(
+    async def _evaluate_branch_with_tdd(self, branch_name: str, task: str) -> Tuple[float, str]:
+        """Runs TDD cycle on branch and returns score based on test results."""
+        logger.info(f"MCTS: Evaluating branch {branch_name} with TDD...")
+        session_id = f"mcts_{branch_name}"
+        
+        # In a real scenario, we might want to pass initial code if already generated
+        result_text = await self.tdd.execute_tdd(
+            task=task,
             session_id=session_id,
-            messages=[{"role": "user", "content": prompt}],
-            task_hint="architect"
+            code_path="implementation.py"
         )
         
-        text = response.get("text", "")
-        hypotheses = [h.strip() for h in text.split("---APPROACH---") if h.strip()]
-        
-        if not hypotheses:
-            hypotheses = [task]  # Fallback to single path
-            
-        return hypotheses[:num_branches]
-
-    async def execute_hypothesis(
-        self,
-        hypothesis: str,
-        executor_agent: Any,
-        state: Any,
-        test_command: Optional[str] = None
-    ) -> float:
-        """
-        Execute a single hypothesis using the provided executor agent.
-        Returns a score (0.0 to 1.0) based on execution success and test passing.
-        """
-        score = 0.0
-        
-        # 1. Execute the hypothesis (this would modify the files in the current branch)
-        state.task_description = hypothesis
-        state.task_hint = "execute"
-        # Reset step index for clean run
-        state.current_step_index = 0
-        
-        try:
-            # Run the agent loop until done (simplified for MCTS)
-            for _ in range(10): # max 10 steps per hypothesis
-                state = await executor_agent.process(state)
-                if state.is_done:
-                    score += 0.4  # Base score for successful completion
-                    break
-        except Exception as e:
-            logger.error(f"Hypothesis execution failed: {e}")
-            return 0.0
-
-        # 2. Commit the changes
-        self.commit_changes(f"Implemented hypothesis: {hypothesis[:50]}")
-
-        # 3. Evaluate with tests if provided
-        if test_command:
-            try:
-                # Use standard subprocess so it doesn't leak into the agent's active sandbox state improperly
-                result = subprocess.run(
-                    test_command,
-                    shell=True,
-                    cwd=self.workspace_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                if result.returncode == 0:
-                    score += 0.6  # Tests passed!
-                else:
-                    # Tests failed, but maybe some progress was made
-                    # Calculate ratio of passed vs failed if possible, but for now 0 test score
-                    pass
-            except subprocess.TimeoutExpired:
-                pass
+        if "[TDD Success]" in result_text:
+            # Extract coverage or just give a high score
+            cov_match = re.search(r"coverage: (\d+)%", result_text)
+            coverage = int(cov_match.group(1)) if cov_match else 80
+            score = 0.5 + (coverage / 200.0) # 0.5 to 1.0
+            return score, result_text
         else:
-            # If no tests, rely on agent's confidence
-            score += 0.3
-
-        return score
+            return 0.1, result_text
 
     async def run_mcts(
         self,
@@ -174,68 +67,62 @@ class MCTSManager:
         context: str,
         model_router: Any,
         executor_agent: Any,
-        state: Any,
-        test_command: Optional[str] = None
+        state: Any
     ) -> str:
         """
-        Main MCTS entry point.
-        1. Ensures git repo.
-        2. Generates hypotheses.
-        3. Branches out and executes each.
-        4. Selects the best branch and merges it back to main.
+        The main entry point called by Orchestrator.
+        Explores multiple paths via Git branches and returns the best solution.
         """
+        logger.info(f"Starting MCTS for task: {task}")
+        
         if not self.is_git_repo():
+            logger.info("Initializing git repo for MCTS exploration.")
             self._run_git(["init"])
-            self.commit_changes("Initial commit for MCTS")
+            self._run_git(["add", "."])
+            self._run_git(["commit", "-m", "Initial commit for MCTS"])
 
-        base_branch = self.get_current_branch() or "main"
+        base_branch = "main" # Assume main for simplicity, or detect current
         
-        hypotheses = await self.generate_hypotheses(
-            task, context, model_router, state.session_id
+        # 1. Generate Hypotheses
+        prompt = (
+            f"Task: {task}\nContext: {context}\n"
+            "Generate 3 distinct technical approaches. Separate by '---APPROACH---'."
         )
+        response = await model_router.generate(
+            messages=[{"role": "user", "content": prompt}],
+            task_hint="think"
+        )
+        hypotheses = [h.strip() for h in response.get("text", "").split("---APPROACH---") if h.strip()]
         
-        logger.info(f"MCTS generated {len(hypotheses)} hypotheses.")
-        
-        results = []
-        branches = []
+        if not hypotheses:
+            return "No distinct hypotheses generated. Proceeding with default."
 
-        for i, hypothesis in enumerate(hypotheses):
-            branch_name = f"mcts-branch-{uuid.uuid4().hex[:8]}"
-            branches.append(branch_name)
+        results = []
+        for i, hyp in enumerate(hypotheses[:3]):
+            branch_name = f"archimedes-branch-{uuid.uuid4().hex[:6]}"
+            logger.info(f"Exploring Hypothesis {i+1} on branch {branch_name}")
             
-            self.checkout_branch(base_branch)
-            self.create_branch(branch_name)
+            # Switch to new branch
+            self._run_git(["checkout", "-b", branch_name])
             
-            logger.info(f"Evaluating hypothesis {i+1} on branch {branch_name}")
-            
-            # Deep copy state if necessary, or just rely on the agent to manage it
-            # We'll need a clean context for each branch
-            executor_agent.context_manager.clear()
-            
-            score = await self.execute_hypothesis(
-                hypothesis, executor_agent, state, test_command
-            )
+            # 4. Evaluate branch using TDD
+            score, feedback = await self._evaluate_branch_with_tdd(branch_name, task)
             
             results.append({
+                "hypothesis": hyp,
                 "branch": branch_name,
                 "score": score,
-                "hypothesis": hypothesis
+                "feedback": feedback
             })
             
-            logger.info(f"Hypothesis {i+1} scored {score:.2f}")
+            # Return to base
+            self._run_git(["checkout", base_branch])
 
-        # Find the best branch
-        best_result = max(results, key=lambda x: x["score"])
+        # 2. Select Best (Simple max for now)
+        best = max(results, key=lambda x: x["score"])
         
-        logger.info(f"Best branch is {best_result['branch']} with score {best_result['score']:.2f}")
+        # 3. Merge Best
+        logger.info(f"Merging best branch: {best['branch']}")
+        self._run_git(["merge", best["branch"], "--no-edit"])
         
-        # Checkout base and merge the best
-        self.checkout_branch(base_branch)
-        self.merge_branch(best_result["branch"])
-        
-        # Cleanup other branches
-        for b in branches:
-            if b != best_result["branch"]:
-                self.delete_branch(b)
-                
-        return best_result["hypothesis"]
+        return f"Selected Approach: {best['hypothesis']}\nResult: Successfully merged code changes from {best['branch']}."

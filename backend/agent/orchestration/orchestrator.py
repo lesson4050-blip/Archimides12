@@ -6,6 +6,7 @@ from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.agent.orchestration.agents.planner_agent import PlannerAgent
 from backend.agent.orchestration.agents.executor_agent import ExecutorAgent
 from backend.agent.orchestration.agents.critic_agent import CriticAgent
+from backend.agent.orchestration.mcts import MCTSManager
 from backend.models.model_router import ModelRouter
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
@@ -140,6 +141,7 @@ class AgentOrchestrator:
         self.critic = CriticAgent(router)
         from backend.agent.orchestration.swarm import MicroAgentSwarm
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)
+        self.mcts_manager = MCTSManager(workspace_dir=".")
         
     async def run_task(self, 
                        task_description: str, 
@@ -265,20 +267,17 @@ class AgentOrchestrator:
                     # Strategy-aware dispatch: use swarm for matching strategies
                     agent_override = STRATEGY_AGENTS.get(strategy)
                     if strategy == "mcts":
-                        from backend.agent.orchestration.mcts import MCTSManager
-                        mcts_manager = MCTSManager(workspace_dir=".")
-                        
                         if websocket_send:
                             await websocket_send({"type": "info", "content": "🔍 Запуск MCTS: Поиск оптимального решения через ветвление..."})
                             
-                        # Context from context manager
+                        # Context from history and task
                         context_str = state.task_description
                         try:
                             context_str += "\n" + "\n".join([msg["content"] for msg in state.history if msg["role"] == "user"])
                         except Exception:
                             pass
                             
-                        mcts_result = await mcts_manager.run_mcts(
+                        mcts_result = await self.mcts_manager.run_mcts(
                             task=current_target,
                             context=context_str,
                             model_router=self.router,
@@ -287,10 +286,8 @@ class AgentOrchestrator:
                         )
                         state.results.append({
                             "step": i,
-                            "output": f"MCTS Selected Hypothesis:\n{mcts_result}"
+                            "output": f"MCTS Result:\n{mcts_result}"
                         })
-                        
-                        # Set critic verdict to PASS as MCTS already selected the best
                         state.metadata["critic_verdict"] = "PASS"
                     elif agent_override:
                         # Use swarm with strategy-specific agents

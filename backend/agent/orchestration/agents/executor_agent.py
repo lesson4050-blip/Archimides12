@@ -107,6 +107,7 @@ class ExecutorAgent(BaseAgent):
 
         # Track previous error for self-improvement
         prev_error = None
+        task_success = True
 
         # Sprint 4.1: Skill Engine — check for matching skill before execution
         _tool_call_log = []  # Collect tool calls for loop detection and metrics
@@ -239,17 +240,27 @@ class ExecutorAgent(BaseAgent):
                     "function": { "name": t_name, "arguments": t_params }
                 }
 
-                # Phase 1.2: Pre-flight Command Safety Check
-                from backend.agent.self_improvement import check_tool_safety
-                is_safe, safety_warning = await check_tool_safety(t_name, t_params)
+                # Phase 1.1: Pydantic Schema Validation
+                from backend.agent.orchestration.agents.tool_models import validate_tool_call
+                is_valid, validation_error = validate_tool_call(t_name, t_params)
                 
-                if not is_safe:
+                if not is_valid:
                     tool_res = {
                         "success": False,
-                        "error": f"PRE-FLIGHT REJECTION: {safety_warning}. Please revise your approach."
+                        "error": f"SCHEMA VALIDATION ERROR: {validation_error}. Please provide correct parameters according to the tool definition."
                     }
                 else:
-                    tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
+                    # Phase 1.2: Pre-flight Command Safety Check
+                    from backend.agent.self_improvement import check_tool_safety
+                    is_safe, safety_warning = await check_tool_safety(t_name, t_params)
+                    
+                    if not is_safe:
+                        tool_res = {
+                            "success": False,
+                            "error": f"PRE-FLIGHT REJECTION: {safety_warning}. Please revise your approach."
+                        }
+                    else:
+                        tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
                 
                 from backend.utils.structured_logger import log_model_response
                 log_model_response(
@@ -275,6 +286,7 @@ class ExecutorAgent(BaseAgent):
                 if not success:
                     output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
                     prev_error = output  # Track for self-improvement
+                    task_success = False # Mark task as partially failed
 
                     # v2: Classify error and record with ErrorRecovery
                     file_path = t_params.get("path", t_params.get("file", None))
@@ -344,6 +356,7 @@ class ExecutorAgent(BaseAgent):
                 else:
                     # v2: Record success in ErrorRecovery
                     self.error_recovery.record_success()
+                    task_success = True # Reset success if tool worked
 
                     # Section 6A: Learn from successful recovery
                     if prev_error and success:
@@ -483,7 +496,7 @@ class ExecutorAgent(BaseAgent):
                 state.results.append({"step": state.current_step_index, "output": res_text or "Done."})
 
                 # Sprint 5.1: Experience Extraction — store successful history as a playbook
-                if success:
+                if task_success:
                     try:
                         history = self.context_manager.get_messages()
                         skill_id = self.skill_engine.extract_and_save_skill(

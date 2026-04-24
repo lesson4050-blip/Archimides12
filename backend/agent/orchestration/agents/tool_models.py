@@ -1,0 +1,60 @@
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List, Dict, Any, Union, Tuple
+
+class FileToolModel(BaseModel):
+    action: str = Field(..., description="Action to perform: 'read', 'write', 'append', 'delete', 'list', 'exists'")
+    path: str = Field(..., description="Path to the file or directory")
+    content: Optional[str] = Field(None, description="Content to write or append")
+    encoding: Optional[str] = Field("utf-8", description="File encoding")
+
+    @validator('action')
+    def validate_action(cls, v):
+        allowed = ['read', 'write', 'append', 'delete', 'list', 'exists']
+        if v not in allowed:
+            raise ValueError(f"Action must be one of {allowed}")
+        return v
+
+class ShellToolModel(BaseModel):
+    command: str = Field(..., description="The shell command to execute")
+    timeout: Optional[int] = Field(60, description="Command timeout in seconds")
+
+class SearchToolModel(BaseModel):
+    query: str = Field(..., description="Search query")
+    max_results: Optional[int] = Field(5, description="Maximum number of results to return")
+
+class PresentationToolModel(BaseModel):
+    prompt: str = Field(..., description="Detailed prompt for the presentation content")
+    slide_count: Optional[int] = Field(8, ge=1, le=20, description="Number of slides to generate")
+    theme: Optional[str] = Field("dark", description="Visual theme (dark, light, corporate, bold, gradient)")
+    language: Optional[str] = Field("ru", description="Output language")
+
+class BrowserToolModel(BaseModel):
+    action: str = Field(..., description="Action: 'navigate', 'click', 'type', 'screenshot', 'extract'")
+    url: Optional[str] = Field(None, description="URL for 'navigate'")
+    selector: Optional[str] = Field(None, description="CSS selector for 'click' or 'type'")
+    value: Optional[str] = Field(None, description="Value for 'type'")
+
+# Registry of models for easy lookup
+TOOL_MODELS = {
+    "file": FileToolModel,
+    "shell": ShellToolModel,
+    "search": SearchToolModel,
+    "presentation": PresentationToolModel,
+    "browser": BrowserToolModel
+}
+
+def validate_tool_call(name: str, params: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """
+    Validates tool parameters against the Pydantic model.
+    Returns (is_valid, error_message).
+    """
+    model = TOOL_MODELS.get(name)
+    if not model:
+        # If no model defined, we pass it through (soft migration)
+        return True, None
+    
+    try:
+        model(**params)
+        return True, None
+    except Exception as e:
+        return False, str(e)
