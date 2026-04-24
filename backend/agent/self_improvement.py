@@ -11,7 +11,7 @@ Features:
 - Decay: patterns that haven't helped recently get lower priority
 - Thread-safe: uses connection-per-call pattern for SQLite
 """
-import sqlite3
+import aiosqlite
 import os
 import re
 import logging
@@ -26,55 +26,54 @@ DB_PATH = os.environ.get(
 )
 
 
-def _get_conn() -> sqlite3.Connection:
+async def _init_db():
     """Create a new connection with proper schema initialization."""
     os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.execute("PRAGMA journal_mode=WAL")  # Better concurrent access
-    
-    # Table 1: Raw Error Tracking
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS error_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            tool_name TEXT,
-            raw_error TEXT,
-            normalized_pattern TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    
-    # Table 2: Confirmed Fixes (replaces 'lessons')
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS successful_fixes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            error_pattern TEXT NOT NULL,
-            fix_pattern TEXT NOT NULL,
-            tool_name TEXT DEFAULT '',
-            success_count INTEGER DEFAULT 1,
-            fail_count INTEGER DEFAULT 0,
-            last_used TEXT DEFAULT (datetime('now')),
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    
-    # Table 3: Complex Workflow Skills
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS skill_patterns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            trigger_intent TEXT NOT NULL,
-            skill_payload TEXT NOT NULL,
-            success_rate REAL DEFAULT 1.0,
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_fixes_pattern
-        ON successful_fixes(error_pattern)
-    """)
-    conn.commit()
-    return conn
+    async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+        await conn.execute("PRAGMA journal_mode=WAL")  # Better concurrent access
+        
+        # Table 1: Raw Error Tracking
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS error_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                tool_name TEXT,
+                raw_error TEXT,
+                normalized_pattern TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        
+        # Table 2: Confirmed Fixes (replaces 'lessons')
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS successful_fixes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                error_pattern TEXT NOT NULL,
+                fix_pattern TEXT NOT NULL,
+                tool_name TEXT DEFAULT '',
+                success_count INTEGER DEFAULT 1,
+                fail_count INTEGER DEFAULT 0,
+                last_used TEXT DEFAULT (datetime('now')),
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        
+        # Table 3: Complex Workflow Skills
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS skill_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trigger_intent TEXT NOT NULL,
+                skill_payload TEXT NOT NULL,
+                success_rate REAL DEFAULT 1.0,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_fixes_pattern
+            ON successful_fixes(error_pattern)
+        """)
+        await conn.commit()
 
 
 def _normalize_error(error: str) -> str:
@@ -100,22 +99,22 @@ def _normalize_error(error: str) -> str:
     return pattern
 
 
-def log_error(error: str, tool_name: str, session_id: str = ""):
+async def log_error(error: str, tool_name: str, session_id: str = ""):
     """Log a raw error for analytics and future autonomous processing."""
     if not error: return
     try:
-        conn = _get_conn()
-        conn.execute(
-            "INSERT INTO error_logs (session_id, tool_name, raw_error, normalized_pattern) "
-            "VALUES (?, ?, ?, ?)",
-            (session_id, tool_name, error, _normalize_error(error))
-        )
-        conn.commit()
-        conn.close()
+        await _init_db()
+        async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+            await conn.execute(
+                "INSERT INTO error_logs (session_id, tool_name, raw_error, normalized_pattern) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, tool_name, error, _normalize_error(error))
+            )
+            await conn.commit()
     except Exception as e:
         logger.warning(f"Failed to log error: {e}")
 
-def learn_from_error(
+async def learn_from_error(
     error: str, fix: str, tool_name: str = "", success: bool = True
 ):
     """
@@ -132,42 +131,42 @@ def learn_from_error(
 
     try:
         pattern = _normalize_error(error)
-        conn = _get_conn()
-
-        existing = conn.execute(
-            "SELECT id, success_count, fail_count FROM successful_fixes "
-            "WHERE error_pattern = ? AND tool_name = ?",
-            (pattern, tool_name)
-        ).fetchone()
-
-        if existing:
-            if success:
-                conn.execute(
-                    "UPDATE successful_fixes SET success_count = success_count + 1, "
-                    "last_used = datetime('now'), fix_pattern = ? "
-                    "WHERE id = ?",
-                    (fix[:500], existing[0])
-                )
-            else:
-                conn.execute(
-                    "UPDATE successful_fixes SET fail_count = fail_count + 1 "
-                    "WHERE id = ?",
-                    (existing[0],)
-                )
-        else:
-            conn.execute(
-                "INSERT INTO successful_fixes "
-                "(error_pattern, fix_pattern, tool_name) VALUES (?,?,?)",
-                (pattern, fix[:500], tool_name)
+        await _init_db()
+        async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+            cursor = await conn.execute(
+                "SELECT id, success_count, fail_count FROM successful_fixes "
+                "WHERE error_pattern = ? AND tool_name = ?",
+                (pattern, tool_name)
             )
+            existing = await cursor.fetchone()
 
-        conn.commit()
-        conn.close()
+            if existing:
+                if success:
+                    await conn.execute(
+                        "UPDATE successful_fixes SET success_count = success_count + 1, "
+                        "last_used = datetime('now'), fix_pattern = ? "
+                        "WHERE id = ?",
+                        (fix[:500], existing[0])
+                    )
+                else:
+                    await conn.execute(
+                        "UPDATE successful_fixes SET fail_count = fail_count + 1 "
+                        "WHERE id = ?",
+                        (existing[0],)
+                    )
+            else:
+                await conn.execute(
+                    "INSERT INTO successful_fixes "
+                    "(error_pattern, fix_pattern, tool_name) VALUES (?,?,?)",
+                    (pattern, fix[:500], tool_name)
+                )
+
+            await conn.commit()
     except Exception as e:
         logger.warning(f"Self-improvement learn failed: {e}")
 
 
-def get_fix_hint(error: str, tool_name: str = "") -> Optional[str]:
+async def get_fix_hint(error: str, tool_name: str = "") -> Optional[str]:
     """
     Retrieve a previously learned fix for a similar error.
     
@@ -180,45 +179,46 @@ def get_fix_hint(error: str, tool_name: str = "") -> Optional[str]:
 
     try:
         pattern = _normalize_error(error)
-        conn = _get_conn()
+        await _init_db()
+        async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+            # Query with confidence scoring
+            if tool_name:
+                cursor = await conn.execute(
+                    "SELECT fix_pattern FROM successful_fixes "
+                    "WHERE error_pattern = ? AND tool_name = ? "
+                    "AND (success_count - fail_count) > 0 "
+                    "ORDER BY (success_count - fail_count) DESC LIMIT 1",
+                    (pattern, tool_name)
+                )
+            else:
+                cursor = await conn.execute(
+                    "SELECT fix_pattern FROM successful_fixes "
+                    "WHERE error_pattern = ? "
+                    "AND (success_count - fail_count) > 0 "
+                    "ORDER BY (success_count - fail_count) DESC LIMIT 1",
+                    (pattern,)
+                )
+            row = await cursor.fetchone()
 
-        # Query with confidence scoring
-        if tool_name:
-            row = conn.execute(
-                "SELECT fix_pattern FROM successful_fixes "
-                "WHERE error_pattern = ? AND tool_name = ? "
-                "AND (success_count - fail_count) > 0 "
-                "ORDER BY (success_count - fail_count) DESC LIMIT 1",
-                (pattern, tool_name)
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT fix_pattern FROM successful_fixes "
-                "WHERE error_pattern = ? "
-                "AND (success_count - fail_count) > 0 "
-                "ORDER BY (success_count - fail_count) DESC LIMIT 1",
-                (pattern,)
-            ).fetchone()
-
-        conn.close()
         return row[0] if row else None
     except Exception:
         return None
 
 
-def get_all_lessons(limit: int = 50) -> List[Dict[str, Any]]:
+async def get_all_lessons(limit: int = 50) -> List[Dict[str, Any]]:
     """Retrieve all learned lessons, sorted by effectiveness."""
     try:
-        conn = _get_conn()
-        rows = conn.execute(
-            "SELECT error_pattern, fix_pattern, tool_name, "
-            "success_count, fail_count, last_used "
-            "FROM successful_fixes "
-            "ORDER BY (success_count - fail_count) DESC "
-            "LIMIT ?",
-            (limit,)
-        ).fetchall()
-        conn.close()
+        await _init_db()
+        async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+            cursor = await conn.execute(
+                "SELECT error_pattern, fix_pattern, tool_name, "
+                "success_count, fail_count, last_used "
+                "FROM successful_fixes "
+                "ORDER BY (success_count - fail_count) DESC "
+                "LIMIT ?",
+                (limit,)
+            )
+            rows = await cursor.fetchall()
 
         return [
             {
@@ -236,12 +236,12 @@ def get_all_lessons(limit: int = 50) -> List[Dict[str, Any]]:
         return []
 
 
-def get_context_prompt(error: str, tool_name: str = "") -> str:
+async def get_context_prompt(error: str, tool_name: str = "") -> str:
     """
     Generate a context string for the LLM that includes known fixes.
     Designed to be injected into executor prompts when errors occur.
     """
-    hint = get_fix_hint(error, tool_name)
+    hint = await get_fix_hint(error, tool_name)
     if hint:
         return (
             f"\n[SELF-IMPROVEMENT HINT] A similar error was seen before. "
@@ -250,7 +250,7 @@ def get_context_prompt(error: str, tool_name: str = "") -> str:
     return ""
 
 
-def check_tool_safety(tool_name: str, params: dict) -> Tuple[bool, str]:
+async def check_tool_safety(tool_name: str, params: dict) -> Tuple[bool, str]:
     """
     Pre-flight safety check for tool execution.
     Analyzes parameters and checks against historical failure loops.
@@ -289,13 +289,14 @@ def check_tool_safety(tool_name: str, params: dict) -> Tuple[bool, str]:
 
     # Check if this exact tool/params has failed consecutively
     try:
-        conn = _get_conn()
-        recent_errors = conn.execute(
-            "SELECT COUNT(*) FROM error_logs "
-            "WHERE tool_name = ? AND created_at > datetime('now', '-5 minutes')",
-            (tool_name,)
-        ).fetchone()
-        conn.close()
+        await _init_db()
+        async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+            cursor = await conn.execute(
+                "SELECT COUNT(*) FROM error_logs "
+                "WHERE tool_name = ? AND created_at > datetime('now', '-5 minutes')",
+                (tool_name,)
+            )
+            recent_errors = await cursor.fetchone()
         if recent_errors and recent_errors[0] >= 5:
             return False, (
                 f"Tool '{tool_name}' has failed {recent_errors[0]} times in the last 5 minutes. "
@@ -307,22 +308,23 @@ def check_tool_safety(tool_name: str, params: dict) -> Tuple[bool, str]:
     return True, ""
 
 
-def get_error_frequency(minutes: int = 60, limit: int = 10) -> List[Dict[str, Any]]:
+async def get_error_frequency(minutes: int = 60, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Get the most frequent error patterns in the last N minutes.
     Useful for proactive diagnostics and system health checks.
     """
     try:
-        conn = _get_conn()
-        rows = conn.execute(
-            "SELECT normalized_pattern, tool_name, COUNT(*) as freq "
-            "FROM error_logs "
-            "WHERE created_at > datetime('now', ? || ' minutes') "
-            "GROUP BY normalized_pattern, tool_name "
-            "ORDER BY freq DESC LIMIT ?",
-            (f"-{minutes}", limit)
-        ).fetchall()
-        conn.close()
+        await _init_db()
+        async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+            cursor = await conn.execute(
+                "SELECT normalized_pattern, tool_name, COUNT(*) as freq "
+                "FROM error_logs "
+                "WHERE created_at > datetime('now', ? || ' minutes') "
+                "GROUP BY normalized_pattern, tool_name "
+                "ORDER BY freq DESC LIMIT ?",
+                (f"-{minutes}", limit)
+            )
+            rows = await cursor.fetchall()
         return [
             {"pattern": r[0], "tool": r[1], "count": r[2]}
             for r in rows

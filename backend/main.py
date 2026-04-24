@@ -160,8 +160,8 @@ async def api_health():
     ollama_ok = False
     try:
         import ollama
-        client = ollama.Client(host=settings.OLLAMA_BASE_URL)
-        client.list()
+        client = ollama.AsyncClient(host=settings.OLLAMA_BASE_URL)
+        await client.list()
         ollama_ok = True
     except Exception:
         pass

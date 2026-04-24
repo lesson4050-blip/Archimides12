@@ -5,7 +5,10 @@ from typing import Dict, Any
 import contextlib
 
 # Persistent state across tool calls within the same worker process
-GLOBAL_REPL_STATE = {}
+_SESSION_STATES: dict[str, dict] = {}
+
+def clear_session(session_id: str) -> None:
+    _SESSION_STATES.pop(session_id, None)
 
 class ReplTool:
     """
@@ -34,6 +37,10 @@ class ReplTool:
         }
 
     async def execute(self, session_id: str, code: str) -> Dict[str, Any]:
+        if session_id not in _SESSION_STATES:
+            _SESSION_STATES[session_id] = {}
+        state = _SESSION_STATES[session_id]
+
         # Capture stdout and stderr
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -52,15 +59,15 @@ class ReplTool:
                     eval_part = ast.unparse(parsed.body[-1].value) if hasattr(ast, 'unparse') else ""
                     
                     if exec_part:
-                        exec(compile(parsed.body[:-1], "<repl>", "exec"), GLOBAL_REPL_STATE)
+                        exec(compile(parsed.body[:-1], "<repl>", "exec"), state)
                     
                     if eval_part:
-                        val = eval(compile(parsed.body[-1].value, "<repl>", "eval"), GLOBAL_REPL_STATE)
+                        val = eval(compile(parsed.body[-1].value, "<repl>", "eval"), state)
                         if val is not None:
                             print(val)
                 else:
                     # Just exec the whole block
-                    exec(code, GLOBAL_REPL_STATE)
+                    exec(code, state)
                     
             out = stdout.getvalue()
             err = stderr.getvalue()

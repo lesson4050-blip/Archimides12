@@ -8,7 +8,7 @@ import asyncio
 import logging
 import json
 import os
-import sqlite3
+import aiosqlite
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Callable
 from pathlib import Path
@@ -21,21 +21,20 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 TRIGGER_DB = DATA_DIR / "triggers.db"
 
 
-def _init_db():
-    conn = sqlite3.connect(str(TRIGGER_DB))
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS triggers (
-            id TEXT PRIMARY KEY,
-            description TEXT,
-            trigger_at TEXT,
-            condition TEXT,
-            status TEXT DEFAULT 'pending',
-            created_at TEXT,
-            result TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+async def _init_db():
+    async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS triggers (
+                id TEXT PRIMARY KEY,
+                description TEXT,
+                trigger_at TEXT,
+                condition TEXT,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT,
+                result TEXT
+            )
+        """)
+        await conn.commit()
 
 
 class TriggerTool:
@@ -51,7 +50,7 @@ class TriggerTool:
     def __init__(self):
         self._active: Dict[str, asyncio.Task] = {}
         self._callbacks: Dict[str, Callable] = {}
-        _init_db()
+        self._db_initialized = False
 
     def get_definition(self) -> Dict[str, Any]:
         return {
@@ -118,6 +117,10 @@ class TriggerTool:
         **kwargs
     ) -> Dict[str, Any]:
 
+        if not self._db_initialized:
+            await _init_db()
+            self._db_initialized = True
+
         if action == "add":
             return await self._add_trigger(
                 delay_seconds, trigger_at,
@@ -130,7 +133,7 @@ class TriggerTool:
         elif action == "cancel":
             return await self._cancel(trigger_id)
         elif action == "list":
-            return self._list_triggers()
+            return await self._list_triggers()
         elif action == "check":
             return await self._check_due()
         return {"success": False, "error": f"Unknown action: {action}"}
@@ -154,23 +157,22 @@ class TriggerTool:
 
         tid = tid or f"trig_{abs(hash(description))}_{delay}"
 
-        conn = sqlite3.connect(str(TRIGGER_DB))
-        conn.execute(
-            "INSERT OR REPLACE INTO triggers "
-            "(id, description, trigger_at, status, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (tid, description, trigger_time.isoformat(),
-             "pending", datetime.now().isoformat())
-        )
-        conn.commit()
-        conn.close()
+        async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+            await conn.execute(
+                "INSERT OR REPLACE INTO triggers "
+                "(id, description, trigger_at, status, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (tid, description, trigger_time.isoformat(),
+                 "pending", datetime.now().isoformat())
+            )
+            await conn.commit()
 
         # Schedule in-memory task
         async def _fire():
             wait = (trigger_time - datetime.now()).total_seconds()
             if wait > 0:
                 await asyncio.sleep(wait)
-            self._mark_fired(tid)
+            await self._mark_fired(tid)
             logger.info(f"Trigger fired: {tid} — {description}")
 
         task = asyncio.create_task(_fire())
@@ -195,16 +197,15 @@ class TriggerTool:
 
         tid = tid or f"cond_{abs(hash(condition))}"
 
-        conn = sqlite3.connect(str(TRIGGER_DB))
-        conn.execute(
-            "INSERT OR REPLACE INTO triggers "
-            "(id, description, condition, status, created_at) "
-            "VALUES (?,?,?,?,?)",
-            (tid, description, condition,
-             "watching", datetime.now().isoformat())
-        )
-        conn.commit()
-        conn.close()
+        async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+            await conn.execute(
+                "INSERT OR REPLACE INTO triggers "
+                "(id, description, condition, status, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (tid, description, condition,
+                 "watching", datetime.now().isoformat())
+            )
+            await conn.commit()
 
         return {
             "success": True,
@@ -223,21 +224,20 @@ class TriggerTool:
         if task:
             task.cancel()
 
-        conn = sqlite3.connect(str(TRIGGER_DB))
-        conn.execute(
-            "UPDATE triggers SET status='cancelled' WHERE id=?", (tid,)
-        )
-        conn.commit()
-        conn.close()
+        async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+            await conn.execute(
+                "UPDATE triggers SET status='cancelled' WHERE id=?", (tid,)
+            )
+            await conn.commit()
         return {"success": True, "output": f"Trigger {tid} cancelled."}
 
-    def _list_triggers(self) -> Dict[str, Any]:
-        conn = sqlite3.connect(str(TRIGGER_DB))
-        rows = conn.execute(
-            "SELECT id, description, trigger_at, condition, status "
-            "FROM triggers ORDER BY created_at DESC LIMIT 20"
-        ).fetchall()
-        conn.close()
+    async def _list_triggers(self) -> Dict[str, Any]:
+        async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+            cursor = await conn.execute(
+                "SELECT id, description, trigger_at, condition, status "
+                "FROM triggers ORDER BY created_at DESC LIMIT 20"
+            )
+            rows = await cursor.fetchall()
 
         if not rows:
             return {"success": True, "output": "No triggers scheduled."}
@@ -254,18 +254,18 @@ class TriggerTool:
 
     async def _check_due(self) -> Dict[str, Any]:
         now = datetime.now().isoformat()
-        conn = sqlite3.connect(str(TRIGGER_DB))
-        due = conn.execute(
-            "SELECT id, description FROM triggers "
-            "WHERE status='pending' AND trigger_at <= ?", (now,)
-        ).fetchall()
-        for tid, desc in due:
-            conn.execute(
-                "UPDATE triggers SET status='fired' WHERE id=?", (tid,)
+        async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+            cursor = await conn.execute(
+                "SELECT id, description FROM triggers "
+                "WHERE status='pending' AND trigger_at <= ?", (now,)
             )
-            logger.info(f"Trigger due: {tid} — {desc}")
-        conn.commit()
-        conn.close()
+            due = await cursor.fetchall()
+            for tid, desc in due:
+                await conn.execute(
+                    "UPDATE triggers SET status='fired' WHERE id=?", (tid,)
+                )
+                logger.info(f"Trigger due: {tid} — {desc}")
+            await conn.commit()
 
         fired = len(due)
         return {
@@ -277,13 +277,12 @@ class TriggerTool:
             )
         }
 
-    def _mark_fired(self, tid: str):
+    async def _mark_fired(self, tid: str):
         try:
-            conn = sqlite3.connect(str(TRIGGER_DB))
-            conn.execute(
-                "UPDATE triggers SET status='fired' WHERE id=?", (tid,)
-            )
-            conn.commit()
-            conn.close()
+            async with aiosqlite.connect(str(TRIGGER_DB)) as conn:
+                await conn.execute(
+                    "UPDATE triggers SET status='fired' WHERE id=?", (tid,)
+                )
+                await conn.commit()
         except Exception as e:
             logger.error(f"Error marking trigger fired: {e}")

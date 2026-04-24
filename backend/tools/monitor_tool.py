@@ -2,7 +2,7 @@ import asyncio
 import httpx
 import hashlib
 import logging
-import sqlite3
+import aiosqlite
 import os
 import json
 from typing import Dict, Any, List, Tuple
@@ -16,25 +16,24 @@ DB_PATH = os.environ.get(
 )
 
 
-def _get_conn() -> sqlite3.Connection:
+async def _init_db():
     """Create a new connection with proper schema initialization."""
     os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS monitors (
-            monitor_id TEXT PRIMARY KEY,
-            url TEXT NOT NULL,
-            interval_minutes INTEGER DEFAULT 60,
-            on_change_task TEXT,
-            session_id TEXT,
-            last_hash TEXT,
-            last_checked TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    conn.commit()
-    return conn
+    async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+        await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS monitors (
+                monitor_id TEXT PRIMARY KEY,
+                url TEXT NOT NULL,
+                interval_minutes INTEGER DEFAULT 60,
+                on_change_task TEXT,
+                session_id TEXT,
+                last_hash TEXT,
+                last_checked TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await conn.commit()
 
 
 class MonitorTool:
@@ -42,14 +41,13 @@ class MonitorTool:
     
     def __init__(self):
         self._tasks: Dict[str, asyncio.Task] = {}
-        # Resurrect monitors on startup
-        self._resurrect_monitors()
+        self._db_initialized = False
         
-    def _resurrect_monitors(self):
+    async def _resurrect_monitors(self):
         try:
-            conn = _get_conn()
-            rows = conn.execute("SELECT monitor_id FROM monitors").fetchall()
-            conn.close()
+            async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+                cursor = await conn.execute("SELECT monitor_id FROM monitors")
+                rows = await cursor.fetchall()
             for row in rows:
                 mid = row[0]
                 if mid not in self._tasks:
@@ -80,20 +78,24 @@ class MonitorTool:
     async def execute(self, action: str, url: str = None,
                       interval_minutes: int = 60, on_change_task: str = None,
                       monitor_id: str = None, **kwargs) -> Dict[str, Any]:
+        if not self._db_initialized:
+            await _init_db()
+            self._db_initialized = True
+            await self._resurrect_monitors()
+
         if action == "add":
             if not url:
                 return {"success": False, "error": "url required for 'add' action"}
             mid = f"mon_{abs(hash(url))}_{int(datetime.now().timestamp())}"
             
             try:
-                conn = _get_conn()
-                conn.execute(
-                    "INSERT INTO monitors (monitor_id, url, interval_minutes, on_change_task, session_id) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (mid, url, interval_minutes, on_change_task, kwargs.get("session_id", ""))
-                )
-                conn.commit()
-                conn.close()
+                async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+                    await conn.execute(
+                        "INSERT INTO monitors (monitor_id, url, interval_minutes, on_change_task, session_id) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (mid, url, interval_minutes, on_change_task, kwargs.get("session_id", ""))
+                    )
+                    await conn.commit()
                 
                 self._tasks[mid] = asyncio.create_task(self._watch(mid))
                 return {"success": True, "output": f"Monitor {mid} started for {url}"}
@@ -102,12 +104,12 @@ class MonitorTool:
         
         elif action == "list":
             try:
-                conn = _get_conn()
-                rows = conn.execute(
-                    "SELECT monitor_id, url, interval_minutes, last_checked "
-                    "FROM monitors"
-                ).fetchall()
-                conn.close()
+                async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+                    cursor = await conn.execute(
+                        "SELECT monitor_id, url, interval_minutes, last_checked "
+                        "FROM monitors"
+                    )
+                    rows = await cursor.fetchall()
                 
                 if not rows:
                     return {"success": True, "output": "No active monitors."}
@@ -125,10 +127,9 @@ class MonitorTool:
                 del self._tasks[monitor_id]
                 
             try:
-                conn = _get_conn()
-                conn.execute("DELETE FROM monitors WHERE monitor_id = ?", (monitor_id,))
-                conn.commit()
-                conn.close()
+                async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+                    await conn.execute("DELETE FROM monitors WHERE monitor_id = ?", (monitor_id,))
+                    await conn.commit()
                 return {"success": True, "output": f"Monitor {monitor_id} removed."}
             except Exception as e:
                 return {"success": False, "error": f"DB Error: {str(e)}"}
@@ -145,14 +146,14 @@ class MonitorTool:
 
     async def _fetch_and_compare(self, mid: str) -> Tuple[bool, str]:
         try:
-            conn = _get_conn()
-            row = conn.execute(
-                "SELECT url, last_hash FROM monitors WHERE monitor_id = ?", 
-                (mid,)
-            ).fetchone()
-            if not row:
-                conn.close()
-                return False, "Error: Monitor not found"
+            async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+                cursor = await conn.execute(
+                    "SELECT url, last_hash FROM monitors WHERE monitor_id = ?", 
+                    (mid,)
+                )
+                row = await cursor.fetchone()
+                if not row:
+                    return False, "Error: Monitor not found"
             
             url, last_hash = row
             
@@ -163,12 +164,11 @@ class MonitorTool:
                 
                 changed = last_hash is not None and current_hash != last_hash
                 
-                conn.execute(
+                await conn.execute(
                     "UPDATE monitors SET last_hash = ?, last_checked = ? WHERE monitor_id = ?",
                     (current_hash, datetime.now().isoformat(), mid)
                 )
-                conn.commit()
-                conn.close()
+                await conn.commit()
                 
                 return changed, content[:2000]
         except Exception as e:
@@ -178,13 +178,13 @@ class MonitorTool:
     async def _watch(self, mid: str):
         while True:
             try:
-                conn = _get_conn()
-                row = conn.execute(
-                    "SELECT interval_minutes, on_change_task, session_id "
-                    "FROM monitors WHERE monitor_id = ?", 
-                    (mid,)
-                ).fetchone()
-                conn.close()
+                async with aiosqlite.connect(DB_PATH, timeout=10) as conn:
+                    cursor = await conn.execute(
+                        "SELECT interval_minutes, on_change_task, session_id "
+                        "FROM monitors WHERE monitor_id = ?", 
+                        (mid,)
+                    )
+                    row = await cursor.fetchone()
                 
                 if not row:
                     break # Monitor was deleted
