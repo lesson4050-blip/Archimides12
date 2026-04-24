@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,7 +58,7 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Model preload failed (non-critical): {e}")
 
     import asyncio
-    asyncio.create_task(_preload_model())
+    safe_create_task(_preload_model())
 
     # Start the inactivity reaper
     sandbox_manager.start_reaper()
@@ -68,22 +69,26 @@ async def lifespan(app: FastAPI):
     
     # Start COSMO Presentation engine
     from backend.cosmo.engine import start_engine, stop_engine
-    asyncio.create_task(start_engine())
+    safe_create_task(start_engine())
     logger.info("COSMO Presentation engine starting...")
 
     # Start COSMO Artist (Next.js template server)
     from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn
-    artist_task = asyncio.create_task(start_artist())
+    artist_task = safe_create_task(start_artist())
     logger.info("COSMO Artist server starting on port 3005...")
     
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
 
     # Playwright binary check
-    import subprocess
     try:
-        result = subprocess.run(["python", "-m", "playwright", "help"], capture_output=True, text=True)
-        if result.returncode != 0:
+        process = await asyncio.create_subprocess_exec(
+            "python", "-m", "playwright", "help",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await process.communicate()
+        if process.returncode != 0:
             logger.warning("Playwright may not be installed. Presentation rendering limits will apply.")
     except Exception:
         logger.warning("Playwright check failed. Run `pip install playwright` and `playwright install` to enable PDF generation.")

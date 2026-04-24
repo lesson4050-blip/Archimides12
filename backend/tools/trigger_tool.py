@@ -4,6 +4,7 @@ Upgraded: persistent trigger storage, conditional execution,
 webhook support, cross-session triggers via SQLite.
 Score target: 95%+
 """
+from backend.utils.task import safe_create_task
 import asyncio
 import logging
 import json
@@ -175,7 +176,7 @@ class TriggerTool:
             await self._mark_fired(tid)
             logger.info(f"Trigger fired: {tid} — {description}")
 
-        task = asyncio.create_task(_fire())
+        task = safe_create_task(_fire())
         self._active[tid] = task
 
         return {

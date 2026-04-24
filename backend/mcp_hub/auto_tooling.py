@@ -2,6 +2,7 @@
 Auto-Tooling: агент сам находит и подключает нужные MCP серверы.
 Когда инструмента нет, ищет его в каталоге, npm, или GitHub.
 """
+from backend.utils.task import safe_create_task
 import asyncio
 import logging
 from typing import Optional, List, Dict
@@ -78,7 +79,7 @@ If no tool needed, output: {{"tool_name": null}}
             command=mcp_client._normalize_command(catalog_entry["command"]),
             args=catalog_entry.get("args", [])
         )
-        asyncio.create_task(
+        safe_create_task(
             mcp_client._connect_server(tool_name, params)
         )
         connected = await mcp_client.wait_for_connection(tool_name, timeout=15)

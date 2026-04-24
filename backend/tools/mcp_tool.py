@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import logging
 import asyncio
 from typing import Dict, Any, List, Optional, Callable
@@ -82,7 +83,7 @@ class MCPTool:
             )
             
             # Start connection task
-            asyncio.create_task(self.mcp_client._connect_server(server_name, server_params))
+            safe_create_task(self.mcp_client._connect_server(server_name, server_params))
             
             # Wait for actual connection (up to 15 seconds)
             connected = await self.mcp_client.wait_for_connection(

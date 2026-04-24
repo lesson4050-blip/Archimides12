@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import docker
 import logging
 import asyncio
@@ -71,7 +72,7 @@ class SandboxManager:
     def start_reaper(self):
         """Start the background inactivity reaper. Call from app startup."""
         if self._reaper_task is None or self._reaper_task.done():
-            self._reaper_task = asyncio.create_task(self._reaper_loop())
+            self._reaper_task = safe_create_task(self._reaper_loop())
             logger.info("Inactivity reaper started.")
 
     def stop_reaper(self):
@@ -228,7 +229,7 @@ class SandboxManager:
             )
 
             # Start noVNC inside the container
-            asyncio.create_task(self.novnc.start_streaming(session_id))
+            safe_create_task(self.novnc.start_streaming(session_id))
 
             # Create workspace dir
             container.exec_run("chown -R ubuntu:ubuntu /home/ubuntu/workspace")

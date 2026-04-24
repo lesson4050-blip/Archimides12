@@ -3,6 +3,7 @@
 Полностью переработанная архитектура с максимальной надежностью и производительностью.
 """
 
+from backend.utils.task import safe_create_task
 import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Callable
@@ -129,7 +130,7 @@ class ArchimedesCosmoAgent:
         # MCP Integration: Initialize and connect external servers
         from backend.mcp_hub.client import ArchimedesMCPClient
         self.mcp_client = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
-        # asyncio.create_task(self._init_mcp())  # Moved to initialize()
+        # safe_create_task(self._init_mcp())  # Moved to initialize()
 
         # Connector Bridge: Nango OAuth + MCP tool registration
         from backend.connectors.mcp_bridge import ConnectorMCPBridge

@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import logging
 import uuid
 import os
@@ -348,7 +349,7 @@ class ExecutorAgent(BaseAgent):
                 if success and len(output) > 100:
                     import asyncio
                     from backend.memory.knowledge_graph import extract_and_store_knowledge
-                    asyncio.create_task(
+                    safe_create_task(
                         extract_and_store_knowledge(
                             output[:500],
                             state.session_id,

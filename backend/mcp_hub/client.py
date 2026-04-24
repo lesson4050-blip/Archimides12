@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import logging
 import asyncio
 import sys
@@ -32,7 +33,7 @@ class ArchimedesMCPClient:
                         args=config.get("args", []),
                         env=config.get("env")
                     )
-                    asyncio.create_task(self._connect_server(name, params))
+                    safe_create_task(self._connect_server(name, params))
                     
                 logger.info(f"MCP Client: Integrated external server '{name}'")
             except Exception as e:
@@ -113,7 +114,7 @@ class ArchimedesMCPClient:
                 logger.warning(f"MCP Server '{name}' health check FAILED. Reconnecting...")
                 status[name] = False
                 # Reconnect
-                asyncio.create_task(self._reconnect_server(name))
+                safe_create_task(self._reconnect_server(name))
         return status
 
     async def _reconnect_server(self, name: str):
@@ -137,7 +138,7 @@ class ArchimedesMCPClient:
             env=config.get("env")
         )
         logger.info(f"MCP Client: Reconnecting to '{name}'...")
-        asyncio.create_task(self._connect_server(name, params))
+        safe_create_task(self._connect_server(name, params))
 
     async def wait_for_connection(self, name: str, timeout: float = 15.0) -> bool:
         """Wait until a specific server is connected. Returns True if connected."""

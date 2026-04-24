@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import logging
 import asyncio
 from typing import Dict, List, Any
@@ -197,7 +198,7 @@ class ConnectionManager:
             mode_req = data.get("mode", "planning")
             task_hint = data.get("task_hint", "default")
             
-            asyncio.create_task(agent.process_task(
+            safe_create_task(agent.process_task(
                 task, 
                 websocket_send=streaming_sender, 
                 mode=mode_req, 

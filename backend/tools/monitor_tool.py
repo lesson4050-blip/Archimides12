@@ -1,3 +1,4 @@
+from backend.utils.task import safe_create_task
 import asyncio
 import httpx
 import hashlib
@@ -51,7 +52,7 @@ class MonitorTool:
             for row in rows:
                 mid = row[0]
                 if mid not in self._tasks:
-                    self._tasks[mid] = asyncio.create_task(self._watch(mid))
+                    self._tasks[mid] = safe_create_task(self._watch(mid))
         except Exception as e:
             logger.error(f"Failed to resurrect monitors: {e}")
     
@@ -97,7 +98,7 @@ class MonitorTool:
                     )
                     await conn.commit()
                 
-                self._tasks[mid] = asyncio.create_task(self._watch(mid))
+                self._tasks[mid] = safe_create_task(self._watch(mid))
                 return {"success": True, "output": f"Monitor {mid} started for {url}"}
             except Exception as e:
                 return {"success": False, "error": f"DB Error: {str(e)}"}
@@ -200,7 +201,7 @@ class MonitorTool:
                             agent = manager.agent_loops[session_id]
                             async def sender(event):
                                 await manager.send_event(session_id, event)
-                            asyncio.create_task(agent.process_task(
+                            safe_create_task(agent.process_task(
                                 on_change_task,
                                 websocket_send=sender
                             ))
