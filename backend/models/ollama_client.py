@@ -94,9 +94,13 @@ NEVER mix tool JSON with explanation text.
         # The format parameter is handled separately in generate_with_tools()
         # only when force_json_schema is provided and no tools are present.
 
+        if tools:
+            chat_kwargs["tools"] = tools
+
         # Only pass native tools if Ollama supports them for this model
         # We use text injection as primary method for reliability
         return await self.client.chat(**chat_kwargs)
+
 
     async def generate_with_tools(
         self,
@@ -159,12 +163,14 @@ NEVER mix tool JSON with explanation text.
                 # Extract thought block
                 thought = ""
                 text = content
-                if "<thought>" in content and "</thought>" in content:
-                    thought = (
-                        content.split("<thought>")[1]
-                        .split("</thought>")[0].strip()
-                    )
-                    text = content.split("</thought>")[-1].strip()
+                
+                # Check for <thinking> or <thought>
+                thinking_tags = [("<thinking>", "</thinking>"), ("<thought>", "</thought>")]
+                for start_tag, end_tag in thinking_tags:
+                    if start_tag in content and end_tag in content:
+                        thought = content.split(start_tag)[1].split(end_tag)[0].strip()
+                        text = content.split(end_tag)[-1].strip()
+                        break
 
                 # Try native tool calls first (newer Ollama versions)
                 native_calls = getattr(
@@ -247,7 +253,7 @@ NEVER mix tool JSON with explanation text.
 
                 return {
                     "model_used": "ollama",
-                    "thought": thought,
+                    "thinking": thought,
                     "tool_call": tool_call,
                     "text": text,
                     "tokens_used": 0

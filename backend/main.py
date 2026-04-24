@@ -175,7 +175,7 @@ async def api_health():
     memory_ok = False
     try:
         from backend.memory.memory_bank import get_relevant_facts
-        facts = get_relevant_facts(limit=1)
+        facts = await get_relevant_facts(limit=1)
         memory_ok = True
     except Exception:
         pass

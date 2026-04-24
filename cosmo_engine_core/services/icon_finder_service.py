@@ -20,40 +20,61 @@ class IconFinderService:
         self.embedding_function.DOWNLOAD_PATH = "chroma/models"
         self.embedding_function._download_model_if_not_exists()
         try:
+            print(f"Attempting to get collection '{self.collection_name}'...")
             self.collection = self.client.get_collection(
                 self.collection_name, embedding_function=self.embedding_function
             )
-        except Exception:
+            print("Collection found.")
+        except Exception as e:
+            print(f"Collection not found or error ({e}). Rebuilding...")
             import os
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             icons_path = os.path.join(base_dir, "assets", "icons.json")
-            with open(icons_path, "r") as f:
+            print(f"Loading icons from {icons_path}...")
+            with open(icons_path, "r", encoding="utf-8") as f:
                 icons = json.load(f)
 
             documents = []
             ids = []
+            metadatas = []
 
             for i, each in enumerate(icons["icons"]):
-                if each["name"].split("-")[-1] == "bold":
-                    doc_text = f"{each['name']} {each['tags']}"
-                    documents.append(doc_text)
-                    ids.append(each["name"])
+                doc_text = f"{each['name']} {each['tags']}"
+                documents.append(doc_text)
+                ids.append(each["name"])
+                metadatas.append({"style": each["style"], "name": each["name"]})
 
+            print(f"Prepared {len(documents)} icons for indexing.")
             if documents:
                 self.collection = self.client.create_collection(
                     name=self.collection_name,
                     embedding_function=self.embedding_function,
                     metadata={"hnsw:space": "cosine"},
                 )
-                self.collection.add(documents=documents, ids=ids)
+                print("Collection created. Starting batch indexing...")
+                # ChromaDB batch limit is usually 5461, we have ~9000
+                batch_size = 2000
+                for i in range(0, len(documents), batch_size):
+                    end = min(i + batch_size, len(documents))
+                    print(f"Indexing batch {i} to {end}...")
+                    self.collection.add(
+                        documents=documents[i:end],
+                        ids=ids[i:end],
+                        metadatas=metadatas[i:end]
+                    )
+                print("Indexing complete.")
 
-    async def search_icons(self, query: str, k: int = 1):
+    async def search_icons(self, query: str, style: str = "regular", k: int = 1):
         result = await asyncio.to_thread(
             self.collection.query,
             query_texts=[query],
             n_results=k,
+            where={"style": style}
         )
-        return [f"/static/icons/bold/{each}.svg" for each in result["ids"][0]]
+        if not result["ids"] or not result["ids"][0]:
+            return []
+            
+        return [f"/static/icons/{style}/{name}.svg" for name in result["ids"][0]]
 
 
 ICON_FINDER_SERVICE = IconFinderService()

@@ -9,23 +9,16 @@ COT_PREFIXES = {
         "1. What exactly is the goal?\n"
         "2. What are the edge cases and constraints?\n"
         "3. What is the simplest robust solution?\n"
-        "4. How does this fit into the expected output format?\n\n"
-        "<thinking>"
+        "4. How does this fit into the expected output format?"
     ),
     "agent_action": (
-        "Before selecting a tool or taking an action, reason step-by-step:\n"
-        "1. What is the current state of the task?\n"
-        "2. What information is missing?\n"
-        "3. Which tool provides this information most efficiently?\n"
-        "4. Construct the precise JSON/Action required.\n\n"
-        "<thinking>"
+        "Reason briefly in <thinking> tags, then take the next logical action using a tool."
     ),
     "default": (
         "Think step-by-step before answering:\n"
         "1. Analyze the request.\n"
         "2. Formulate the approach.\n"
-        "3. Verify against constraints.\n\n"
-        "<thinking>"
+        "3. Verify against constraints."
     ),
 }
 
@@ -33,13 +26,13 @@ COT_SUFFIX = "\n</thinking>\n\nNow, providing the final response in the strict r
 
 def detect_task_type(task: str) -> str:
     task_lower = task.lower()
-    if any(w in task_lower for w in ["tool", "action", "json", "execute", "инструмент", "действие"]):
+    if any(w in task_lower for w in ["tool", "action", "json", "execute", "инструмент", "действие", "написать", "write", "create", "создать"]):
         return "agent_action"
-    if any(w in task_lower for w in ["code", "function", "implement", "fix", "код", "исправить"]):
+    if any(w in task_lower for w in ["code", "function", "implement", "fix", "код", "исправить", "script"]):
         return "code"
     return "default"
 
-def inject_cot(messages: List[Dict], task: str = "") -> List[Dict]:
+def inject_cot(messages: List[Dict], task: str = "", include_assistant: bool = True) -> List[Dict]:
     if not messages:
         return messages
     
@@ -56,11 +49,13 @@ def inject_cot(messages: List[Dict], task: str = "") -> List[Dict]:
             }
             break
 
-    result.append({
-        "role": "assistant",
-        "content": "<thinking>\nLet me analyze this carefully..."
-    })
+    if include_assistant:
+        result.append({
+            "role": "assistant",
+            "content": "<thinking>\n"
+        })
     return result
+
 
 def extract_cot_answer(text: str) -> Dict[str, str]:
     if "</thinking>" in text:

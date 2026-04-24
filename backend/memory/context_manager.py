@@ -1,11 +1,12 @@
 """
-Context Manager v2 — Production-grade sliding window with tiktoken.
+Context Manager v3 — Pruning-first context strategy.
 
-Key improvements over v1:
+Key improvements over v2:
 - Accurate token counting via tiktoken (cl100k_base encoding)
 - Configurable preserve_recent window (default 20 messages vs old 10)
 - Tool call history preservation (maintains tool_call_id references)
-- Incremental summarization (60% oldest → summary, keep recent)
+- TWO-PHASE strategy: prune failed attempts FIRST, summarize SECOND
+- Failed tool calls are removed before resorting to lossy summarization
 - Graceful fallback if tiktoken unavailable
 """
 
@@ -174,25 +175,125 @@ class ContextManager:
         return self._current_tokens
 
     # ──────────────────────────────────────────────
-    # Summarization
+    # Phase 1: Context Pruning (lossless)
+    # ──────────────────────────────────────────────
+
+    def prune_failed_attempts(self) -> int:
+        """
+        Remove failed tool call chains from history.
+        
+        A failed chain is: assistant(tool_call) → tool(ERROR: ...)
+        These waste context without providing useful information.
+        
+        Returns the number of messages pruned.
+        """
+        if len(self.history) < 3:
+            return 0
+
+        pruned_indices = set()
+        i = 0
+        while i < len(self.history):
+            msg = self.history[i]
+            
+            # Find assistant messages with tool_calls
+            if (msg.get("role") == "assistant" and
+                msg.get("tool_calls") and
+                i + 1 < len(self.history)):
+                
+                next_msg = self.history[i + 1]
+                
+                # Check if the tool response is a failure
+                if (next_msg.get("role") == "tool" and
+                    isinstance(next_msg.get("content", ""), str) and
+                    next_msg["content"].startswith("ERROR:")):
+                    
+                    # Don't prune if it's in the last preserve_recent messages
+                    if i < len(self.history) - self.preserve_recent:
+                        pruned_indices.add(i)
+                        pruned_indices.add(i + 1)
+                        i += 2
+                        continue
+            i += 1
+
+        if pruned_indices:
+            old_len = len(self.history)
+            self.history = [
+                m for idx, m in enumerate(self.history)
+                if idx not in pruned_indices
+            ]
+            self._recalculate_tokens()
+            pruned_count = old_len - len(self.history)
+            logger.info(
+                f"Context pruning: removed {pruned_count} messages "
+                f"({len(pruned_indices) // 2} failed tool chains)"
+            )
+            return pruned_count
+
+        return 0
+
+    def prune_verbose_tool_outputs(self, max_output_chars: int = 1000) -> int:
+        """
+        Truncate excessively long tool outputs in older messages.
+        Keeps recent messages intact.
+        """
+        truncated = 0
+        cutoff = max(0, len(self.history) - self.preserve_recent)
+        
+        for i in range(cutoff):
+            msg = self.history[i]
+            if msg.get("role") == "tool":
+                content = msg.get("content", "")
+                if isinstance(content, str) and len(content) > max_output_chars:
+                    msg["content"] = (
+                        content[:max_output_chars] +
+                        f"\n...[truncated from {len(content)} chars]"
+                    )
+                    truncated += 1
+        
+        if truncated:
+            self._recalculate_tokens()
+            logger.info(f"Truncated {truncated} verbose tool outputs")
+        
+        return truncated
+
+    # ──────────────────────────────────────────────
+    # Phase 2: Summarization (lossy, last resort)
     # ──────────────────────────────────────────────
 
     async def summarize_if_needed(self, model_router: Any):
         """
-        If tokens exceed threshold, summarize oldest messages.
+        Two-phase context management:
         
-        Strategy:
-        1. Keep system prompt (index 0)
-        2. Find safe split point (don't break tool call chains)
-        3. Summarize everything before split point
-        4. Reconstruct: system + summary + recent messages
+        Phase 1 (lossless): Prune failed tool attempts + truncate verbose outputs
+        Phase 2 (lossy): If still over budget, summarize oldest messages
+        
+        This preserves critical code context that pure summarization destroys.
         """
         if self._current_tokens < self.summarization_threshold:
             return
 
         logger.info(
             f"Context window: {self._current_tokens} tokens "
-            f"(threshold: {self.summarization_threshold}). Summarizing..."
+            f"(threshold: {self.summarization_threshold}). "
+            f"Starting two-phase context management..."
+        )
+
+        # ── Phase 1: Lossless pruning ──
+        pruned = self.prune_failed_attempts()
+        self.prune_verbose_tool_outputs()
+
+        # Check if pruning was sufficient
+        if self._current_tokens < self.summarization_threshold:
+            logger.info(
+                f"Phase 1 sufficient: pruned {pruned} messages, "
+                f"now at {self._current_tokens} tokens"
+            )
+            return
+
+        # ── Phase 2: Lossy summarization ──
+        logger.info(
+            f"Phase 1 insufficient ({self._current_tokens} tokens). "
+            f"Proceeding to Phase 2 (summarization)..."
         )
 
         # Extract system prompt
@@ -211,7 +312,7 @@ class ContextManager:
             logger.info("Too few messages to summarize, skipping.")
             return
 
-        # Build summarization prompt
+        # Build summarization prompt — code-aware
         summary_text_parts = []
         for msg in to_summarize:
             role = msg.get("role", "unknown").upper()
@@ -223,8 +324,13 @@ class ContextManager:
 
         summary_prompt = (
             "Summarize the following conversation history into a concise paragraph. "
-            "Preserve ALL key facts, decisions made, file paths mentioned, "
-            "tool results, and code locations. Be specific, not vague.\n\n"
+            "CRITICAL: Preserve ALL of the following EXACTLY:\n"
+            "- File paths and line numbers mentioned\n"
+            "- Function/class names and their locations\n"
+            "- Error messages and their root causes\n"
+            "- Decisions made and their rationale\n"
+            "- Tool results and their outcomes\n"
+            "- Code patterns discovered\n\n"
             + "\n".join(summary_text_parts)
         )
 
@@ -241,7 +347,10 @@ class ContextManager:
                 new_history.append(system_prompt)
             new_history.append({
                 "role": "assistant",
-                "content": f"[Conversation summary — {len(to_summarize)} messages condensed]: {summary_text}"
+                "content": (
+                    f"[Context summary — {len(to_summarize)} messages condensed, "
+                    f"{pruned} failed attempts pruned]: {summary_text}"
+                )
             })
             new_history.extend(recent)
 
@@ -250,7 +359,7 @@ class ContextManager:
             self._recalculate_tokens()
 
             logger.info(
-                f"Summarization complete: {old_count} → {self._current_tokens} tokens "
+                f"Phase 2 complete: {old_count} → {self._current_tokens} tokens "
                 f"({len(to_summarize)} messages → 1 summary)"
             )
 

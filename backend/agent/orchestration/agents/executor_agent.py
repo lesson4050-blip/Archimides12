@@ -8,6 +8,8 @@ from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.models.model_router import ModelRouter
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
+from backend.agent.error_recovery import ErrorRecovery
+from backend.agent.skills.skill_engine import SkillEngine
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,11 @@ class ExecutorAgent(BaseAgent):
     3. STEERING: 
        {hint_instructions}
     4. ACTION: If tools are needed, use them immediately. Don't over-explain if a tool can do the job.
+    5. NO PLACEHOLDERS: Never output markdown code blocks if you can use the 'file' tool to write the actual file. 
+    6. PROGRESSION: Each step MUST move the task forward via a tool call. Do not just talk about what you will do.
+    7. TOOL USAGE: When using a tool, provide the exact parameters defined in its schema. 
+       Example tool call: {{"name": "file", "params": {{"action": "write", "path": "math_utils.py", "content": "def add(a,b): return a+b"}}}}
+       For the 'file' tool, ALWAYS provide 'action', 'path', and 'content' (if writing).
     
     PRESENTATION GENERATION (MANDATORY RULES):
     - For ANY request about "презентация", "слайды", "pitch deck",
@@ -54,9 +61,11 @@ class ExecutorAgent(BaseAgent):
         self.tool_registry = tool_registry
         self.context_manager = context_manager
         self.max_steps = getattr(settings, "AGENT_MAX_ITERATIONS", 25)
+        self.error_recovery = ErrorRecovery()
         
         from backend.agent.intelligence.intelligence_router import IntelligenceRouter
         self.intelligence = IntelligenceRouter(router)
+        self.skill_engine = SkillEngine()
 
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
         # Clear previous critic verdict to prevent cross-subtask pollution
@@ -100,15 +109,14 @@ class ExecutorAgent(BaseAgent):
         prev_error = None
 
         # Sprint 4.1: Skill Engine — check for matching skill before execution
-        _tool_call_log = []  # Collect tool calls for skill compression
+        _tool_call_log = []  # Collect tool calls for loop detection and metrics
         try:
-            from backend.agent.skill_engine import find_matching_skill, get_skill_prompt
-            matching_skill = find_matching_skill(current_target)
+            matching_skill = self.skill_engine.find_relevant_skill(current_target)
             if matching_skill:
-                skill_hint = get_skill_prompt(matching_skill)
+                skill_hint = self.skill_engine.get_skill_prompt_injection(matching_skill)
                 self.context_manager.add_message("system", skill_hint)
                 await self.log_thought(
-                    f"🧠 Found matching skill ({matching_skill['trigger']['intent_hash']}), "
+                    f"🧠 Found matching skill ({matching_skill['id']}), "
                     f"replaying with {matching_skill.get('total_steps', '?')} steps",
                     websocket_send
                 )
@@ -146,15 +154,15 @@ class ExecutorAgent(BaseAgent):
                 )
                 from backend.memory.knowledge_graph import format_graph_context
 
-                memory_facts = get_relevant_facts(limit=5)
+                memory_facts = await get_relevant_facts(limit=5)
 
                 # Get summary of last session for continuity
-                last_session_facts = get_relevant_facts(limit=3, category="task_result")
+                last_session_facts = await get_relevant_facts(limit=3, category="task_result")
 
                 # Extract key terms from task for graph query
                 task_words = current_target.split()[:4]
                 key_term = " ".join(task_words) if task_words else ""
-                graph_ctx = format_graph_context(key_term, depth=2) if key_term else ""
+                graph_ctx = await format_graph_context(key_term, depth=2) if key_term else ""
 
                 memory_context = ""
                 if memory_facts:
@@ -233,7 +241,7 @@ class ExecutorAgent(BaseAgent):
 
                 # Phase 1.2: Pre-flight Command Safety Check
                 from backend.agent.self_improvement import check_tool_safety
-                is_safe, safety_warning = check_tool_safety(t_name, t_params)
+                is_safe, safety_warning = await check_tool_safety(t_name, t_params)
                 
                 if not is_safe:
                     tool_res = {
@@ -268,14 +276,35 @@ class ExecutorAgent(BaseAgent):
                     output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
                     prev_error = output  # Track for self-improvement
 
+                    # v2: Classify error and record with ErrorRecovery
+                    file_path = t_params.get("path", t_params.get("file", None))
+                    self.error_recovery.record_failure(
+                        tool_name=t_name,
+                        params=t_params,
+                        error=output,
+                        file_path=file_path
+                    )
+
+                    # v2: Check kill-switch
+                    should_stop, reason = self.error_recovery.should_escalate()
+                    if should_stop:
+                        await self.log_info(
+                            f"🛑 Kill switch triggered: {reason}", websocket_send
+                        )
+                        state.results.append({
+                            "step": state.current_step_index,
+                            "output": f"Задача прервана: {reason}"
+                        })
+                        state.history = self.context_manager.get_messages()
+                        return state
+
                     # Log raw error to DB
                     from backend.agent.self_improvement import log_error
                     log_error(output, t_name, state.session_id)
 
-                    # Track confidence: failure drops score
-                    if not hasattr(state, 'confidence_score'):
-                        state.confidence_score = 100
-                    state.confidence_score = max(0, state.confidence_score - 15)
+                    # v2: Get structured recovery advice
+                    recovery_advice = self.error_recovery.get_recovery_advice(t_name, output)
+                    output += f"\n[RECOVERY HINT]: {recovery_advice}"
                     
                     # Section 6A: Check self-improvement DB for known fix
                     from backend.agent.self_improvement import get_fix_hint
@@ -313,6 +342,9 @@ class ExecutorAgent(BaseAgent):
                         except Exception as e:
                             logger.warning(f"Auto-tooling attempt failed: {e}")
                 else:
+                    # v2: Record success in ErrorRecovery
+                    self.error_recovery.record_success()
+
                     # Section 6A: Learn from successful recovery
                     if prev_error and success:
                         from backend.agent.self_improvement import learn_from_error
@@ -450,23 +482,22 @@ class ExecutorAgent(BaseAgent):
                 
                 state.results.append({"step": state.current_step_index, "output": res_text or "Done."})
 
-                # Sprint 4.1: Compress successful workflow into a reusable skill
-                if len(_tool_call_log) >= 3:
+                # Sprint 5.1: Experience Extraction — store successful history as a playbook
+                if success:
                     try:
-                        from backend.agent.skill_engine import compress_skill
-                        skill_file = compress_skill(
+                        history = self.context_manager.get_messages()
+                        skill_id = self.skill_engine.extract_and_save_skill(
                             task_description=current_target,
-                            tool_calls=_tool_call_log,
-                            final_result=res_text or "",
-                            session_id=state.session_id,
+                            history=history,
+                            success=True
                         )
-                        if skill_file:
+                        if skill_id:
                             await self.log_thought(
-                                f"📦 Compressed workflow into skill: {skill_file}",
+                                f"📦 Experience Compressed: New skill extracted ({skill_id})",
                                 websocket_send
                             )
                     except Exception as e:
-                        logger.debug(f"Skill compression skipped: {e}")
+                        logger.debug(f"Skill extraction failed: {e}")
                 
                 # Save key learnings to Memory Bank
                 if res_text and len(res_text) > 100:
@@ -490,7 +521,7 @@ class ExecutorAgent(BaseAgent):
                         if isinstance(facts, list):
                             for fact in facts[:2]:
                                 if isinstance(fact, str) and len(fact) > 5:
-                                    save_fact(
+                                    await save_fact(
                                         fact=fact,
                                         session_id=state.session_id,
                                         category="task_result",

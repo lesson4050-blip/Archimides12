@@ -75,14 +75,9 @@ async def get_relevant_facts(
                     params
                 )
                 rows = await cursor.fetchall()
-                # Fallback to importance-based if no results
+                # No results for keyword search
                 if not rows:
-                    cursor = await conn.execute(
-                        "SELECT fact FROM memories "
-                        "ORDER BY importance DESC LIMIT ?",
-                        (limit,)
-                    )
-                    rows = await cursor.fetchall()
+                    return []
             else:
                 if category:
                     cursor = await conn.execute(

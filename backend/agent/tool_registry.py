@@ -260,6 +260,7 @@ class ToolRegistry:
             TOOLS_NEEDING_SESSION = {
                 "file", "shell", "browser", "voice", "document",
                 "slides", "expose", "plan", "monitor", "trigger",
+                "fast_linter", "ast_navigator",
             }
             if session_id and name in TOOLS_NEEDING_SESSION:
                 params["session_id"] = session_id

@@ -248,6 +248,10 @@ class ArchimedesCosmoAgent:
             self.ast_tool = ASTTool()
             self.tool_registry.register("ast_navigator", self.ast_tool.execute)
             
+            # Infra Tool (Sprint 6.1)
+            from backend.agent.tools.infra_tool import InfraTool
+            self.infra_tool = InfraTool()
+            self.tool_registry.register("infra", self.infra_tool.execute)
             # Log Analyzer Tool
             from backend.tools.log_analyzer_tool import LogAnalyzerTool
             self.log_analyzer = LogAnalyzerTool()
