@@ -487,7 +487,9 @@ class MicroAgentSwarm:
             "   - Is complete and ready for direct use\n\n"
             "Output ONLY the final synthesized answer. "
             "No commentary, no scores, no explanations about your process.\n"
-            "Respond in RUSSIAN."
+            "Respond in the SAME LANGUAGE as the original task. "
+            "If the task is in Russian — respond in Russian. "
+            "If the task is in English — respond in English."
         )
 
         synth_response = await self.router.generate(

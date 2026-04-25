@@ -89,6 +89,7 @@ class ArchimedesCosmoAgent:
 
         from backend.mcp_hub.client import ArchimedesMCPClient
         self.mcp_client = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
+        self.orchestrator._mcp_client_ref = self.mcp_client
         from backend.connectors.mcp_bridge import ConnectorMCPBridge
         self.connector_bridge = ConnectorMCPBridge(self.tool_registry, self.session_id or "default")
         from backend.agent.tool_definition_cache import ToolDefinitionCache
@@ -99,6 +100,9 @@ class ArchimedesCosmoAgent:
         for msg in self.history:
             self.context_manager.add_message(msg["role"], msg.get("content", ""))
         logger.info(f"OK: Initialized {self.name} (ID: {self.agent_id})")
+
+        # Schedule async initialization (MCP + connectors) without blocking __init__
+        safe_create_task(self.initialize())
 
     @property
     def tools(self) -> Dict[str, Callable]:

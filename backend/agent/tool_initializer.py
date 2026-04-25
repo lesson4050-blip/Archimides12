@@ -245,6 +245,13 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register message handler: {e}")
 
+        try:
+            from backend.tools.patch_tool import PatchTool
+            self.agent.patch_tool = PatchTool()
+            self.agent.register_tool("patch", self.agent.patch_tool.execute)
+        except Exception as e:
+            logger.error(f"Failed to register PatchTool: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools

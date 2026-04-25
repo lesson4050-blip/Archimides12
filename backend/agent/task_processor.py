@@ -57,6 +57,9 @@ class TaskProcessor:
             return min(1.0, max(0.0, float(response.get("text", "0.5").strip())))
         except (ValueError, TypeError):
             return 0.5
+        except Exception as e:
+            logger.warning(f"Complexity analysis failed: {e}")
+            return 0.5
 
     # ── LEGACY: Plan creation ──
 

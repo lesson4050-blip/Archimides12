@@ -147,6 +147,7 @@ class AgentOrchestrator:
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)
         self.mcts_manager = MCTSManager(workspace_dir=".")
         self.skill_library = SkillLibrary()
+        self._mcp_client_ref = None  # Set by core.py after init
         
     async def run_task(self, 
                        task_description: str, 
@@ -164,6 +165,9 @@ class AgentOrchestrator:
             task_hint=task_hint,
             stream=stream,
         )
+
+        # Inject mcp_client into state metadata for executor access
+        state.metadata["mcp_client"] = getattr(self, '_mcp_client_ref', None)
         
         # Add initial greeting/task to history
         state.add_message("user", task_description)
@@ -198,7 +202,7 @@ class AgentOrchestrator:
         logger.info(f"[{state.session_id}] Orchestrator: conversational shortcut")
         
         messages = [
-            {"role": "system", "content": "Ты — Archimedes, дружелюбный и профессиональный AI-ассистент. Отвечай на русском языке. Будь кратким и приветливым."},
+            {"role": "system", "content": "Ты — Archimedes, дружелюбный и профессиональный AI-ассистент. Respond in the same language the user used. Будь кратким и приветливым."},
             {"role": "user", "content": state.task_description}
         ]
         

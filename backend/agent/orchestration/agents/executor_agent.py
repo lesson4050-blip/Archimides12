@@ -72,6 +72,14 @@ class ExecutorAgent(BaseAgent):
         state.metadata.pop("critic_verdict", None)
         state.metadata.pop("critic_scores", None)
         state.metadata.pop("critic_issues", None)
+
+        # Initialize all per-execution state attributes consistently
+        if not hasattr(state, "_recent_tool_calls"):
+            state._recent_tool_calls = []
+        if not hasattr(state, "excluded_tools"):
+            state.excluded_tools = []
+        if not hasattr(state, "confidence_score"):
+            state.confidence_score = 100
         
         # Determine target task
         if state.mode == AgentMode.FAST:
@@ -128,22 +136,18 @@ class ExecutorAgent(BaseAgent):
         for step in range(self.max_steps):
             # Loop detection & Dynamic Strategy Switching (Sprint 2.2)
             excluded_tools = getattr(state, "excluded_tools", [])
-            if not hasattr(state, '_recent_tool_calls'):
-                state._recent_tool_calls = []
             if len(state._recent_tool_calls) >= 3:
                 last3 = state._recent_tool_calls[-3:]
                 if len(set(last3)) == 1:
-                    repeating_tool = eval(last3[0]).get("name") if last3[0].startswith("{") else last3[0].split("{")[0]
-                    
+                    # Safe parsing: call_sig format is "tool_name:params_str"
+                    repeating_tool = last3[0].split(":")[0]
+
                     self.context_manager.add_message("user",
-                        f"SYSTEM CRITICAL: You have repeatedly failed using the '{repeating_tool}' tool. "
-                        f"This strategy is blocked. You MUST switch to an alternative strategy immediately."
+                        f"SYSTEM CRITICAL: Tool '{repeating_tool}' has failed 3 times. "
+                        f"This tool is now BLOCKED. Switch to a completely different strategy."
                     )
-                    
-                    if not hasattr(state, "excluded_tools"):
-                        state.excluded_tools = []
-                    state.excluded_tools.append(repeating_tool)
-                    
+                    if repeating_tool not in state.excluded_tools:
+                        state.excluded_tools.append(repeating_tool)
                     state._recent_tool_calls = []
 
             messages = self.context_manager.get_messages_with_cache()
@@ -350,10 +354,8 @@ class ExecutorAgent(BaseAgent):
                             from backend.mcp_hub.auto_tooling import find_and_connect_tool
                             from backend.sandbox.singleton import sandbox_manager
 
-                            # BUG 1: Get mcp_client from agent core via singleton
-                            from backend.websocket.handler import manager as ws_manager
-                            agent = ws_manager.agent_loops.get(state.session_id)
-                            mcp_client = getattr(agent, 'mcp_client', None) if agent else None
+                            # Get mcp_client from state metadata (injected by core.py)
+                            mcp_client = state.metadata.get("mcp_client", None)
 
                             new_tool = await find_and_connect_tool(
                                 task_description=state.task_description,

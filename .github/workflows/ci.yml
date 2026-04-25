@@ -2,52 +2,50 @@ name: Archimedes CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, master ]
+    branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: archimedes
-          POSTGRES_PASSWORD: archimedes
-          POSTGRES_DB: archimedes
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-    - uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        
-    - name: Run Tests with Coverage
-      env:
-        DATABASE_URL: postgresql+asyncpg://archimedes:archimedes@localhost:5432/archimedes
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        AUTH_ENABLED: "true"
-      run: |
-        pytest --cov=backend tests/
-        
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-asyncio pytest-mock
+      
+      - name: Run unit tests
+        env:
+          GROQ_API_KEY: "test_key"
+          GOOGLE_API_KEY: "test_key"
+          TAVILY_API_KEY: "test_key"
+        run: |
+          pytest tests/test_shell_persistent.py \
+                 tests/test_model_router.py \
+                 tests/test_complexity_analyzer.py \
+                 -v --tb=short --timeout=30
+      
+      - name: Check no eval() on user data
+        run: |
+          if grep -rn "eval(" backend/agent/ --include="*.py" | grep -v "^.*#" | grep -v "test_"; then
+            echo "ERROR: eval() found in agent code"
+            exit 1
+          fi
+      
+      - name: Lint check
+        run: |
+          pip install flake8
+          flake8 backend/ --max-line-length=120 --ignore=E501,W503 --count

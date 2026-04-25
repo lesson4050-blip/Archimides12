@@ -132,7 +132,6 @@ async def lifespan(app: FastAPI):
 
     sandbox_manager.stop_reaper()
     
-    global self_play_loop_instance
     if self_play_loop_instance:
         self_play_loop_instance.stop()
 

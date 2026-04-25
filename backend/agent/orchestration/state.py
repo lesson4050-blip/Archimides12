@@ -50,15 +50,13 @@ class OrchestrationState:
         """Extract history for ContextManager sync."""
         return self.history
 
-    def reset_for_subtask(self):
-        """Reset per-subtask state without clearing global context.
-        
-        Call this between subtask iterations to prevent cross-contamination
-        of critic verdicts and retry counts.
-        """
-        self.current_retry_count = 0
+    def reset_for_subtask(self) -> None:
+        """Reset per-subtask state to prevent cross-contamination."""
         self.metadata.pop("critic_verdict", None)
         self.metadata.pop("critic_scores", None)
         self.metadata.pop("critic_issues", None)
+        self.metadata.pop("rescue_attempted", None)
+        self.current_retry_count = 0
+        self._recent_tool_calls = []
         self.updated_at = datetime.datetime.now().isoformat()
 
