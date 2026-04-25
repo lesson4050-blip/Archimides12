@@ -99,6 +99,7 @@ tags.json
 test_uvicorn.py
 test_uvicorn2.py
 test_*.py
+!tests/test_*.py
 uv.lock
 capture_results.cjs
 dump_latest.py

@@ -1,59 +1,157 @@
 """
-Monte Carlo Tree Search (MCTS) / Hypothesis Testing Engine (V3).
-Standardized and Integrated.
+Monte Carlo Tree Search (MCTS) Engine — Real Implementation.
+
+Uses UCB1 selection, LLM-based expansion and simulation,
+and proper backpropagation through a tree of hypothesis nodes.
 """
-import os
+import math
 import uuid
 import logging
 import asyncio
-import re
-import subprocess
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
-from backend.agent.tdd_executor import TDDExecutor
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class MCTSNode:
+    """A single node in the MCTS tree."""
+    id: str
+    hypothesis: str
+    parent_id: Optional[str]
+    visits: int = 0
+    total_score: float = 0.0
+    children: List[str] = field(default_factory=list)
+
+
+class MCTSTree:
+    """Manages the MCTS node graph."""
+
+    def __init__(self):
+        self.nodes: Dict[str, MCTSNode] = {}
+
+    def add_node(self, node: MCTSNode):
+        self.nodes[node.id] = node
+        if node.parent_id and node.parent_id in self.nodes:
+            self.nodes[node.parent_id].children.append(node.id)
+
+    def get_node(self, node_id: str) -> Optional[MCTSNode]:
+        return self.nodes.get(node_id)
+
+    def get_root(self) -> Optional[MCTSNode]:
+        for node in self.nodes.values():
+            if node.parent_id is None:
+                return node
+        return None
+
+    def get_depth(self, node: MCTSNode) -> int:
+        depth = 0
+        current = node
+        while current.parent_id:
+            depth += 1
+            parent = self.get_node(current.parent_id)
+            if parent is None:
+                break
+            current = parent
+        return depth
+
+    def get_leaves(self) -> List[MCTSNode]:
+        return [n for n in self.nodes.values() if not n.children]
+
+
 class MCTSManager:
-    def __init__(self, orchestrator):
-        self.orchestrator = orchestrator
-        # orchestrator should have llm and executor attributes
-        self.tdd = TDDExecutor(orchestrator.llm, orchestrator.executor)
+    """
+    Lightweight Monte Carlo Tree Search for multi-hypothesis evaluation.
+
+    Phases per iteration:
+      1. Selection  — UCB1 walk from root to a promising leaf
+      2. Expansion  — LLM generates child approaches for the selected leaf
+      3. Simulation — LLM scores a leaf node's feasibility
+      4. Backpropagation — scores propagate up to the root
+    """
+
+    def __init__(self, workspace_dir: str = "."):
+        self.workspace_dir = workspace_dir
         self.max_depth = 2
-        self.num_simulations = 3
-        self.workspace_dir = "."
+        self.num_simulations = 5
+        self.exploration_constant = 1.414  # sqrt(2), standard UCB1
 
-    def _run_git(self, cmd: List[str]) -> Tuple[bool, str]:
+    # ── UCB1 Selection ──
+
+    def _ucb1(self, node: MCTSNode, parent_visits: int) -> float:
+        if node.visits == 0:
+            return float('inf')
+        exploitation = node.total_score / node.visits
+        exploration = self.exploration_constant * math.sqrt(
+            math.log(parent_visits) / node.visits
+        )
+        return exploitation + exploration
+
+    def _select(self, tree: MCTSTree) -> MCTSNode:
+        """Walk from root to a leaf using UCB1."""
+        node = tree.get_root()
+        if node is None:
+            raise ValueError("MCTS tree has no root")
+
+        while node.children:
+            children = [tree.get_node(cid) for cid in node.children]
+            children = [c for c in children if c is not None]
+            if not children:
+                break
+            # Prefer unvisited nodes
+            unvisited = [c for c in children if c.visits == 0]
+            if unvisited:
+                return unvisited[0]
+            node = max(children, key=lambda c: self._ucb1(c, node.visits))
+        return node
+
+    # ── Expansion ──
+
+    async def _expand(self, tree: MCTSTree, node: MCTSNode,
+                      task: str, model_router) -> List[MCTSNode]:
+        """Generate child hypotheses via LLM if depth allows."""
+        if tree.get_depth(node) >= self.max_depth:
+            return []
+
+        prompt = (
+            f"Given this task and current approach, suggest 2 distinct "
+            f"alternative refinements or improvements.\n"
+            f"Task: {task[:400]}\n"
+            f"Current approach: {node.hypothesis[:400]}\n"
+            "Separate each with '---APPROACH---'."
+        )
         try:
-            full_cmd = ["git"] + cmd
-            result = subprocess.run(
-                full_cmd,
-                cwd=self.workspace_dir,
-                capture_output=True,
-                text=True,
-                check=False
+            response = await model_router.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_hint="think"
             )
-            return (result.returncode == 0), (result.stdout.strip() if result.returncode == 0 else result.stderr.strip())
         except Exception as e:
-            return False, str(e)
+            logger.warning(f"MCTS expansion failed: {e}")
+            return []
 
-    def is_git_repo(self) -> bool:
-        success, _ = self._run_git(["status"])
-        return success
+        new_nodes = []
+        for h in response.get("text", "").split("---APPROACH---"):
+            h = h.strip()
+            if h:
+                child = MCTSNode(
+                    id=str(uuid.uuid4()),
+                    hypothesis=h,
+                    parent_id=node.id
+                )
+                tree.add_node(child)
+                new_nodes.append(child)
+        return new_nodes
 
-    async def _evaluate_hypothesis(
-        self,
-        hypothesis: str,
-        task: str,
-        model_router: Any,
-    ) -> Tuple[float, str]:
-        """
-        Реальная оценка гипотезы через LLM-scoring.
-        Не запускает код — оценивает feasibility и completeness.
-        """
+    # ── Simulation (LLM scoring) ──
+
+    async def _simulate(self, node: MCTSNode, task: str,
+                        model_router) -> Tuple[float, str]:
+        """Score a hypothesis via LLM evaluation."""
         prompt = f"""Rate this approach to solving the task. Score 0.0-1.0.
 
 TASK: {task[:400]}
-APPROACH: {hypothesis[:500]}
+APPROACH: {node.hypothesis[:500]}
 
 Evaluate:
 - Feasibility (0-1): Will this actually work?
@@ -77,30 +175,60 @@ Return JSON only:
                 reason = data.get("reason", "")
                 return min(max(score, 0.0), 1.0), reason
         except Exception as e:
-            logger.warning(f"MCTS evaluation failed: {e}")
+            logger.warning(f"MCTS simulation failed: {e}")
 
         return 0.5, "evaluation failed"
+
+    # ── Backpropagation ──
+
+    def _backpropagate(self, tree: MCTSTree, node: MCTSNode, score: float):
+        """Propagate score up through ancestors."""
+        current = node
+        while current is not None:
+            current.visits += 1
+            current.total_score += score
+            if current.parent_id:
+                current = tree.get_node(current.parent_id)
+            else:
+                break
+
+    # ── Main MCTS loop ──
 
     async def run_mcts(
         self,
         task: str,
         context: str,
         model_router: Any,
-        executor_agent: Any,
-        state: Any
+        executor_agent: Any = None,
+        state: Any = None
     ) -> str:
-        logger.info(f"MCTS: evaluating approaches for: {task[:60]}")
+        """
+        Run MCTS for self.num_simulations iterations and return the
+        best-scoring leaf hypothesis.
+        """
+        logger.info(f"MCTS: starting search for: {task[:60]}")
 
-        # Generate N hypotheses
+        tree = MCTSTree()
+
+        # Root node represents the raw task
+        root = MCTSNode(id=str(uuid.uuid4()), hypothesis=task, parent_id=None)
+        tree.add_node(root)
+
+        # Generate initial hypotheses as root's children
         prompt = (
             f"Task: {task}\nContext: {context[:300]}\n"
             "Generate 3 distinct technical approaches. "
             "Separate each with '---APPROACH---'."
         )
-        response = await model_router.generate(
-            messages=[{"role": "user", "content": prompt}],
-            task_hint="think"
-        )
+        try:
+            response = await model_router.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_hint="think"
+            )
+        except Exception as e:
+            logger.error(f"MCTS initial generation failed: {e}")
+            return task
+
         hypotheses = [
             h.strip()
             for h in response.get("text", "").split("---APPROACH---")
@@ -110,23 +238,48 @@ Return JSON only:
         if not hypotheses:
             return task
 
-        # Score all hypotheses in parallel
-        scores = await asyncio.gather(*[
-            self._evaluate_hypothesis(h, task, model_router)
-            for h in hypotheses
-        ])
+        for h in hypotheses:
+            child = MCTSNode(id=str(uuid.uuid4()), hypothesis=h, parent_id=root.id)
+            tree.add_node(child)
 
-        # Select best
-        best_idx = max(range(len(scores)), key=lambda i: scores[i][0])
-        best_hypothesis = hypotheses[best_idx]
-        best_score, best_reason = scores[best_idx]
+        # MCTS iterations
+        for iteration in range(self.num_simulations):
+            # 1. Selection
+            selected = self._select(tree)
+
+            # 2. Expansion
+            new_nodes = await self._expand(tree, selected, task, model_router)
+
+            # 3. Simulation — score the expanded node (or selected if no expansion)
+            target = new_nodes[0] if new_nodes else selected
+            score, reason = await self._simulate(target, task, model_router)
+
+            # 4. Backpropagation
+            self._backpropagate(tree, target, score)
+
+            logger.debug(
+                f"MCTS iter {iteration + 1}/{self.num_simulations}: "
+                f"node={target.id[:8]} score={score:.2f} reason={reason[:40]}"
+            )
+
+        # Select best leaf by average score
+        leaves = tree.get_leaves()
+        if not leaves:
+            return task
+
+        best = max(
+            leaves,
+            key=lambda n: (n.total_score / n.visits) if n.visits > 0 else 0.0
+        )
+        best_avg = best.total_score / best.visits if best.visits > 0 else 0.0
 
         logger.info(
-            f"MCTS: selected approach {best_idx+1}/3 "
-            f"(score={best_score:.2f}: {best_reason[:60]})"
+            f"MCTS: completed {self.num_simulations} iterations, "
+            f"best score={best_avg:.2f}, "
+            f"tree size={len(tree.nodes)} nodes"
         )
 
         return (
-            f"OPTIMAL APPROACH (MCTS score {best_score:.2f}/1.0):\n"
-            f"{best_hypothesis}"
+            f"OPTIMAL APPROACH (MCTS score {best_avg:.2f}/1.0):\n"
+            f"{best.hypothesis}"
         )
