@@ -1,0 +1,96 @@
+{
+  "name": "archimedes-ai",
+  "displayName": "Archimedes AI Agent",
+  "description": "AI agent directly in VS Code — chat, code, deploy",
+  "version": "0.1.0",
+  "publisher": "archimedes",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "archimedes.openChat",
+        "title": "Archimedes: Open Chat"
+      },
+      {
+        "command": "archimedes.fixSelection",
+        "title": "Archimedes: Fix Selected Code"
+      },
+      {
+        "command": "archimedes.explainSelection",
+        "title": "Archimedes: Explain Selected Code"
+      },
+      {
+        "command": "archimedes.runTask",
+        "title": "Archimedes: Run Task"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "archimedes.openChat",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      },
+      {
+        "command": "archimedes.fixSelection",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "Archimedes AI",
+      "properties": {
+        "archimedes.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Archimedes backend URL"
+        },
+        "archimedes.wsUrl": {
+          "type": "string",
+          "default": "ws://localhost:8000/ws",
+          "description": "WebSocket URL"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "archimedes",
+          "title": "Archimedes AI",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "archimedes": [
+        {
+          "type": "webview",
+          "id": "archimedes.chatView",
+          "name": "Chat"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@types/node-fetch": "^2.6.13",
+    "node-fetch": "^2.7.0"
+  }
+}

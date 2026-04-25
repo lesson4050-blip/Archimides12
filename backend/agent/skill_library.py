@@ -1,0 +1,316 @@
+"""
+Skill Library — когнитивное сжатие опыта.
+Если агент однажды решил задачу хорошо,
+он запоминает «как» и переиспользует.
+
+Top-level implementation:
+- Bag-of-Words hashing (order-invariant)
+- Jaccard similarity fuzzy matching (45% threshold)
+- Use-count tracking + last_used timestamp
+- TTL-based eviction (30 days unused)
+- Thread-safe I/O with file locking
+- Quality gating (>= 0.7)
+"""
+import json
+import hashlib
+import logging
+import re
+import string
+import threading
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+SKILL_DIR = Path("data/skills")
+_SKILL_TTL_DAYS = 30  # Evict skills unused for 30+ days
+_MAX_SKILLS = 200  # Hard cap on stored skills
+
+
+class SkillLibrary:
+    """
+    Stores and retrieves proven task-solving trajectories.
+    Skills are indexed by task-type signature.
+    Thread-safe via lock on write operations.
+    """
+
+    def __init__(self, storage_dir: str = None):
+        self.storage = Path(storage_dir or SKILL_DIR)
+        self.storage.mkdir(parents=True, exist_ok=True)
+        self._index: Dict[str, Dict] = {}
+        self._lock = threading.Lock()
+        self._load_index()
+
+    def _load_index(self):
+        idx_file = self.storage / "index.json"
+        if idx_file.exists():
+            try:
+                self._index = json.loads(idx_file.read_text("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                logger.warning("Skill index corrupted, starting fresh")
+                self._index = {}
+        logger.info(f"SkillLibrary loaded: {len(self._index)} skills")
+
+    def _save_index(self):
+        idx_file = self.storage / "index.json"
+        with self._lock:
+            idx_file.write_text(
+                json.dumps(self._index, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+
+    def _task_signature(self, task_description: str) -> str:
+        """
+        Hash the task type using Bag-of-Words for resilience to phrasing.
+        Order-invariant: "create file and deploy" == "deploy and create file"
+        """
+        text = task_description.lower()
+        text = text.translate(str.maketrans("", "", string.punctuation))
+
+        # Tokenize, remove stop words (len <= 2), sort alphabetically
+        words = sorted(set(w for w in text.split() if len(w) > 2))
+
+        normalized = " ".join(words)[:500]
+        return hashlib.md5(normalized.encode()).hexdigest()[:12]
+
+    def find_skill(self, task: str) -> Optional[Dict[str, Any]]:
+        """
+        Find a matching skill for this task type.
+        Priority: exact hash match > Jaccard fuzzy match (>= 0.45).
+        Updates use_count and last_used on hit.
+        """
+        sig = self._task_signature(task)
+
+        # Exact match (fast path)
+        if sig in self._index:
+            skill = self._load_skill_file(sig)
+            if skill:
+                self._record_hit(sig)
+                skill["_hit"] = True
+                skill["_fuzzy"] = False
+                logger.info(f"Skill EXACT HIT: {sig} ({skill.get('label','')})")
+                return skill
+
+        # Jaccard fuzzy match (slow path)
+        task_words = self._tokenize(task)
+        if not task_words:
+            return None
+
+        best_match = None
+        best_score = 0.0
+
+        for sig_key, meta in self._index.items():
+            label = meta.get("label", "")
+            label_words = self._tokenize(label)
+
+            if not label_words:
+                continue
+
+            intersection = len(task_words & label_words)
+            union = len(task_words | label_words)
+            score = intersection / union if union > 0 else 0
+
+            if score > 0.45 and score > best_score:
+                best_score = score
+                best_match = sig_key
+
+        if best_match:
+            skill = self._load_skill_file(best_match)
+            if skill:
+                self._record_hit(best_match)
+                skill["_hit"] = True
+                skill["_fuzzy"] = True
+                skill["_similarity"] = round(best_score, 2)
+                logger.info(
+                    f"Skill FUZZY HIT: {best_match} "
+                    f"(sim={best_score:.2f}, label={self._index[best_match].get('label','')})"
+                )
+                return skill
+
+        return None
+
+    def store_skill(
+        self,
+        task: str,
+        trajectory: List[Dict[str, Any]],
+        label: str = None,
+        quality_score: float = 1.0,
+    ):
+        """
+        Store a successful task trajectory as a reusable skill.
+        Only stores if quality_score >= 0.7 to avoid junk.
+        Auto-evicts stale skills when at capacity.
+        """
+        if quality_score < 0.7:
+            logger.debug(f"Skill not stored: quality {quality_score} < 0.7")
+            return
+
+        sig = self._task_signature(task)
+
+        # Skip if already stored with equal or higher quality
+        if sig in self._index:
+            existing_quality = self._index[sig].get("quality", 0)
+            if existing_quality >= quality_score:
+                return
+
+        # Evict stale skills if at capacity
+        if len(self._index) >= _MAX_SKILLS:
+            self._evict_stale()
+
+        # Compress trajectory: keep only tool calls and results
+        compressed = self._compress_trajectory(trajectory)
+
+        skill_data = {
+            "task": task[:500],
+            "label": label or task[:100],
+            "trajectory": compressed,
+            "quality_score": quality_score,
+            "created_at": datetime.now().isoformat(),
+            "last_used": datetime.now().isoformat(),
+            "use_count": 0,
+        }
+
+        # Save skill file
+        skill_file = self.storage / f"{sig}.json"
+        with self._lock:
+            skill_file.write_text(
+                json.dumps(skill_data, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+
+        # Update index
+        self._index[sig] = {
+            "label": skill_data["label"],
+            "quality": quality_score,
+            "created": skill_data["created_at"],
+            "last_used": skill_data["last_used"],
+            "use_count": 0,
+        }
+        self._save_index()
+
+        logger.info(
+            f"Skill STORED: {sig} ({skill_data['label'][:50]}) "
+            f"q={quality_score}"
+        )
+
+    def get_context_prompt(self, task: str) -> str:
+        """
+        If a skill exists, return a prompt suffix for the agent.
+        Includes quality score and similarity info.
+        """
+        skill = self.find_skill(task)
+        if not skill:
+            return ""
+
+        steps = skill.get("trajectory", [])
+        if not steps:
+            return ""
+
+        fuzzy_note = ""
+        if skill.get("_fuzzy"):
+            fuzzy_note = f" (fuzzy match, similarity={skill.get('_similarity', '?')})"
+
+        lines = [
+            f"[SKILL LIBRARY] A similar task was solved before{fuzzy_note}. "
+            f"Quality score: {skill.get('quality_score', '?')}/1.0. "
+            f"Reference trajectory:"
+        ]
+        for i, step in enumerate(steps[:10], 1):
+            lines.append(
+                f"  Step {i}: {step.get('tool','')} "
+                f"→ {step.get('result_summary','')[:120]}"
+            )
+        lines.append(
+            "Use this as guidance but adapt to the current task. "
+            "Do NOT blindly replay — the context may differ."
+        )
+        return "\n".join(lines)
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Return skill library statistics."""
+        return {
+            "total_skills": len(self._index),
+            "storage_dir": str(self.storage),
+            "top_used": sorted(
+                self._index.items(),
+                key=lambda x: x[1].get("use_count", 0),
+                reverse=True
+            )[:5],
+        }
+
+    # ── Private helpers ─────────────────────────────────────────────
+
+    @staticmethod
+    def _tokenize(text: str) -> set:
+        """Lowercase, strip punctuation, return set of meaningful words."""
+        text = text.lower().translate(
+            str.maketrans("", "", string.punctuation)
+        )
+        return set(w for w in text.split() if len(w) > 2)
+
+    def _load_skill_file(self, sig: str) -> Optional[Dict]:
+        """Load a skill JSON file by signature."""
+        skill_file = self.storage / f"{sig}.json"
+        if not skill_file.exists():
+            return None
+        try:
+            return json.loads(skill_file.read_text("utf-8"))
+        except Exception as e:
+            logger.warning(f"Failed to load skill {sig}: {e}")
+            return None
+
+    def _record_hit(self, sig: str):
+        """Increment use_count and update last_used in index."""
+        if sig in self._index:
+            self._index[sig]["use_count"] = self._index[sig].get("use_count", 0) + 1
+            self._index[sig]["last_used"] = datetime.now().isoformat()
+            self._save_index()
+
+    def _evict_stale(self):
+        """Remove skills unused for > TTL days, lowest quality first."""
+        cutoff = (datetime.now() - timedelta(days=_SKILL_TTL_DAYS)).isoformat()
+        stale = [
+            sig for sig, meta in self._index.items()
+            if meta.get("last_used", meta.get("created", "")) < cutoff
+        ]
+
+        # Sort by quality (evict lowest first)
+        stale.sort(key=lambda s: self._index[s].get("quality", 0))
+
+        evicted = 0
+        for sig in stale:
+            skill_file = self.storage / f"{sig}.json"
+            if skill_file.exists():
+                skill_file.unlink()
+            del self._index[sig]
+            evicted += 1
+            if len(self._index) < _MAX_SKILLS:
+                break
+
+        if evicted:
+            self._save_index()
+            logger.info(f"SkillLibrary evicted {evicted} stale skills")
+
+    @staticmethod
+    def _compress_trajectory(
+        trajectory: List[Dict[str, Any]]
+    ) -> List[Dict[str, str]]:
+        """
+        Compress a full trajectory into tool-call summaries.
+        Keeps only name + truncated params + truncated result.
+        """
+        compressed = []
+        for step in trajectory:
+            if step.get("tool_call") or step.get("type") == "tool":
+                tool_call = step.get("tool_call", {})
+                compressed.append({
+                    "tool": tool_call.get("name", step.get("name", "unknown")),
+                    "params_summary": str(
+                        tool_call.get("params", step.get("params", {}))
+                    )[:250],
+                    "result_summary": str(
+                        step.get("result", step.get("output", ""))
+                    )[:250],
+                })
+        return compressed

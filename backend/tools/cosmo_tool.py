@@ -280,6 +280,28 @@ class CosmoPresentationTool:
 
         file_size_kb = output_path.stat().st_size // 1024
 
+        # --- Visual QA (non-blocking, best-effort) ---
+        vision_report = ""
+        try:
+            from backend.agent.vision_feedback import VisionFeedbackLoop
+            from backend.models.model_router import ModelRouter
+            vfl = VisionFeedbackLoop(router=ModelRouter())
+            qa = await vfl.analyze_pptx_slides(
+                presentation_id=pres_id,
+                slide_count=n_slides,
+            )
+            if qa.get("total_problems", 0) > 0:
+                vision_report = (
+                    f"\n\n🔍 Visual QA ({qa['slides_analyzed']} slides):\n"
+                    f"  Score: {qa['avg_quality']}/10 | "
+                    f"Problems: {qa['total_problems']}\n"
+                    f"  {qa.get('summary', '')[:300]}"
+                )
+            else:
+                vision_report = "\n\n✅ Visual QA: All slides passed."
+        except Exception as e:
+            logger.debug(f"Vision QA skipped: {e}")
+
         return {
             "success": True,
             "output": (
@@ -289,6 +311,7 @@ class CosmoPresentationTool:
                 f"📁 Файл: {output_path.name} ({file_size_kb} KB)\n"
                 f"📥 Путь: {output_path}\n\n"
                 f"Файл сохранён и готов к скачиванию."
+                f"{vision_report}"
             ),
             "file_path": str(output_path),
             "filename": output_path.name,

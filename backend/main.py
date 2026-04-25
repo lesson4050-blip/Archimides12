@@ -12,6 +12,7 @@ from backend.api.routes import router as main_router
 from backend.auth.routes import router as auth_router
 from backend.api.settings_routes import router as settings_router
 from backend.api.connectors_router import router as connectors_router
+from backend.api.quick_task_router import router as quick_task_router
 
 
 # Configure logging
@@ -137,6 +138,7 @@ app.include_router(auth_router)
 app.include_router(main_router)
 app.include_router(settings_router)
 app.include_router(connectors_router)
+app.include_router(quick_task_router)
 
 
 

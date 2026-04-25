@@ -305,6 +305,12 @@ class ArchimedesCosmoAgent:
             self.repl_tool = ReplTool()
             self.tool_registry.register("python_repl", self.repl_tool.execute)
 
+            # Deploy Tool — autonomous deployment
+            from backend.tools.deploy_tool import DeployTool
+            self.deploy_tool = DeployTool()
+            self.tool_registry.register("deploy", self.deploy_tool.execute)
+            logger.info("Deploy Tool registered (docker, vercel, liveness)")
+
             # Core Tool Registration
             self.file_tool = FileTool(sandbox_manager.filesystem)
             self.register_tool("file", self.file_tool.execute)

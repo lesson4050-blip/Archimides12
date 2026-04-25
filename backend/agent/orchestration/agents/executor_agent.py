@@ -211,13 +211,30 @@ class ExecutorAgent(BaseAgent):
             all_tools = self.tool_registry.get_all_tool_definitions()
             active_tools = [t for t in all_tools if t["function"]["name"] not in getattr(state, "excluded_tools", [])]
 
+            # Auto-detect complexity — simple for tool loops, complex for planning
+            _is_planning_step = any(
+                kw in (current_target or "").lower()
+                for kw in [
+                    "plan", "design", "architect", "analyze", "compare",
+                    "план", "архитектур", "спроектируй", "проанализируй",
+                    "рефактор", "оптимизируй", "почему", "объясни"
+                ]
+            )
+            _auto_mode = "complex" if _is_planning_step else "simple"
+
             response = await self.intelligence.generate(
                 messages=messages,
                 task=current_target,
-                force_mode="simple",  # Keep simple mode for main agent loop to prevent latency
+                force_mode=_auto_mode,
                 tools=active_tools,
                 on_token=on_token
             )
+
+            if _auto_mode == "complex":
+                logger.info(
+                    f"MoA activated — mode: complex | "
+                    f"proposers: {response.get('proposer_count', 1)}"
+                )
 
             thought = response.get("thinking", response.get("thought", ""))
             if thought:

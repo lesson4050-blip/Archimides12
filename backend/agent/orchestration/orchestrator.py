@@ -10,6 +10,7 @@ from backend.agent.orchestration.mcts import MCTSManager
 from backend.models.model_router import ModelRouter
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
+from backend.agent.skill_library import SkillLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,7 @@ class AgentOrchestrator:
         from backend.agent.orchestration.swarm import MicroAgentSwarm
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)
         self.mcts_manager = MCTSManager(workspace_dir=".")
+        self.skill_library = SkillLibrary()
         
     async def run_task(self, 
                        task_description: str, 
@@ -162,6 +164,12 @@ class AgentOrchestrator:
         
         # Add initial greeting/task to history
         state.add_message("user", task_description)
+        
+        # Inject Skill Library context if matching playbook exists
+        skill_ctx = self.skill_library.get_context_prompt(task_description)
+        if skill_ctx:
+            state.add_message("system", skill_ctx)
+            logger.info("SkillLibrary: injected matching playbook")
         
         # Shortcut: conversational messages get answered directly without planning/critic
         if is_conversational(task_description):

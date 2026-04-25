@@ -265,3 +265,44 @@ class GeminiClient:
             "text": full_text,
             "tokens_used": 0
         }
+
+    async def generate_with_image(
+        self,
+        prompt: str,
+        image_base64: str,
+        image_mime_type: str = "image/jpeg",
+    ) -> Dict[str, Any]:
+        """
+        Multimodal generation: send image + text prompt to Gemini Flash Vision.
+        Used by VisionFeedbackLoop for visual QA of generated content.
+        """
+        try:
+            import google.generativeai as genai
+            from PIL import Image
+            import io
+            import base64
+
+            genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+            model = genai.GenerativeModel("gemini-1.5-flash")
+
+            image_bytes = base64.b64decode(image_base64)
+            image = Image.open(io.BytesIO(image_bytes))
+
+            response = model.generate_content(
+                [prompt, image],
+                generation_config=genai.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=2048,
+                ),
+            )
+
+            return {
+                "text": response.text,
+                "model_used": "gemini-1.5-flash-vision",
+            }
+        except ImportError as e:
+            logger.warning(f"Vision deps missing: {e}")
+            return {"text": "{}", "model_used": "none", "error": str(e)}
+        except Exception as e:
+            logger.error(f"Vision generation failed: {e}")
+            return {"text": "{}", "model_used": "none", "error": str(e)}
