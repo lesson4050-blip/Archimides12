@@ -14,6 +14,8 @@ from backend.api.settings_routes import router as settings_router
 from backend.api.connectors_router import router as connectors_router
 from backend.api.quick_task_router import router as quick_task_router
 
+self_play_loop_instance = None
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -63,6 +65,20 @@ async def lifespan(app: FastAPI):
 
     # Start the inactivity reaper
     sandbox_manager.start_reaper()
+    
+    # Start Self-Play Loop
+    from backend.agent.self_play_loop import SelfPlayLoop
+    from backend.models.model_router import ModelRouter
+    from backend.agent.skill_library import SkillLibrary
+    
+    global self_play_loop_instance
+    self_play_loop_instance = SelfPlayLoop(
+        model_router=ModelRouter(),
+        skill_library=SkillLibrary(),
+        idle_threshold_mins=30
+    )
+    safe_create_task(self_play_loop_instance.start())
+    logger.info("SelfPlayLoop starting...")
     
     # Start the scheduler
     from backend.tools.scheduler_singleton import get_scheduler
@@ -115,6 +131,11 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Error during MCP cleanup for {session_id}: {e}")
 
     sandbox_manager.stop_reaper()
+    
+    global self_play_loop_instance
+    if self_play_loop_instance:
+        self_play_loop_instance.stop()
+
     await sandbox_manager.cleanup()
     await stop_engine()
     await stop_artist_fn()

@@ -45,6 +45,8 @@ ROUTING_RULES = [
      "complex", "swarm_code"),
     (r"(design|architect|system|structure|план|architecture)",
      "complex", "swarm_architect"),
+    (r"(codeact|autonomous code|multi-file refactor)",
+     "complex", "codeact"),
     (r"(explore|mcts|hypothesis|multiple solutions|branch|эксперимент|альтернатив)",
      "complex", "mcts"),
     (r"(translate|переведи|перевод)",
@@ -123,6 +125,7 @@ STRATEGY_AGENTS = {
     "single_slides": None,
     "direct": None,
     "mcts": None,
+    "codeact": None,
 }
 
 
@@ -297,6 +300,22 @@ class AgentOrchestrator:
                             "output": f"MCTS Result:\n{mcts_result}"
                         })
                         state.metadata["critic_verdict"] = "PASS"
+                    elif strategy == "codeact":
+                        from backend.agent.codeact_executor import CodeActExecutor
+                        codeact = CodeActExecutor(self.router)
+                        codeact_result = await codeact.execute(
+                            task=current_target,
+                            context=state.task_description,
+                            session_id=state.session_id,
+                            websocket_send=websocket_send,
+                        )
+                        state.results.append({
+                            "step": i,
+                            "output": codeact_result.get("output", ""),
+                        })
+                        state.metadata["critic_verdict"] = (
+                            "PASS" if codeact_result.get("success") else "RETRY"
+                        )
                     elif agent_override:
                         # Use swarm with strategy-specific agents
                         swarm_result = await self.swarm.run(

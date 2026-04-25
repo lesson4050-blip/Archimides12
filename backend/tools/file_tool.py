@@ -59,7 +59,14 @@ class FileTool:
             if content is None:
                 return {"success": False, "error": "Content is required for 'write' action."}
             await self._auto_snapshot(path, "write")
-            return await self.filesystem.write_file(session_id, path, content)
+            res = await self.filesystem.write_file(session_id, path, content)
+            if res.get("success") and path.endswith(".py"):
+                from backend.agent.lsp_client import LSPClient
+                diagnostics = LSPClient().validate_file(path)
+                if diagnostics:
+                    res["warnings"] = [d.get("message", "") for d in diagnostics]
+                    res["message"] = "File written but contains syntax warnings."
+            return res
             
         elif action == "append":
             if content is None:
@@ -92,7 +99,14 @@ class FileTool:
                 # Replace the slice
                 lines[start_idx:end_idx] = content.split("\n")
                 new_content = "\n".join(lines)
-                return await self.filesystem.write_file(session_id, path, new_content)
+                res = await self.filesystem.write_file(session_id, path, new_content)
+                if res.get("success") and path.endswith(".py"):
+                    from backend.agent.lsp_client import LSPClient
+                    diagnostics = LSPClient().validate_file(path)
+                    if diagnostics:
+                        res["warnings"] = [d.get("message", "") for d in diagnostics]
+                        res["message"] = "File edited but contains syntax warnings."
+                return res
                 
             else:
                 # Legacy string replacement
@@ -112,7 +126,14 @@ class FileTool:
                     return {"success": False, "error": f"String '{old_string}' not found in file."}
                     
                 new_content = file_content.replace(old_string, new_string)
-                return await self.filesystem.write_file(session_id, path, new_content)
+                res = await self.filesystem.write_file(session_id, path, new_content)
+                if res.get("success") and path.endswith(".py"):
+                    from backend.agent.lsp_client import LSPClient
+                    diagnostics = LSPClient().validate_file(path)
+                    if diagnostics:
+                        res["warnings"] = [d.get("message", "") for d in diagnostics]
+                        res["message"] = "File edited but contains syntax warnings."
+                return res
             
         elif action == "view":
             return await self.filesystem.list_files(session_id, path)

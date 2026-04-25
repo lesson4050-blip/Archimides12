@@ -1,0 +1,51 @@
+name: SWE-bench Evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: 'SWE-bench dataset split'
+        required: true
+        default: 'princeton-nlp/SWE-bench_Lite'
+        type: choice
+        options:
+          - 'princeton-nlp/SWE-bench_Lite'
+          - 'princeton-nlp/SWE-bench'
+      limit:
+        description: 'Number of issues to evaluate (0 for all)'
+        required: true
+        default: '10'
+        type: string
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install datasets swebench
+        
+    - name: Run SWE-bench Evaluation
+      env:
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+      run: |
+        python backend/scripts/evaluate_swe_bench.py --dataset ${{ inputs.dataset }} --limit ${{ inputs.limit }}
+        
+    - name: Upload Evaluation Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: swe-bench-results
+        path: swe_bench_results/

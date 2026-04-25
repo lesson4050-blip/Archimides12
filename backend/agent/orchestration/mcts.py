@@ -40,26 +40,46 @@ class MCTSManager:
         success, _ = self._run_git(["status"])
         return success
 
-    async def _evaluate_branch_with_tdd(self, branch_name: str, task: str) -> Tuple[float, str]:
-        """Runs TDD cycle on branch and returns score based on test results."""
-        logger.info(f"MCTS: Evaluating branch {branch_name} with TDD...")
-        session_id = f"mcts_{branch_name}"
-        
-        # In a real scenario, we might want to pass initial code if already generated
-        result_text = await self.tdd.execute_tdd(
-            task=task,
-            session_id=session_id,
-            code_path="implementation.py"
-        )
-        
-        if "[TDD Success]" in result_text:
-            # Extract coverage or just give a high score
-            cov_match = re.search(r"coverage: (\d+)%", result_text)
-            coverage = int(cov_match.group(1)) if cov_match else 80
-            score = 0.5 + (coverage / 200.0) # 0.5 to 1.0
-            return score, result_text
-        else:
-            return 0.1, result_text
+    async def _evaluate_hypothesis(
+        self,
+        hypothesis: str,
+        task: str,
+        model_router: Any,
+    ) -> Tuple[float, str]:
+        """
+        Реальная оценка гипотезы через LLM-scoring.
+        Не запускает код — оценивает feasibility и completeness.
+        """
+        prompt = f"""Rate this approach to solving the task. Score 0.0-1.0.
+
+TASK: {task[:400]}
+APPROACH: {hypothesis[:500]}
+
+Evaluate:
+- Feasibility (0-1): Will this actually work?
+- Completeness (0-1): Does it solve the full task?
+- Risk (0-1, lower = better): What could go wrong?
+- Efficiency (0-1): Is this the right number of steps?
+
+Return JSON only:
+{{"feasibility": 0.8, "completeness": 0.9, "risk": 0.2, "efficiency": 0.7,
+  "overall": 0.8, "reason": "why this score"}}"""
+
+        try:
+            response = await model_router.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_hint="think"
+            )
+            from backend.utils.json_repair import repair_and_parse
+            data, _ = repair_and_parse(response.get("text", "{}"))
+            if data and isinstance(data.get("overall"), (int, float)):
+                score = float(data["overall"])
+                reason = data.get("reason", "")
+                return min(max(score, 0.0), 1.0), reason
+        except Exception as e:
+            logger.warning(f"MCTS evaluation failed: {e}")
+
+        return 0.5, "evaluation failed"
 
     async def run_mcts(
         self,
@@ -69,60 +89,44 @@ class MCTSManager:
         executor_agent: Any,
         state: Any
     ) -> str:
-        """
-        The main entry point called by Orchestrator.
-        Explores multiple paths via Git branches and returns the best solution.
-        """
-        logger.info(f"Starting MCTS for task: {task}")
-        
-        if not self.is_git_repo():
-            logger.info("Initializing git repo for MCTS exploration.")
-            self._run_git(["init"])
-            self._run_git(["add", "."])
-            self._run_git(["commit", "-m", "Initial commit for MCTS"])
+        logger.info(f"MCTS: evaluating approaches for: {task[:60]}")
 
-        base_branch = "main" # Assume main for simplicity, or detect current
-        
-        # 1. Generate Hypotheses
+        # Generate N hypotheses
         prompt = (
-            f"Task: {task}\nContext: {context}\n"
-            "Generate 3 distinct technical approaches. Separate by '---APPROACH---'."
+            f"Task: {task}\nContext: {context[:300]}\n"
+            "Generate 3 distinct technical approaches. "
+            "Separate each with '---APPROACH---'."
         )
         response = await model_router.generate(
             messages=[{"role": "user", "content": prompt}],
             task_hint="think"
         )
-        hypotheses = [h.strip() for h in response.get("text", "").split("---APPROACH---") if h.strip()]
-        
+        hypotheses = [
+            h.strip()
+            for h in response.get("text", "").split("---APPROACH---")
+            if h.strip()
+        ][:3]
+
         if not hypotheses:
-            return "No distinct hypotheses generated. Proceeding with default."
+            return task
 
-        results = []
-        for i, hyp in enumerate(hypotheses[:3]):
-            branch_name = f"archimedes-branch-{uuid.uuid4().hex[:6]}"
-            logger.info(f"Exploring Hypothesis {i+1} on branch {branch_name}")
-            
-            # Switch to new branch
-            self._run_git(["checkout", "-b", branch_name])
-            
-            # 4. Evaluate branch using TDD
-            score, feedback = await self._evaluate_branch_with_tdd(branch_name, task)
-            
-            results.append({
-                "hypothesis": hyp,
-                "branch": branch_name,
-                "score": score,
-                "feedback": feedback
-            })
-            
-            # Return to base
-            self._run_git(["checkout", base_branch])
+        # Score all hypotheses in parallel
+        scores = await asyncio.gather(*[
+            self._evaluate_hypothesis(h, task, model_router)
+            for h in hypotheses
+        ])
 
-        # 2. Select Best (Simple max for now)
-        best = max(results, key=lambda x: x["score"])
-        
-        # 3. Merge Best
-        logger.info(f"Merging best branch: {best['branch']}")
-        self._run_git(["merge", best["branch"], "--no-edit"])
-        
-        return f"Selected Approach: {best['hypothesis']}\nResult: Successfully merged code changes from {best['branch']}."
+        # Select best
+        best_idx = max(range(len(scores)), key=lambda i: scores[i][0])
+        best_hypothesis = hypotheses[best_idx]
+        best_score, best_reason = scores[best_idx]
+
+        logger.info(
+            f"MCTS: selected approach {best_idx+1}/3 "
+            f"(score={best_score:.2f}: {best_reason[:60]})"
+        )
+
+        return (
+            f"OPTIMAL APPROACH (MCTS score {best_score:.2f}/1.0):\n"
+            f"{best_hypothesis}"
+        )
