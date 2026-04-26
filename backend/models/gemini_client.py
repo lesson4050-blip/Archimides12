@@ -210,61 +210,50 @@ class GeminiClient:
 
     async def generate_stream(
         self,
-        messages,
-        tools=None,
-        on_token=None
-    ):
-        """
-        Gemini streaming via generate_content_stream.
-        Falls back to non-stream if tools present.
-        """
-        if tools:
-            return await self.generate_with_tools(messages, tools)
-
-        contents = []
-        system_instruction = None
-        for msg in messages:
-            if msg["role"] == "system":
-                system_instruction = msg["content"]
-                continue
-            role = "user" if msg["role"] == "user" else "model"
-            if msg.get("content"):
-                contents.append(
-                    types.Content(
-                        role=role,
-                        parts=[types.Part(text=msg["content"])]
-                    )
-                )
-
+        messages: list,
+        tools: list = None,
+        on_token=None,
+        task_hint: str = "default"
+    ) -> dict:
+        """True streaming from Gemini API."""
+        import google.generativeai as genai
+        
         full_text = ""
+        
         try:
-            stream = await asyncio.to_thread(
-                self.client.models.generate_content_stream,
-                model=self.model_name,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
+            genai.configure(api_key=self.client.api_key)
+            model_name = "gemini-2.5-flash" if task_hint in ("quick", "default") else "gemini-2.5-pro"
+            model = genai.GenerativeModel(model_name)
+            
+            # Simple message format for genai directly
+            formatted = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    continue
+                role = "user" if msg["role"] in ["user", "tool"] else "model"
+                formatted.append({"role": role, "parts": [msg.get("content", "")]})
+            
+            response = await asyncio.to_thread(
+                model.generate_content,
+                formatted,
+                stream=True,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=4096,
+                    temperature=0.7
                 )
             )
-            for chunk in stream:
+            
+            for chunk in response:
                 if chunk.text:
                     full_text += chunk.text
                     if on_token:
-                        await on_token({
-                            "type": "token",
-                            "content": chunk.text
-                        })
+                        await on_token({"type": "token", "content": chunk.text})
+            
+            return {"text": full_text, "tool_call": None, "model_used": model_name}
+            
         except Exception as e:
             logger.error(f"Gemini stream error: {e}")
-            return await self.generate_with_tools(messages, None)
-
-        return {
-            "model_used": "gemini",
-            "thought": "",
-            "tool_call": None,
-            "text": full_text,
-            "tokens_used": 0
-        }
+            return await self.generate_with_tools(messages, tools=tools)
 
     async def generate_with_image(
         self,

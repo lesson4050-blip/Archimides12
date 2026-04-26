@@ -68,149 +68,147 @@ class CodeActExecutor:
         context: str = "",
         session_id: str = "default",
         websocket_send=None,
+        max_iterations: int = 15,
     ) -> Dict[str, Any]:
-
-        messages = [
-            {"role": "system", "content": CODEACT_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    f"TASK: {task}\n"
-                    + (f"\nCONTEXT: {context}" if context else "")
-                )
-            }
-        ]
-
-        iterations = 0
-        execution_log = []
-
-        while iterations < self.max_iterations:
-            iterations += 1
-
-            # Get agent's next action
-            response = await self.router.generate(
-                messages=messages,
-                task_hint="think",
-                temperature=0.2,
-            )
-            agent_text = response.get("text", "").strip()
-
+        """
+        CodeAct execution loop.
+        The agent writes Python code, executes it, observes output,
+        and iterates until the task is solved or iterations exhausted.
+        """
+        history = []
+        
+        # Strong CodeAct system prompt
+        system_prompt = (
+            "You are CodeAct — an expert autonomous coding agent.\n"
+            "You solve tasks by writing and executing Python code in a REPL.\n\n"
+            "RULES:\n"
+            "1. ALWAYS respond with executable Python code wrapped in ```python blocks.\n"
+            "2. Use print() to show results — you can only see printed output.\n"
+            "3. After seeing output, analyze it and write the NEXT code block.\n"
+            "4. If code fails, fix the specific error — don't rewrite from scratch.\n"
+            "5. When task is done, write: print('TASK_COMPLETE: <result summary>')\n"
+            "6. Available: standard library + requests + numpy + pandas + subprocess.\n"
+            "7. For file operations: use open(), pathlib, os — not shell commands.\n"
+            "8. For git operations: use subprocess.run(['git', ...]).\n\n"
+            "NEVER explain what you'll do. Write the code immediately."
+        )
+        
+        if context:
+            history.append({"role": "system", "content": system_prompt})
+            history.append({"role": "user", "content": f"Context:\n{context}\n\nTask: {task}"})
+        else:
+            history.append({"role": "system", "content": system_prompt})
+            history.append({"role": "user", "content": task})
+        
+        all_outputs = []
+        
+        for iteration in range(max_iterations):
             if websocket_send:
                 await websocket_send({
                     "type": "thought",
-                    "thought_type": "codeact",
-                    "content": agent_text[:200],
+                    "content": f"🔁 CodeAct iteration {iteration + 1}/{max_iterations}"
                 })
-
+            
+            # Generate next code block
+            response = await self.router.generate(
+                messages=history,
+                task_hint="execute"
+            )
+            
+            agent_response = response.get("text", "")
+            if not agent_response:
+                break
+            
+            history.append({"role": "assistant", "content": agent_response})
+            
+            # Extract Python code blocks
+            import re
+            code_blocks = re.findall(
+                r'```python\n(.*?)```',
+                agent_response,
+                re.DOTALL
+            )
+            
+            if not code_blocks:
+                # No code block — might be final text answer
+                if "TASK_COMPLETE" in agent_response or iteration > 2:
+                    return {
+                        "success": True,
+                        "output": agent_response,
+                        "iterations": iteration + 1,
+                        "all_outputs": all_outputs
+                    }
+                # Nudge agent to write code
+                history.append({
+                    "role": "user",
+                    "content": "Write executable Python code to continue. Wrap it in ```python blocks."
+                })
+                continue
+            
+            # Execute all code blocks
+            execution_results = []
+            for code in code_blocks:
+                exec_result = await self._execute_code_safe(
+                    code, session_id, websocket_send
+                )
+                execution_results.append(exec_result)
+                all_outputs.append(exec_result)
+                
+                if websocket_send:
+                    status = "✅" if exec_result["success"] else "❌"
+                    await websocket_send({
+                        "type": "thought",
+                        "content": f"{status} Code output: {exec_result['output'][:200]}"
+                    })
+            
             # Check if task is complete
-            if "<task_complete>" in agent_text:
-                summary_start = agent_text.find("<task_complete>") + 15
-                summary_end = agent_text.find("</task_complete>")
-                summary = agent_text[summary_start:summary_end].strip()
+            combined_output = "\n".join(r["output"] for r in execution_results)
+            if "TASK_COMPLETE" in combined_output:
+                final = combined_output.split("TASK_COMPLETE:")[-1].strip()
                 return {
                     "success": True,
-                    "output": summary,
-                    "iterations": iterations,
-                    "execution_log": execution_log,
+                    "output": final or combined_output,
+                    "iterations": iteration + 1,
+                    "all_outputs": all_outputs
                 }
-
-            # Extract and execute Python code
-            if "<execute_python>" in agent_text:
-                code_start = agent_text.find("<execute_python>") + 16
-                code_end = agent_text.find("</execute_python>")
-                if code_end > code_start:
-                    code = agent_text[code_start:code_end].strip()
-                    stdout, stderr, error = await self._execute_code(code)
-
-                    execution_log.append({
-                        "iteration": iterations,
-                        "code": code[:300],
-                        "stdout": stdout[:500],
-                        "stderr": stderr[:200],
-                    })
-
-                    # Feed result back to agent
-                    messages.append({
-                        "role": "assistant",
-                        "content": agent_text
-                    })
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            f"Execution result:\n"
-                            f"STDOUT:\n{stdout[:2000]}\n"
-                            + (f"STDERR:\n{stderr[:500]}\n" if stderr else "")
-                            + (f"ERROR: {error}\n" if error else "")
-                            + "\nContinue with next action or mark complete."
-                        )
-                    })
-                    continue
-
-            # No code block — agent gave a text response
-            messages.append({"role": "assistant", "content": agent_text})
-            # Prompt to write code
-            messages.append({
+            
+            # Add execution results to history for next iteration
+            history.append({
                 "role": "user",
-                "content": (
-                    "Please write Python code to take the next action. "
-                    "Use <execute_python>...</execute_python> tags."
-                )
+                "content": f"Execution output:\n{combined_output}\n\nContinue solving the task."
             })
-
+        
+        # Hit iteration limit
+        last_output = all_outputs[-1]["output"] if all_outputs else "No output"
         return {
             "success": False,
-            "output": "Max iterations reached",
-            "iterations": iterations,
-            "execution_log": execution_log,
+            "output": f"Iteration limit reached. Last output:\n{last_output}",
+            "iterations": max_iterations,
+            "all_outputs": all_outputs
         }
 
-    async def _execute_code(
-        self, code: str
-    ) -> tuple[str, str, Optional[str]]:
-        """Execute Python code safely, capture output."""
-        stdout_buf = StringIO()
-        stderr_buf = StringIO()
-        error = None
-
+    async def _execute_code_safe(
+        self,
+        code: str,
+        session_id: str,
+        websocket_send=None,
+    ) -> Dict[str, Any]:
+        """Execute Python code safely via sandbox."""
         try:
-            # Implement strict import filtering
-            import builtins
-            original_import = builtins.__import__
-            
-            # List of forbidden modules
-            forbidden_modules = {'ctypes', 'pty', 'tty', 'resource', 'multiprocessing'}
-            
-            def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
-                root_module = name.split('.')[0]
-                if root_module in forbidden_modules:
-                    raise ImportError(f"Import of '{name}' is forbidden by security policy.")
-                return original_import(name, globals, locals, fromlist, level)
-            
-            safe_builtins = {k: v for k, v in builtins.__dict__.items()}
-            safe_builtins['__import__'] = safe_import
-            
-            # Create isolated namespace
-            namespace = {
-                "__builtins__": safe_builtins,
-                "asyncio": asyncio,
-            }
-            # Import common modules
-            exec(
-                "import os, sys, json, re, pathlib, subprocess, "
-                "shutil, tempfile\n"
-                "from pathlib import Path",
-                namespace
+            from backend.sandbox.singleton import sandbox_manager
+            result = await sandbox_manager.executor.execute_code(
+                code=code,
+                session_id=session_id,
+                timeout=30
             )
-
-            with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
-                exec(code, namespace)
-
+            return {
+                "success": result.get("success", True),
+                "output": str(result.get("output", result.get("stdout", "")))[:2000],
+                "error": result.get("error", result.get("stderr", ""))
+            }
         except Exception as e:
-            error = f"{type(e).__name__}: {e}\n"
-            error += traceback.format_exc()[-500:]
-
-        return (
-            stdout_buf.getvalue(),
-            stderr_buf.getvalue(),
-            error
-        )
+            return {
+                "success": False,
+                "output": f"Execution error: {e}",
+                "error": str(e)
+            }

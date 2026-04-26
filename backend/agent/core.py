@@ -180,6 +180,19 @@ class ArchimedesCosmoAgent:
             self.state = AgentState.PLANNING if mode == AgentMode.PLANNING else AgentState.EXECUTING
             if websocket_send:
                 await websocket_send({"type": "message_info", "content": f"🚀 Mode: **{mode.value.upper()}** — {task_description}"})
+            
+            # Checkpoint: save context every 5 tool calls (handled by context_manager hook)
+            try:
+                from backend.agent.session_store import get_session_store
+                get_session_store().save_context(
+                    session_id=self.session_id or "default",
+                    history=self.context_manager.get_messages()[:10],  # lightweight
+                    task_description=task_description,
+                    metadata={"mode": mode.value}
+                )
+            except Exception:
+                pass
+            
             orch_result = await self.orchestrator.run_task(
                 task_description=task_description, mode=mode,
                 session_id=self.session_id or "default", websocket_send=websocket_send,
@@ -193,6 +206,13 @@ class ArchimedesCosmoAgent:
             result = ExecutionResult(task_id=task_id, status=TaskStatus.COMPLETED, output=final_output,
                                      duration=asyncio.get_running_loop().time() - start_time,
                                      metadata={"mode": mode.value, "plan": orch_result.get("plan")})
+            
+            # Clean up completed session
+            try:
+                from backend.agent.session_store import get_session_store
+                get_session_store().delete_session(self.session_id or "default")
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"Task failed: {e}")
             if websocket_send:

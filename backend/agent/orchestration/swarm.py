@@ -40,7 +40,7 @@ MICRO_AGENT_TEMPLATES = {
             "Never submit code you haven't tested. "
             "Output only the solution, no explanations unless asked."
         ),
-        "tools": ["file", "shell", "search", "ast_navigator", "fast_linter"]
+        "tools": ["file", "shell", "search", "ast_navigator", "fast_linter", "code_edit", "patch"]
     },
     "critic": {
         "specialty": "Finding bugs, security issues, and improvements",
@@ -53,7 +53,7 @@ MICRO_AGENT_TEMPLATES = {
             "Base your review on REAL execution output, not assumptions. "
             "Output: list of issues with severity (CRITICAL/HIGH/MEDIUM/LOW)."
         ),
-        "tools": ["file", "shell", "fast_linter", "ast_navigator"]
+        "tools": ["file", "shell", "fast_linter", "ast_navigator", "code_edit"]
     },
     "researcher": {
         "specialty": "Deep research and information synthesis",

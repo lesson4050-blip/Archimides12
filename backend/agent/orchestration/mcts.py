@@ -73,8 +73,8 @@ class MCTSManager:
 
     def __init__(self, workspace_dir: str = "."):
         self.workspace_dir = workspace_dir
-        self.max_depth = 2
-        self.num_simulations = 5
+        self.max_depth = 3
+        self.num_simulations = 8
         self.exploration_constant = 1.414  # sqrt(2), standard UCB1
 
     # ── UCB1 Selection ──
@@ -117,6 +117,9 @@ class MCTSManager:
         prompt = (
             f"Given this task and current approach, suggest 2 distinct "
             f"alternative refinements or improvements.\n"
+            f"IMPORTANT: Generate approaches that are FUNDAMENTALLY DIFFERENT from "
+            f"each other. Avoid paraphrasing. Each must use a different strategy, "
+            f"algorithm, or tool combination.\n"
             f"Task: {task[:400]}\n"
             f"Current approach: {node.hypothesis[:400]}\n"
             "Separate each with '---APPROACH---'."
@@ -148,20 +151,20 @@ class MCTSManager:
     async def _simulate(self, node: MCTSNode, task: str,
                         model_router) -> Tuple[float, str]:
         """Score a hypothesis via LLM evaluation."""
-        prompt = f"""Rate this approach to solving the task. Score 0.0-1.0.
+        prompt = f"""
+Evaluate this solution approach for the given task.
+Task: {task[:400]}
+Approach: {node.hypothesis[:500]}
 
-TASK: {task[:400]}
-APPROACH: {node.hypothesis[:500]}
+Score each dimension from 0.0 to 1.0:
+- Correctness: Will this actually solve the problem? (weight: 0.4)
+- Completeness: Does it handle edge cases? (weight: 0.3)
+- Efficiency: Is the approach reasonably fast/clean? (weight: 0.2)
+- Feasibility: Can this be implemented with available tools? (weight: 0.1)
 
-Evaluate:
-- Feasibility (0-1): Will this actually work?
-- Completeness (0-1): Does it solve the full task?
-- Risk (0-1, lower = better): What could go wrong?
-- Efficiency (0-1): Is this the right number of steps?
-
-Return JSON only:
-{{"feasibility": 0.8, "completeness": 0.9, "risk": 0.2, "efficiency": 0.7,
-  "overall": 0.8, "reason": "why this score"}}"""
+Reply ONLY with a JSON object:
+{{"correctness": 0.0, "completeness": 0.0, "efficiency": 0.0, "feasibility": 0.0}}
+"""
 
         try:
             response = await model_router.generate(
@@ -169,11 +172,15 @@ Return JSON only:
                 task_hint="think"
             )
             from backend.utils.json_repair import repair_and_parse
-            data, _ = repair_and_parse(response.get("text", "{}"))
-            if data and isinstance(data.get("overall"), (int, float)):
-                score = float(data["overall"])
-                reason = data.get("reason", "")
-                return min(max(score, 0.0), 1.0), reason
+            dims, _ = repair_and_parse(response.get("text", "{}"))
+            if dims and isinstance(dims, dict):
+                score = (
+                    dims.get("correctness", 0.0) * 0.4 +
+                    dims.get("completeness", 0.0) * 0.3 +
+                    dims.get("efficiency", 0.0) * 0.2 +
+                    dims.get("feasibility", 0.0) * 0.1
+                )
+                return min(max(score, 0.0), 1.0), "Evaluated via dimensions"
         except Exception as e:
             logger.warning(f"MCTS simulation failed: {e}")
 

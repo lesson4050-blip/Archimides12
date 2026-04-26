@@ -260,6 +260,14 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register VisionTool: {e}")
 
+        try:
+            from backend.tools.code_editor_tool import CodeEditorTool
+            self.agent.code_editor_tool = CodeEditorTool()
+            self.agent.register_tool("code_edit", self.agent.code_editor_tool.execute)
+            logger.info("CodeEditorTool registered")
+        except Exception as e:
+            logger.error(f"Failed to register CodeEditorTool: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools

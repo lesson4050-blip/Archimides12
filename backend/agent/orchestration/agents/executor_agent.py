@@ -327,7 +327,7 @@ class ExecutorAgent(BaseAgent):
                         )
                         state.results.append({
                             "step": state.current_step_index,
-                            "output": f"Задача прервана: {reason}"
+                            "output": f"Task aborted: {reason}"
                         })
                         state.history = self.context_manager.get_messages()
                         return state
@@ -508,10 +508,10 @@ class ExecutorAgent(BaseAgent):
                     continue
 
                 if not res_text and step == 0:
-                    res_text = "Я выполнил эту часть задачи." # Safety fallback
+                    res_text = "Task step completed."  # Safety fallback
                 
                 if websocket_send and res_text:
-                    await websocket_send({"type": "message_info", "content": f"Результат шага: {res_text}"})
+                    await websocket_send({"type": "message_info", "content": f"Step result: {res_text}"})
                 
                 state.results.append({"step": state.current_step_index, "output": res_text or "Done."})
 
@@ -574,7 +574,7 @@ class ExecutorAgent(BaseAgent):
                             f"Suggest 2-3 logical NEXT STEPS the user might want. "
                             f"Output as short JSON array: "
                             f'["action1", "action2", "action3"]\n'
-                            f"Max 8 words each. In RUSSIAN."
+                            f"Max 8 words each. Match the language of the original task."
                         )
                         sug_resp = await self.router.generate(
                             messages=[{"role": "user", "content": suggest_prompt}],

@@ -256,6 +256,9 @@ class AgentOrchestrator:
                     current_plan=state.current_plan
                 )
                 state_copy.history = list(state.history)
+                # Inject mcp_client so parallel agents can use auto-tooling
+                state_copy.metadata["mcp_client"] = state.metadata.get("mcp_client")
+                state_copy.metadata["strategy"] = state.metadata.get("strategy", "swarm_code")
                 tasks.append(
                     self.executor.process(state_copy, websocket_send)
                 )
