@@ -15,7 +15,7 @@ class GeminiClient:
         self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         self.model_name = settings.GEMINI_MODEL
 
-    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
         retries = 0
         backoff = 2
         
@@ -79,12 +79,20 @@ class GeminiClient:
             if fns:
                 genai_tools = [types.Tool(function_declarations=fns)]
 
+        # Route model based on task complexity
+        if task_hint in ("think", "plan"):
+            selected_model = "gemini-2.5-pro-preview-05-06"
+        elif task_hint in ("quick", "default"):
+            selected_model = "gemini-2.5-flash-preview-04-17"
+        else:
+            selected_model = self.model_name
+
         while retries < 3:
             try:
                 # Use generate_content
                 response = await asyncio.to_thread(
                     self.client.models.generate_content,
-                    model=self.model_name,
+                    model=selected_model,
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
@@ -222,7 +230,7 @@ class GeminiClient:
         
         try:
             genai.configure(api_key=self.client.api_key)
-            model_name = "gemini-2.5-flash" if task_hint in ("quick", "default") else "gemini-2.5-pro"
+            model_name = "gemini-2.5-flash-preview-04-17" if task_hint in ("quick", "default") else "gemini-2.5-pro-preview-05-06"
             model = genai.GenerativeModel(model_name)
             
             # Simple message format for genai directly

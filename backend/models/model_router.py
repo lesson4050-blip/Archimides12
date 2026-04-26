@@ -17,7 +17,7 @@ class AllModelsExhausted(Exception):
 class ModelRouter:
     # Speed-first routing categories
     SPEED_TASKS = {"search", "browse", "realtime", "summarize",
-                   "translate", "quick", "simple"}
+                   "translate", "quick", "simple", "fast"}
     QUALITY_TASKS = {"think", "plan", "execute", "code", "debug"}
     CREATIVE_TASKS = {"image", "creative", "persona"}
 

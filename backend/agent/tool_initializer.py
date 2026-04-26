@@ -276,6 +276,17 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register CodeEditorTool: {e}")
 
+        try:
+            from backend.tools.parallel_search_tool import ParallelSearchTool
+            self.agent.parallel_search_tool = ParallelSearchTool()
+            self.agent.register_tool(
+                "parallel_search",
+                self.agent.parallel_search_tool.execute
+            )
+            logger.info("ParallelSearchTool registered")
+        except Exception as e:
+            logger.error(f"Failed to register ParallelSearchTool: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools

@@ -119,7 +119,46 @@ def classify_task(text: str) -> Tuple[str, str]:
     elif signals["is_question"]:
         return "simple", "direct"
     else:
-        return "simple", "direct"
+        # Ambiguous — will be LLM-classified by orchestrator if needed
+        return "medium", "single"
+
+
+async def classify_task_with_llm(
+    text: str,
+    router: ModelRouter,
+    fallback_result: tuple = None
+) -> tuple:
+    """
+    LLM-based task classification for ambiguous tasks.
+    Falls back to regex result if LLM fails.
+    Only called for medium-length tasks that regex can't clearly route.
+    """
+    prompt = (
+        "Classify this task into one routing category.\n"
+        f"Task: {text[:300]}\n\n"
+        "Categories:\n"
+        "- codeact: fix a bug, apply a patch, SWE-bench style fix\n"
+        "- swarm_code: write new code, build a feature, implement API\n"
+        "- swarm_research: research, analyze, compare, summarize\n"
+        "- mcts: explore multiple solutions, needs creative alternatives\n"
+        "- single: simple translation, calculation, single-step task\n"
+        "- direct: greeting, trivial question\n\n"
+        "Reply with ONLY the category name. Nothing else."
+    )
+    try:
+        response = await router.generate(
+            messages=[{"role": "user", "content": prompt}],
+            task_hint="quick"
+        )
+        category = response.get("text", "").strip().lower()
+        valid = {"codeact", "swarm_code", "swarm_research",
+                 "mcts", "single", "direct"}
+        if category in valid:
+            complexity = "complex" if category not in ("single", "direct") else "simple"
+            return complexity, category
+    except Exception:
+        pass
+    return fallback_result or ("medium", "single")
 
 
 # Strategy to swarm agent types mapping
@@ -192,6 +231,17 @@ class AgentOrchestrator:
         
         # Semantic task routing
         complexity, strategy = classify_task(task_description)
+        
+        # For medium-complexity ambiguous tasks, use LLM to refine routing
+        if complexity == "medium" and len(task_description) > 80:
+            try:
+                complexity, strategy = await classify_task_with_llm(
+                    task_description, self.router,
+                    fallback_result=(complexity, strategy)
+                )
+                logger.info(f"LLM routing: {complexity}/{strategy}")
+            except Exception:
+                pass  # Keep regex result
         
         if complexity == "simple":
             logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
@@ -442,7 +492,7 @@ class AgentOrchestrator:
                 f"ORIGINAL REQUEST: {state.task_description}\n\n"
             )
             for res in state.results:
-                summary_prompt += f"Шаг {res.get('step')}: {res.get('output')}\n"
+                summary_prompt += f"Step {res.get('step')}: {res.get('output')}\n"
             
             try:
                 response = await self.router.generate(

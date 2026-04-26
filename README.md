@@ -18,32 +18,49 @@ Through recent production hardening, Archimedes features robust quality gates, c
 ---
 
 ## Architecture
-User Request
-│
-▼
-┌─────────────────────────────────────────┐
-│          AgentOrchestrator              │
-│  ┌──────────┐ ┌──────────┐ ┌─────────┐ │
-│  │ Planner  │→│ Executor │→│ Critic  │ │
-│  └──────────┘ └──────────┘ └─────────┘ │
-│         MicroAgent Swarm                │
-│  Coder · Critic · Tester · Researcher   │
-└─────────────────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────┐
-│              Tool Layer                 │
-│  Browser · Shell · File · Search        │
-│  COSMO Presentation · Image Gen         │
-│  Native MCP Ecosystem Integration       │
-└─────────────────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────┐
-│            Memory System                │
-│  GraphRAG · Memory Bank · Vector Store  │
-│  Self-Improvement (learns from errors)  │
-└─────────────────────────────────────────┘
+
+**Agent Core**
+- `backend/agent/core.py` — ArchimedesCosmoAgent (196 lines)
+- `backend/agent/tool_initializer.py` — 25+ tools with per-tool error handling
+- `backend/agent/task_processor.py` — legacy fallback execution path
+- `backend/agent/tool_definition_cache.py` — O(1) tool definition caching
+
+**Orchestration**
+- `backend/agent/orchestration/orchestrator.py` — semantic task routing (9 strategies)
+- `backend/agent/orchestration/mcts.py` — real MCTS: UCB1 + LLM simulation (8 iterations)
+- `backend/agent/orchestration/swarm.py` — MicroAgentSwarm (coder/researcher/critic)
+- `backend/agent/codeact_executor.py` — CodeAct v2: Python REPL loop + TASK_COMPLETE
+
+**Models**
+- `backend/models/model_router.py` — 3-tier routing: Groq → Gemini → Ollama
+- `backend/models/retry_wrapper.py` — exponential backoff with jitter
+- `backend/models/groq_client.py` — streaming SSE support
+- `backend/models/gemini_client.py` — streaming via google.generativeai
+
+**Tools (25+)**
+- `shell_tool.py` — PersistentShellSession (state preserved across calls)
+- `code_editor_tool.py` — surgical edits: find_replace, view_function, insert_after
+- `patch_tool.py` — unified diff generation and application
+- `git_tool.py` — status, diff, add, commit, push (async subprocess)
+- `vision_tool.py` — screenshot → Gemini Vision → analysis
+
+**Memory**
+- `backend/memory/context_manager.py` — self-healing (heal_context)
+- `backend/memory/consolidator.py` — nightly semantic knowledge compression
+- `backend/agent/session_store.py` — disk-backed session persistence
+
+**Benchmarks & Eval**
+- `backend/benchmarks/runner.py` — internal quick benchmark (4 categories)
+- `backend/benchmarks/swe_bench_adapter.py` — SWE-bench harness adapter
+- `scripts/run_swe_bench.py` — CLI evaluation runner
+- `backend/api/routes/benchmark.py` — REST endpoint /benchmark/run
+
+**CI/CD**
+- `.github/workflows/ci.yml` — pytest + eval + no-eval() check
+- `.github/workflows/swe_bench.yml` — SWE-bench CI pipeline
+
+**Extensions**
+- `vscode-extension/` — VSCode extension for direct IDE integration
 
 ---
 

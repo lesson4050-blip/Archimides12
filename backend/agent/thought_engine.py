@@ -144,6 +144,9 @@ TOOL SELECTION:
 - vision: take a screenshot of the sandbox desktop and analyze it with
   Gemini Vision. Use when you need to see the current UI state, verify
   that a web page rendered correctly, or find UI elements to click.
+- parallel_search: run 2-8 search queries simultaneously, returns
+  filtered relevant results. Use instead of multiple sequential search
+  calls for research tasks. Up to 3x faster for multi-aspect research.
 
 THOUGHT BLOCKS:
 Before every tool call, output a thought block. This is for your internal reasoning and is NOT shown to the user as chat. Use it to plan your next technical move.

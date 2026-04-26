@@ -130,3 +130,8 @@ cosmo_engine_core/container.db
 cosmo_engine_core/presenton.db
 cosmo_engine_core/placeholder
 archimedes_cosmo*/
+
+# VSCode Extension build artifacts
+vscode-extension/out/
+vscode-extension/*.vsix
+vscode-extension/node_modules/
