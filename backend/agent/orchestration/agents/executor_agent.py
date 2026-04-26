@@ -19,8 +19,6 @@ class ExecutorAgent(BaseAgent):
     The main execution agent that invokes tools and solves subtasks or entire tasks.
     """
     
-    ORCHESTRATION_LANGUAGE = "RUSSIAN"
-    
     SYSTEM_PROMPT = """
     You are the Executor Agent for Archimedes. 
     Your goal is to solve the SUBTASK with extreme precision and high-quality results.
@@ -30,7 +28,10 @@ class ExecutorAgent(BaseAgent):
     TASK MODE: {task_hint}
     
     CORE DIRECTIVES:
-    1. LANGUAGE: ALWAYS RESPOND IN RUSSIAN. All thoughts and final answers must be in Russian.
+    1. LANGUAGE: Respond in the SAME LANGUAGE the user used in their task. 
+       If the task is in Russian — respond in Russian.
+       If the task is in English — respond in English.
+       Never switch languages mid-response.
     2. STYLE: Be professional, helpful, and conversational in your final responses.
     3. STEERING: 
        {hint_instructions}
@@ -53,7 +54,7 @@ class ExecutorAgent(BaseAgent):
     - After generation: share the file with user and open preview
     - The tool handles everything — just call it with a good prompt.
     
-    When you have completed the subtask, provide a polite and clear summary of your work in RUSSIAN.{memory_context}
+    When you have completed the subtask, provide a polite and clear summary of your work in the SAME LANGUAGE as the user's original task.{memory_context}
     """
 
     def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager):
@@ -155,7 +156,7 @@ class ExecutorAgent(BaseAgent):
             if not any(m["role"] == "system" for m in messages):
                 # Inject relevant memory bank context
                 from backend.memory.memory_bank import (
-                    get_relevant_facts, get_session_summary
+                    get_relevant_facts
                 )
                 from backend.memory.knowledge_graph import format_graph_context
 

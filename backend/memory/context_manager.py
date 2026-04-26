@@ -112,6 +112,60 @@ class ContextManager:
         """Get current message history."""
         return self.history
 
+    def heal_context(self) -> int:
+        """
+        Detect and fix corrupted message sequences.
+        Returns number of messages removed/fixed.
+        
+        Common corruptions:
+        1. Multiple consecutive system messages (keep last)
+        2. Tool result without preceding tool_call
+        3. Assistant message with tool_calls but no following tool result
+        4. Empty content messages
+        """
+        if not self.history:
+            return 0
+        
+        fixes = 0
+        cleaned = []
+        i = 0
+        
+        while i < len(self.history):
+            msg = self.history[i]
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            
+            # Remove empty non-tool messages
+            if not content and role not in ("tool",) and not msg.get("tool_calls"):
+                fixes += 1
+                i += 1
+                continue
+            
+            # Deduplicate consecutive system messages (keep last)
+            if role == "system" and cleaned and cleaned[-1].get("role") == "system":
+                cleaned[-1] = msg  # Replace with newer system message
+                fixes += 1
+                i += 1
+                continue
+            
+            # Orphaned tool result: no preceding assistant with tool_calls
+            if role == "tool":
+                if not cleaned or cleaned[-1].get("role") != "assistant":
+                    fixes += 1
+                    i += 1
+                    continue
+                if not cleaned[-1].get("tool_calls"):
+                    fixes += 1
+                    i += 1
+                    continue
+            
+            cleaned.append(msg)
+            i += 1
+        
+        self.history = cleaned
+        self._recalculate_tokens()
+        return fixes
+
     def _deduplicate_tool_results(
         self, messages: List[Dict]
     ) -> List[Dict]:
@@ -137,6 +191,19 @@ class ContextManager:
         Only new messages are appended after it within token budget.
         This reduces token costs by ~60-80% on repeated calls.
         """
+        if len(self.history) > 10:
+            # Quick corruption check: count tool roles vs tool_calls
+            tool_results = sum(1 for m in self.history if m.get("role") == "tool")
+            tool_calls = sum(
+                len(m.get("tool_calls", [])) 
+                for m in self.history 
+                if m.get("role") == "assistant"
+            )
+            if abs(tool_results - tool_calls) > 3:
+                fixed = self.heal_context()
+                if fixed:
+                    logger.warning(f"Context self-healed: removed {fixed} corrupted messages")
+
         if not self.history:
             return []
 

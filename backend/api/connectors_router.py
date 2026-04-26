@@ -141,17 +141,38 @@ async def get_catalog(user: dict = Depends(get_current_user)):
     data = _load()
     connected_apps = data.get("apps", {})
     connected_keys = data.get("api_keys", {})
-    apps_out = {
-        k: {**v, "connected": k in connected_apps}
-        for k, v in APPS_CATALOG.items()
+    
+    services = {}
+    for k, v in APPS_CATALOG.items():
+        services[k] = {
+            **v,
+            "connected": k in connected_apps,
+            "capabilities": v.get("capabilities", ["read", "write"]),
+            "nango_key": v.get("nango_key", f"{k}-auth")
+        }
+    
+    for k, v in AI_PROVIDERS.items():
+        services[k] = {
+            **v,
+            "category": "ai",
+            "auth_type": "token",
+            "connected": k in connected_keys,
+            "capabilities": v.get("capabilities", ["generate", "analyze"]),
+            "nango_key": ""
+        }
+        
+    categories = {
+        "dev": {"name": "Developer Tools", "icon": "🛠️"},
+        "communication": {"name": "Communication", "icon": "💬"},
+        "productivity": {"name": "Productivity", "icon": "📝"},
+        "finance": {"name": "Finance", "icon": "💳"},
+        "sales": {"name": "Sales & CRM", "icon": "🔶"},
+        "ai": {"name": "AI Models", "icon": "🧠"},
     }
-    providers_out = {
-        k: {**v, "connected": k in connected_keys}
-        for k, v in AI_PROVIDERS.items()
-    }
+
     return {
-        "apps": apps_out,
-        "ai_providers": providers_out,
+        "services": services,
+        "categories": categories,
         "mcp_servers": data.get("mcp_servers", {})
     }
 

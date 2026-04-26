@@ -252,6 +252,14 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register PatchTool: {e}")
 
+        try:
+            from backend.tools.vision_tool import VisionTool
+            self.agent.vision_tool = VisionTool()
+            self.agent.register_tool("vision", self.agent.vision_tool.execute)
+            logger.info("VisionTool registered")
+        except Exception as e:
+            logger.error(f"Failed to register VisionTool: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools

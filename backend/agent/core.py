@@ -104,6 +104,12 @@ class ArchimedesCosmoAgent:
         # Schedule async initialization (MCP + connectors) without blocking __init__
         safe_create_task(self.initialize())
 
+        # Schedule nightly memory consolidation
+        from backend.memory.consolidator import MemoryConsolidator
+        safe_create_task(
+            MemoryConsolidator.schedule_nightly(self.router, interval_hours=12)
+        )
+
     @property
     def tools(self) -> Dict[str, Callable]:
         """FIX 7: single source of truth — delegates to tool_registry.tools."""

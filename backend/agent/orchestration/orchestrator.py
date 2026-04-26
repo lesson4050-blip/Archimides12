@@ -147,6 +147,7 @@ class AgentOrchestrator:
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)
         self.mcts_manager = MCTSManager(workspace_dir=".")
         self.skill_library = SkillLibrary()
+        self._parallel_result_bus: Dict[str, Any] = {}
         self._mcp_client_ref = None  # Set by core.py after init
         
     async def run_task(self, 
@@ -260,13 +261,22 @@ class AgentOrchestrator:
                 )
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Share successful results with subsequent agents via metadata
+            successful_outputs = []
             for i, result in enumerate(results):
-                if isinstance(result, Exception):
+                if not isinstance(result, Exception) and result.results:
+                    output = result.results[-1].get("output", "")
+                    if output and len(output) > 10:
+                        successful_outputs.append(f"Agent {i} result: {output[:500]}")
+                    state.results.extend(result.results)
+                elif isinstance(result, Exception):
                     state.results.append({
                         "step": i, "output": f"Error: {result}"
                     })
-                else:
-                    state.results.extend(result.results)
+
+            # Store for potential follow-up sequential steps
+            self._parallel_result_bus[state.session_id] = successful_outputs
         else:
             # Sequential execution with strategy-aware dispatch
             for i, subtask in enumerate(all_subtasks):
@@ -414,8 +424,14 @@ class AgentOrchestrator:
             if websocket_send:
                 await websocket_send({"type": "info", "content": "Синтезирую итоговый ответ..."})
             
-            summary_prompt = "На основе результатов всех выполненных подзадач сформируй итоговый ответ пользователю на его изначальный запрос.\n\n"
-            summary_prompt += f"ИЗНАЧАЛЬНЫЙ ЗАПРОС: {state.task_description}\n\n"
+            summary_prompt = (
+                "Based on the results of all completed subtasks, formulate a final "
+                "response to the user's original request. "
+                "CRITICAL: Respond in the SAME LANGUAGE as the original request. "
+                "If the original request was in Russian — respond in Russian. "
+                "If in English — respond in English.\n\n"
+                f"ORIGINAL REQUEST: {state.task_description}\n\n"
+            )
             for res in state.results:
                 summary_prompt += f"Шаг {res.get('step')}: {res.get('output')}\n"
             
