@@ -10,13 +10,10 @@ CodeAct Executor — агент пишет Python-код как действие
 """
 import asyncio
 import logging
-
-import traceback
+import re
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
-
-
 
 
 class CodeActExecutor:
@@ -43,7 +40,7 @@ class CodeActExecutor:
         and iterates until the task is solved or iterations exhausted.
         """
         history = []
-        
+
         # Strong CodeAct system prompt
         system_prompt = (
             "You are CodeAct — an expert autonomous coding agent.\n"
@@ -59,43 +56,43 @@ class CodeActExecutor:
             "8. For git operations: use subprocess.run(['git', ...]).\n\n"
             "NEVER explain what you'll do. Write the code immediately."
         )
-        
+
         if context:
             history.append({"role": "system", "content": system_prompt})
             history.append({"role": "user", "content": f"Context:\n{context}\n\nTask: {task}"})
         else:
             history.append({"role": "system", "content": system_prompt})
             history.append({"role": "user", "content": task})
-        
+
         all_outputs = []
-        
+
         for iteration in range(max_iterations):
             if websocket_send:
                 await websocket_send({
                     "type": "thought",
                     "content": f"🔁 CodeAct iteration {iteration + 1}/{max_iterations}"
                 })
-            
+
             # Generate next code block
+            # Use "fast" hint — CodeAct needs many quick iterations
             response = await self.router.generate(
                 messages=history,
-                task_hint="execute"
+                task_hint="fast"
             )
-            
+
             agent_response = response.get("text", "")
             if not agent_response:
                 break
-            
+
             history.append({"role": "assistant", "content": agent_response})
-            
-            # Extract Python code blocks
-            import re
+
+            # Extract Python code blocks (re imported at top)
             code_blocks = re.findall(
                 r'```python\n(.*?)```',
                 agent_response,
                 re.DOTALL
             )
-            
+
             if not code_blocks:
                 # No code block — might be final text answer
                 if "TASK_COMPLETE" in agent_response or iteration > 2:
@@ -111,7 +108,7 @@ class CodeActExecutor:
                     "content": "Write executable Python code to continue. Wrap it in ```python blocks."
                 })
                 continue
-            
+
             # Execute all code blocks
             execution_results = []
             for code in code_blocks:
@@ -120,14 +117,14 @@ class CodeActExecutor:
                 )
                 execution_results.append(exec_result)
                 all_outputs.append(exec_result)
-                
+
                 if websocket_send:
                     status = "✅" if exec_result["success"] else "❌"
                     await websocket_send({
                         "type": "thought",
                         "content": f"{status} Code output: {exec_result['output'][:200]}"
                     })
-            
+
             # Check if task is complete
             combined_output = "\n".join(r["output"] for r in execution_results)
             if "TASK_COMPLETE" in combined_output:
@@ -138,13 +135,13 @@ class CodeActExecutor:
                     "iterations": iteration + 1,
                     "all_outputs": all_outputs
                 }
-            
+
             # Add execution results to history for next iteration
             history.append({
                 "role": "user",
                 "content": f"Execution output:\n{combined_output}\n\nContinue solving the task."
             })
-        
+
         # Hit iteration limit
         last_output = all_outputs[-1]["output"] if all_outputs else "No output"
         return {
@@ -164,7 +161,7 @@ class CodeActExecutor:
         try:
             from backend.sandbox.e2b_sandbox import E2BSandbox
             sandbox = E2BSandbox()
-            # Wrap synchronous run_command in executor
+            # Wrap synchronous run_command in executor to avoid blocking
             loop = asyncio.get_running_loop()
             stdout, stderr, returncode = await loop.run_in_executor(
                 None,
