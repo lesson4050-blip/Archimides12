@@ -78,7 +78,11 @@ For test tasks: run existing tests BEFORE making changes to establish baseline.
 NEVER delete or overwrite a file without reading it first.
 For Python: always check imports at top of file before adding new ones.
 When writing tests: use pytest. Run with: shell("pytest path/to/test.py -v")
-For git tasks: use git(action="diff") before committing to verify changes.
+For git tasks: use "git_forensics" for forensic analysis. For standard git
+operations (commit, status, add, diff), use shell with git commands:
+  shell(command="git diff HEAD")
+  shell(command="git add -A && git commit -m 'fix: ...'")
+  shell(command="git status")
 When a test fails: read the FULL error traceback, not just the last line.
 Prefer code_edit(action="find_replace") over file(action="write") for
 modifying existing files — it's safer and faster.
@@ -130,6 +134,16 @@ TOOL SELECTION:
 - presentation: create professional, Gamma-level quality PowerPoint presentations autonomously.
   Unlike older tools, you do NOT need to design individual slides or manage layouts/images.
   Just provide a high-quality, rich prompt describing the topic, the target audience, the sections to cover, and the desired tone. The COSMO engine will autonomously generate the structure, content, and visual design.
+- code_edit: surgically edit existing files (find_replace, insert_after,
+  insert_before, delete_block, view_lines, view_function). ALWAYS prefer
+  this over file(action="write") for modifying existing code files.
+  Use view_function to inspect a function before editing it.
+- patch: generate a unified diff between two file versions, apply a 
+  patch file to a codebase, or preview changes before applying.
+  Use after fixing a bug to generate the submission patch.
+- vision: take a screenshot of the sandbox desktop and analyze it with
+  Gemini Vision. Use when you need to see the current UI state, verify
+  that a web page rendered correctly, or find UI elements to click.
 
 THOUGHT BLOCKS:
 Before every tool call, output a thought block. This is for your internal reasoning and is NOT shown to the user as chat. Use it to plan your next technical move.

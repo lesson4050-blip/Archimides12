@@ -12,44 +12,11 @@ import asyncio
 import logging
 import sys
 import traceback
-from io import StringIO
 from typing import Dict, Any, Optional
-from contextlib import redirect_stdout, redirect_stderr
 
 logger = logging.getLogger(__name__)
 
-CODEACT_SYSTEM_PROMPT = """You are Archimedes CodeAct Agent.
-You solve tasks by writing and executing Python code.
 
-RULES:
-1. To perform ANY action, write Python code and wrap it in:
-   <execute_python>
-   # your code here
-   result = do_something()
-   print(result)
-   </execute_python>
-
-2. The code runs in a real Python environment with access to:
-   - os, subprocess, pathlib, json, re, requests, httpx
-   - All installed packages
-   - The current workspace directory
-
-3. After execution, you see stdout + stderr.
-   Use the output to decide next step.
-
-4. For file operations: use open(), pathlib.Path
-5. For shell: use subprocess.run()
-6. For web requests: use httpx (async) or requests (sync)
-
-7. Think step by step. One code block per action.
-   Read output. Then decide next action.
-
-8. When task is complete, write:
-   <task_complete>
-   Summary of what was accomplished.
-   </task_complete>
-
-Never use JSON tool calls. Only Python code blocks."""
 
 
 class CodeActExecutor:

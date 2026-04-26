@@ -3,6 +3,11 @@ from typing import List, Dict, Any, Optional
 from backend.models.groq_client import GroqClient, RateLimitExceeded as GroqRateLimit
 from backend.models.gemini_client import GeminiClient, RateLimitExceeded as GeminiRateLimit
 from backend.models.ollama_client import OllamaClient
+from backend.models.retry_wrapper import with_retry, RetryConfig
+
+GROQ_RETRY = RetryConfig(max_retries=3, base_delay=2.0, max_delay=30.0)
+GEMINI_RETRY = RetryConfig(max_retries=2, base_delay=5.0, max_delay=60.0)
+DEFAULT_RETRY = RetryConfig(max_retries=1, base_delay=1.0, max_delay=5.0)
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +56,14 @@ class ModelRouter:
         errors = []
         for client in order:
             try:
-                return await client.generate_with_tools(messages, tools)
+                config = GROQ_RETRY if isinstance(client, GroqClient) else (GEMINI_RETRY if isinstance(client, GeminiClient) else DEFAULT_RETRY)
+                return await with_retry(
+                    client.generate_with_tools,
+                    messages=messages,
+                    tools=tools,
+                    config=config,
+                    operation_name=f"{client.__class__.__name__} generate"
+                )
             except (GroqRateLimit, GeminiRateLimit) as e:
                 logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
                 errors.append(str(e))
@@ -79,10 +91,24 @@ class ModelRouter:
         errors = []
         for client in order:
             try:
+                config = GROQ_RETRY if isinstance(client, GroqClient) else (GEMINI_RETRY if isinstance(client, GeminiClient) else DEFAULT_RETRY)
                 if hasattr(client, "generate_stream"):
-                    return await client.generate_stream(messages, tools, on_token=on_token)
+                    return await with_retry(
+                        client.generate_stream,
+                        messages=messages,
+                        tools=tools,
+                        on_token=on_token,
+                        config=config,
+                        operation_name=f"{client.__class__.__name__} generate_stream"
+                    )
                 else:
-                    return await client.generate_with_tools(messages, tools)
+                    return await with_retry(
+                        client.generate_with_tools,
+                        messages=messages,
+                        tools=tools,
+                        config=config,
+                        operation_name=f"{client.__class__.__name__} generate"
+                    )
             except (GroqRateLimit, GeminiRateLimit) as e:
                 logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
                 errors.append(str(e))

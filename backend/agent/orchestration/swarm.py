@@ -40,7 +40,7 @@ MICRO_AGENT_TEMPLATES = {
             "Never submit code you haven't tested. "
             "Output only the solution, no explanations unless asked."
         ),
-        "tools": ["file", "shell", "search", "ast_navigator", "fast_linter", "code_edit", "patch"]
+        "tools": ["file", "shell", "search", "ast_navigator", "fast_linter", "code_edit", "patch", "git"]
     },
     "critic": {
         "specialty": "Finding bugs, security issues, and improvements",
@@ -76,7 +76,7 @@ MICRO_AGENT_TEMPLATES = {
             "Report actual pass/fail results, not hypothetical ones. "
             "Output: complete test file AND execution results."
         ),
-        "tools": ["file", "shell", "fast_linter"]
+        "tools": ["file", "shell", "fast_linter", "git", "code_edit"]
     },
     "architect": {
         "specialty": "System design and architecture decisions",

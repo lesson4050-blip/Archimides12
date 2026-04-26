@@ -224,6 +224,14 @@ class ToolInitializer:
             logger.error(f"Failed to register GitForensicsTool: {e}")
 
         try:
+            from backend.tools.git_tool import GitTool
+            self.agent.git_tool_instance = GitTool()
+            self.agent.register_tool("git", self.agent.git_tool_instance.execute)
+            logger.info("GitTool registered")
+        except Exception as e:
+            logger.error(f"Failed to register GitTool: {e}")
+
+        try:
             from backend.tools.repl_tool import ReplTool
             self.agent.repl_tool = ReplTool()
             self.tool_registry.register("python_repl", self.agent.repl_tool.execute)

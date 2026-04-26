@@ -34,6 +34,12 @@ def is_conversational(text: str) -> bool:
 
 # Semantic routing — maps task intent to agent strategy
 ROUTING_RULES = [
+    # CodeAct routes — precise single-file bug fixes
+    (r"(fix the bug|patch|apply.*fix|reproduce.*error|failing test|"
+     r"исправь.*ошибку|примени.*патч)",
+     "complex", "codeact"),
+    (r"(swe.?bench|github.*issue|pull request|bugfix|bug fix)",
+     "complex", "codeact"),
     # (pattern, complexity, strategy)
     (r"(write|create|implement|build|code|script|function|class|api|endpoint)",
      "complex", "swarm_code"),

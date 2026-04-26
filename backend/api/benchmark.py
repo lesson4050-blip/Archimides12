@@ -27,6 +27,13 @@ async def run_benchmark(agent_session_id: str = "default") -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+@router.get("/metrics")
+async def get_metrics() -> Dict[str, Any]:
+    """Return current agent performance metrics."""
+    from backend.utils.metrics import metrics
+    return {"success": True, "metrics": metrics.get_summary()}
+
+
 @router.get("/history")
 async def get_benchmark_history() -> Dict[str, Any]:
     """Return stored benchmark results."""

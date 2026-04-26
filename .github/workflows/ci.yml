@@ -29,14 +29,17 @@ jobs:
       
       - name: Run unit tests
         env:
-          GROQ_API_KEY: "test_key"
-          GOOGLE_API_KEY: "test_key"
-          TAVILY_API_KEY: "test_key"
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || 'test_groq_key_ci' }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'test_google_key_ci' }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY || 'test_tavily_key_ci' }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           pytest tests/test_shell_persistent.py \
                  tests/test_model_router.py \
                  tests/test_complexity_analyzer.py \
-                 -v --tb=short --timeout=30
+                 tests/test_integration_swe.py \
+                 -v --tb=short --timeout=60 \
+                 --ignore=tests/test_e2e.py
       
       - name: Check no eval() on user data
         run: |

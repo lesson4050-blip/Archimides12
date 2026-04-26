@@ -207,6 +207,17 @@ class ArchimedesCosmoAgent:
                                      duration=asyncio.get_running_loop().time() - start_time,
                                      metadata={"mode": mode.value, "plan": orch_result.get("plan")})
             
+            # Record metrics (non-blocking)
+            from backend.utils.metrics import metrics
+            from backend.utils.task import safe_create_task
+            safe_create_task(metrics.record_task(
+                session_id=self.session_id or "default",
+                task_description=task_description,
+                success=(result.status == TaskStatus.COMPLETED),
+                duration_s=result.duration,
+                mode=mode.value,
+            ))
+            
             # Clean up completed session
             try:
                 from backend.agent.session_store import get_session_store
