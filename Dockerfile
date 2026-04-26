@@ -120,7 +120,7 @@ cd /app
 nohup python3 -m uvicorn backend.main:app \
     --host 0.0.0.0 \
     --port 8000 \
-    --reload \
+    --workers 2 \
     > /app/logs/backend.log 2>&1 &
 
 BACKEND_PID=$!
@@ -168,7 +168,7 @@ chmod +x /app/start.sh
 
 # Здоровье контейнера
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+    CMD curl -f http://localhost:8000/api/health || exit 1
 
 # Команда по умолчанию
 CMD ["/app/start.sh"]

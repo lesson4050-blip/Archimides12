@@ -481,7 +481,7 @@ class AgentOrchestrator:
         else:
             # Planning mode: Synthesize all steps into a cohesive response
             if websocket_send:
-                await websocket_send({"type": "info", "content": "Синтезирую итоговый ответ..."})
+                await websocket_send({"type": "info", "content": "Synthesizing final response..."})
             
             summary_prompt = (
                 "Based on the results of all completed subtasks, formulate a final "

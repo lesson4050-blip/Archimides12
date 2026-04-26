@@ -413,7 +413,7 @@ class ContextManager:
             if system_prompt:
                 new_history.append(system_prompt)
             new_history.append({
-                "role": "assistant",
+                "role": "system",
                 "content": (
                     f"[Context summary — {len(to_summarize)} messages condensed, "
                     f"{pruned} failed attempts pruned]: {summary_text}"

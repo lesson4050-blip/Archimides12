@@ -63,6 +63,7 @@ class ModelRouter:
                     client.generate_with_tools,
                     messages=messages,
                     tools=tools,
+                    task_hint=task_hint,
                     config=config,
                     operation_name=f"{client.__class__.__name__} generate"
                 )
@@ -90,6 +91,7 @@ class ModelRouter:
                         messages=messages,
                         tools=tools,
                         on_token=on_token,
+                        task_hint=task_hint,
                         config=config,
                         operation_name=f"{client.__class__.__name__} generate_stream"
                     )
@@ -98,6 +100,7 @@ class ModelRouter:
                         client.generate_with_tools,
                         messages=messages,
                         tools=tools,
+                        task_hint=task_hint,
                         config=config,
                         operation_name=f"{client.__class__.__name__} generate"
                     )

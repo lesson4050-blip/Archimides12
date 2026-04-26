@@ -2,6 +2,20 @@
 # Archimedes — .gitignore
 # ═══════════════════════════════════════
 
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Logs & databases
+*.log
+*.db
+*.sqlite3
+
+# Stray node_modules
+backend/node_modules/
+
 # Python
 **/__pycache__/
 *.py[cod]

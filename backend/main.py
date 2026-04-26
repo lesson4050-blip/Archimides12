@@ -31,13 +31,10 @@ async def lifespan(app: FastAPI):
     if not settings.JWT_SECRET_KEY:
         import secrets
         settings.JWT_SECRET_KEY = secrets.token_hex(32)
-        logger.warning("IMPORTANT: JWT_SECRET_KEY is not set in .env! Generated new key.")
-        try:
-            with open(".env", "a") as f:
-                f.write(f"\nJWT_SECRET_KEY={settings.JWT_SECRET_KEY}\n")
-            logger.info("Saved new JWT_SECRET_KEY to .env file to prevent session loss on restart.")
-        except Exception as e:
-            logger.error(f"Failed to append JWT key to .env: {e}. Existing tokens will be invalidated on server restart.")
+        logger.warning(
+            "JWT_SECRET_KEY not set in .env — generated ephemeral key. "
+            "Sessions will reset on restart. Set JWT_SECRET_KEY in .env to fix."
+        )
     
     await init_db()
 
