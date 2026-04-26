@@ -10,7 +10,7 @@ export const slideLayoutDescription =
   "A two-column table of contents slide with section titles and numbers on a left panel and a title plus description paragraph on the right panel.";
 
 const SectionSchema = z.object({
-  title: z.string().min(4).max(25).meta({
+  title: z.string().min(2).max(100).meta({
     description: "Section label shown in the left navigation column.",
   }),
   number: z.string().min(2).max(3).meta({
@@ -22,7 +22,7 @@ const SectionSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(6).max(18).default("Table Of Content").meta({
+  title: z.string().min(2).max(100).default("Table Of Content").meta({
     description: "Heading in the right-side content area.",
   }),
   description: z.string().min(50).max(160).default(

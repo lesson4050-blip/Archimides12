@@ -88,7 +88,7 @@ const ChartItemSchema = z.object({
     colorPalette: z.enum(['vibrant', 'ocean', 'forest', 'sunset', 'professional']).default('vibrant'),
 });
 export const Schema = z.object({
-    title: z.string().min(3).max(50).default('Data Analytics Dashboard').describe('Main title of the slide'),
+    title: z.string().min(2).max(100).default('Data Analytics Dashboard').describe('Main title of the slide'),
     description: z.string().min(10).max(200).default('Comprehensive overview of key metrics and performance indicators across multiple data dimensions.').describe('Description text below the title'),
     bullets: z.array(z.string().max(80)).max(6).default([
         'Pipeline coverage above 3x target with strong enterprise adoption.',

@@ -8,7 +8,7 @@ import { FlexibleReportChart, flexibleChartDataSchema } from "./flexibleReportCh
 import { RemoteSvgIcon } from "@/app/hooks/useRemoteSvgIcon";
 
 const InsightItemSchema = z.object({
-  title: z.string().min(3).max(80).meta({
+  title: z.string().min(2).max(100).meta({
     description: "Bullet point title shown next to the icon.",
   }),
   description: z.string().min(20).max(120).meta({
@@ -22,7 +22,7 @@ export const slideLayoutDescription =
   "A slide with a title at the top, a vertical list of three bullet points with icon, title and description on the left, and a bar chart on the right.";
 
 export const Schema = z.object({
-  title: z.string().min(3).max(80).default("Data Analysis").meta({
+  title: z.string().min(2).max(100).default("Data Analysis").meta({
     description: "Slide title shown at the top-left.",
   }),
   itemIcon: z

@@ -7,7 +7,7 @@ export const layoutName = 'Image With Title And Metrics'
 export const layoutDescription = 'A two-column layout with a large supporting image on the left and content on the right including title, description, and a 2-column metrics grid displaying up to 3 statistics with labels and values.'
 
 const metricsWithImageSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Competitive Advantage').meta({
+    title: z.string().min(2).max(100).default('Competitive Advantage').meta({
         description: "Heading text of the slide",
     }),
     description: z.string().min(10).max(150).default('Ginyard International Co. stands out by offering custom digital solutions tailored to client needs, alongside long-term support to ensure lasting relationships and continuous adaptation.').meta({

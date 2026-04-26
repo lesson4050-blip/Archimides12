@@ -2,7 +2,7 @@ import { RemoteSvgIcon } from "@/app/hooks/useRemoteSvgIcon";
 import * as z from "zod";
 
 const FeatureCardSchema = z.object({
-  title: z.string().min(3).max(17).meta({
+  title: z.string().min(2).max(100).meta({
     description: "Title shown on each card.",
   }),
   description: z.string().min(18).max(80).meta({
@@ -29,7 +29,7 @@ export const slideLayoutDescription =
   "A list of cards in grid with title, icon and compact description in each.";
 
 export const Schema = z.object({
-  title: z.string().min(6).max(20).default("Feature Grid").meta({
+  title: z.string().min(2).max(100).default("Feature Grid").meta({
     description: "Slide title shown above the grid.",
   }),
   features: z

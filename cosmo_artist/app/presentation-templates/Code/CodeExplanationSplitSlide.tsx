@@ -7,7 +7,7 @@ export const slideLayoutDescription =
   "A two-column slide with a code panel on the left and description on the right.";
 
 export const Schema = z.object({
-  title: z.string().min(8).max(24).default("Code + Explanation").meta({
+  title: z.string().min(2).max(100).default("Code + Explanation").meta({
     description: "Slide heading shown at the top-left.",
   }),
   codeSnippet: z.object({
@@ -43,7 +43,7 @@ export function UserAuth() {
   }).meta({
     description: "Code sample shown in the left panel.",
   }),
-  descriptionTitle: z.string().min(4).max(20).default("Description").meta({
+  descriptiontitle: z.string().min(2).max(100).default("Description").meta({
     description: "Heading shown above the paragraph.",
   }),
   description: z

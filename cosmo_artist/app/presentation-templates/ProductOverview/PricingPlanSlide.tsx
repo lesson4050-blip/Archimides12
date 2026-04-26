@@ -27,7 +27,7 @@ const PlanSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(6).max(18).default("Pricing Plan").meta({
+  title: z.string().min(2).max(100).default("Pricing Plan").meta({
     description: "Main slide title.",
   }),
   featureIcon: z.object({

@@ -20,7 +20,7 @@ const CardSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(8).max(16).default("Business Challenges").meta({
+  title: z.string().min(2).max(100).default("Business Challenges").meta({
     description: "Main slide title. Max 16 characters.",
   }),
   taglineLabel: z.string().max(16).default("TAGLINE").meta({

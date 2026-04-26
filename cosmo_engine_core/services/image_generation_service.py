@@ -284,10 +284,17 @@ class ImageGenerationService:
             
             if response.status != 200:
                 DEEP_LOGGER.log_error(f"Pexels API error: {response.status}", Exception(str(data)))
+                # Secondary fallback to Pixabay if Pexels fails
+                if get_pixabay_api_key_env():
+                    DEEP_LOGGER.log("Pexels failed, falling back to Pixabay...")
+                    return await self.get_image_from_pixabay(prompt)
                 return "/static/images/placeholder.jpg"
 
             if not data.get("photos") or len(data["photos"]) == 0:
                 DEEP_LOGGER.log(f"No photos found on Pexels for query: {prompt}", "WARNING")
+                if get_pixabay_api_key_env():
+                    DEEP_LOGGER.log("No Pexels results, falling back to Pixabay...")
+                    return await self.get_image_from_pixabay(prompt)
                 return "/static/images/placeholder.jpg"
 
             image_url = data["photos"][0]["src"]["large"]

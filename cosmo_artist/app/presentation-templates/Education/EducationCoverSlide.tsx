@@ -10,7 +10,7 @@ export const Schema = z.object({
   name: z.string().min(3).max(16).optional().default("Name").meta({
     description: "Optional organization/institution/presenter name shown above the slide title.",
   }),
-  title: z.string().min(6).max(32).default("PowerPoint Template").meta({
+  title: z.string().min(2).max(100).default("PowerPoint Template").meta({
     description: "Main centered title of the cover slide.",
   }),
   backgroundImage: z.object({

@@ -18,10 +18,10 @@ export const slideLayoutDescription =
   "A metrics slide with description text on the left and metric cards on the right.";
 
 export const Schema = z.object({
-  title: z.string().min(6).max(18).default("Metrics").meta({
+  title: z.string().min(2).max(100).default("Metrics").meta({
     description: "Slide title shown at the top-left.",
   }),
-  explanationTitle: z.string().min(4).max(16).default("Explanation").meta({
+  explanationtitle: z.string().min(2).max(100).default("Explanation").meta({
     description: "Heading above the explanatory paragraph.",
   }),
   explanation: z

@@ -5,7 +5,7 @@ const MemberSchema = z.object({
   subtext: z.string().min(2).max(40).meta({
     description: "Subtext for the image.",
   }),
-  title: z.string().min(2).max(40).meta({
+  title: z.string().min(2).max(100).meta({
     description: "Title/name/subject for the image",
   }),
   image: z.object({

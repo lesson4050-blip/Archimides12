@@ -15,7 +15,7 @@ const MilestoneSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(4).max(14).default("Timeline").meta({
+  title: z.string().min(2).max(100).default("Timeline").meta({
     description: "Main timeline heading shown at the top-left.",
   }),
   milestones: z

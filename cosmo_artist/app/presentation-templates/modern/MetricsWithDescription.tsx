@@ -1,21 +1,20 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import * as z from "zod";
 import { ImageSchema } from "../defaultSchemes";
+import { gsap } from "gsap";
 
 export const layoutId = "metrics-with-description-image";
 export const layoutName = "Metrics With Description and Image Slide Layout";
 export const layoutDescription =
-  "Metrics with description slide layout with an image as whole for the slide";
+  "A bold infographic layout featuring massive metrics, detailed descriptions, and a cinematic hero image, styled with obsidian glassmorphism.";
 
 const marketSizeSlideSchema = z.object({
-  title: z.string().min(3).max(15).default("Market Size").meta({
+  title: z.string().min(2).max(100).default("Market Size").meta({
     description: "Main slide title",
   }),
-
-
   mapImage: ImageSchema.default({
     __image_url__:
-      "https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg", // You can quickly find a world map image via a Google search or use a free resource like Wikimedia Commons
+      "https://upload.wikimedia.org/wikipedia/commons/8/80/World_map_-_low_resolution.svg",
     __image_prompt__: "World map with location pins or points",
   }),
   marketStats: z
@@ -33,35 +32,22 @@ const marketSizeSlideSchema = z.object({
         label: "Total Available Market (TAM)",
         value: "1.4 Billion",
         description:
-          "In the TAM Section, we can fill in the potential of any person who can buy an offer or the maximum amount of revenue a business can earn by selling their offer.",
+          "The maximum potential revenue a business can earn by selling their offer to the entire market.",
       },
       {
         label: "Serviceable Available Market (SAM)",
         value: "194 Million",
         description:
-          "It is a part of TAM that has the potential to become a target market for the company by considering the type of product, technology available and geographical conditions.",
+          "The portion of the TAM that is targeted by your products and services within your geographical reach.",
       },
-      {
-        label: "Total Available Market (TAM)",
-        value: "1.4 Billion",
-        description:
-          "In the TAM Section, we can fill in the potential of any person who can buy an offer or the maximum amount of revenue a business can earn by selling their offer.",
-      },
-      {
-        label: "Serviceable Available Market (SAM)",
-        value: "194 Million",
-        description:
-          "It is a part of TAM that has the potential to become a target market for the company by considering the type of product, technology available and geographical conditions.",
-      }
     ])
     .meta({
-      description:
-        "Market statistics including TAM, SAM, and SOM with labels, values, and descriptions.",
+      description: "Market statistics with labels, values, and descriptions.",
     }),
   description: z
     .string()
     .default(
-      "Market size is the total amount of all sales and customers that can be seen directly by stakeholders. This technique is usually calculated at the end of the year, the market size can be used by companies to determine the potential of their market and business in the future. This is very useful, especially for new companies that will offer services to those who are interested in our services.",
+      "Market size analysis allows stakeholders to determine the potential of their business in the future, providing a clear roadmap for growth and investment strategy.",
     )
     .meta({
       description: "Main description text for the slide",
@@ -79,89 +65,101 @@ const MarketSizeSlideLayout: React.FC<MarketSizeSlideProps> = ({
   data: slideData,
 }) => {
   const stats = slideData?.marketStats || [];
+  const containerRef = useRef<HTMLDivElement>(null);
+  const statsRef = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      const tl = gsap.timeline({ defaults: { ease: "power4.out", duration: 1 } });
+      tl.from(containerRef.current.querySelector(".editorial-title"), { x: -50, opacity: 0 })
+        .from(statsRef.current, { y: 30, opacity: 0, stagger: 0.1 }, "-=0.6")
+        .from(containerRef.current.querySelector(".hero-image-container"), { scale: 1.1, opacity: 0, duration: 1.5 }, "-=1");
+    }
+  }, []);
 
   return (
-    <>
-      {/* Montserrat Font */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
+    <div
+      ref={containerRef}
+      className="w-full h-full aspect-video relative overflow-hidden flex flex-col p-16 lg:p-20"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: "var(--bg-primary, #000)",
+        color: "var(--text-primary, #FFF)",
+      }}
+    >
+      {/* Background Gradients */}
+      <div className="absolute top-0 left-0 w-1/3 h-full bg-accent-primary/5 blur-[120px] pointer-events-none"></div>
 
-      <div
-        className="w-full rounded-sm max-w-[1280px] shadow-lg max-h-[720px] aspect-video relative z-20 mx-auto overflow-hidden"
-        style={{
-          fontFamily: "var(--heading-font-family,Montserrat)",
-          backgroundColor: 'var(--background-color, #FFFFFF)'
-        }}
-      >
-        {/* Header */}
-        {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
-
-                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                  {(slideData as any)?.__companyName__ || 'Company Name'}
-                </span>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex h-full px-16 pb-16">
-          {/* Title and Map on the left */}
-          <div className="flex flex-col items-center justify-center w-[48%] pr-8 h-full">
-            <div className="flex flex-col items-left justify-center h-full w-full">
-              {/* Move the title down to align with the top of the market stats */}
-              <h1
-                className="text-5xl font-bold mb-8 leading-tight text-left"
-                style={{ color: 'var(--background-text, #1E4CD9)' }}>
-                {slideData?.title || "Market Size"}
-              </h1>
-              <div className="w-full bg-[#CBE3CC] rounded-md mb-8 flex items-center justify-center">
-                {slideData?.mapImage?.__image_url__ && (
-                  <img
-                    src={slideData?.mapImage?.__image_url__}
-                    alt="Market World Map with Points"
-                    className="w-full object-contain rounded-md"
-                    style={{ maxHeight: 220 }}
-                  />
-                )}
-              </div>
-              {slideData?.description && (
-                <p className="text-sm leading-relaxed font-normal mb-12 max-w-lg text-left" style={{ color: 'var(--background-text, #234CD9)' }}>
-                  {slideData?.description}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Market Stats on the right - vertically centered */}
-          <div className="flex flex-col items-start justify-center w-[52%] gap-8">
-            <div className="w-full space-y-10">
-              {stats.map((stat, index) => (
-                <div key={index}>
-                  <div className="space-y-2">
-                    <div className="text-white text-sm font-semibold px-3 py-1 inline-block rounded-sm" style={{ backgroundColor: 'var(--primary-color, #234CD9)', color: 'var(--primary-text, #ffffff)' }}>
-                      <span className="text-sm">{stat.label}</span>
-                    </div>
-                    <div className="text-2xl font-bold" style={{ color: 'var(--primary-color, #1E4CD9)' }}>
-                      {stat.value}
-                    </div>
-                  </div>
-                  <p className="text-sm leading-snug" style={{ color: 'var(--background-text, #334155)' }}>
-                    {stat.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-16 relative z-10">
+        <div className="flex items-center gap-4">
+          {(slideData as any)?._logo_url__ && (
+            <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
+          )}
+          <span className="text-xl font-bold tracking-tighter opacity-80 uppercase">
+            {(slideData as any)?.__companyName__ || "COSMO"}
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-[1px] bg-white/20"></div>
+           <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">Market Analysis // 05</span>
         </div>
       </div>
-    </>
+
+      <div className="flex flex-1 gap-16 relative z-10">
+        {/* Left: Market Stats */}
+        <div className="w-[55%] flex flex-col justify-center">
+          <h1 className="editorial-title text-7xl lg:text-8xl uppercase mb-12 leading-[0.9]">
+            {slideData?.title}
+          </h1>
+          
+          <div className="grid grid-cols-2 gap-x-8 gap-y-12">
+            {stats.map((stat, idx) => (
+              <div 
+                key={idx} 
+                ref={(el) => (statsRef.current[idx] = el)}
+                className="flex flex-col gap-3 group"
+              >
+                <div className="flex items-center gap-2">
+                   <div className="w-2 h-2 rounded-full bg-accent-primary"></div>
+                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">{stat.label}</span>
+                </div>
+                <div className="text-5xl lg:text-6xl font-black tracking-tighter text-white group-hover:text-accent-primary transition-colors duration-500">
+                  {stat.value}
+                </div>
+                <p className="text-xs leading-relaxed opacity-30 group-hover:opacity-60 transition-opacity duration-500 max-w-[240px]">
+                  {stat.description}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-16 pt-8 border-t border-white/10 max-w-md">
+             <p className="text-sm leading-relaxed opacity-40 italic">
+               "{slideData?.description}"
+             </p>
+          </div>
+        </div>
+
+        {/* Right: Hero Image */}
+        <div className="w-[45%] h-full relative hero-image-container">
+           <div className="absolute inset-0 z-10 bg-gradient-to-l from-transparent via-black/20 to-black/80"></div>
+           <div className="glass-card absolute inset-0 z-20 rounded-[3rem] border border-white/10 pointer-events-none"></div>
+           
+           <div className="w-full h-full rounded-[3rem] overflow-hidden">
+             {slideData?.mapImage?.__image_url__ && (
+               <img
+                 src={slideData.mapImage.__image_url__}
+                 alt={slideData.mapImage.__image_prompt__ || "Market Map"}
+                 className="w-full h-full object-cover grayscale-[0.2] hover:grayscale-0 transition-all duration-1000"
+               />
+             )}
+           </div>
+           
+           <div className="absolute -bottom-8 -right-8 w-48 h-48 bg-accent-primary/20 blur-[60px] rounded-full"></div>
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -1,191 +1,157 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import * as z from "zod";
-import { ImageSchema, IconSchema } from "../defaultSchemes";
+import { IconSchema } from "../defaultSchemes";
 import { RemoteSvgIcon } from "@/app/hooks/useRemoteSvgIcon";
+import { gsap } from "gsap";
 
 export const layoutId = "bullet-with-icons";
 export const layoutName = "Bullet With Icons Slide Layout";
-export const layoutDescription = "Bullets with icons slide layout";
+export const layoutDescription = "A clean and impactful layout featuring a main title and a list of key categories with icons, styled with obsidian glassmorphism.";
+
 const bulletWithIconsSlideSchema = z.object({
-  title: z.string().min(3).max(20).default("Problem").meta({
-    description: "Main title of the problem statement slide",
+  title: z.string().min(2).max(100).default("The Challenge").meta({
+    description: "Main title of the slide",
   }),
   description: z
     .string()
     .min(50)
-    .max(200)
+    .max(300)
     .default(
-      "A problem needs to be discussed further and in detail because this problem is the main foundation in the initial development of a product, service, and decision making. Without a well-defined problem, it will have an impact on a job that is unfocused, unmanaged, and less relevant.",
+      "Defining the core challenges is essential for project success. Without a clear problem statement, development remains fragmented and less effective for stakeholders.",
     )
     .meta({
-      description: "Main content text describing the problem statement",
+      description: "Main content text describing the context",
     }),
   problemCategories: z
     .array(
       z.object({
-        title: z.string().min(3).max(30).meta({
-          description: "Title of the problem category",
+        title: z.string().min(2).max(100).meta({
+          description: "Title of the category",
         }),
-        description: z.string().min(20).max(100).meta({
-          description: "Description of the problem category",
+        description: z.string().min(20).max(150).meta({
+          description: "Description of the category",
         }),
         icon: IconSchema.optional().meta({
-          description: "Optional icon for the problem category",
+          description: "Icon for the category",
         }),
       }),
     )
     .min(2)
-    .max(3)
+    .max(4)
     .default([
       {
         title: "Inefficiency",
-        description:
-          "Businesses struggle to find digital tools that meet their needs, causing operational slowdowns.",
+        description: "Businesses struggle with outdated tools and fragmented workflows.",
         icon: {
-          __icon_url__:
-            "https://presenton-public.s3.ap-southeast-1.amazonaws.com/static/icons/bold/checks-bold.svg",
-          __icon_query__: "warning alert inefficiency",
-        },
-      },
-      {
-        title: "High Costs",
-        description:
-          "Outdated systems increase expenses, while small businesses struggle to expand their market reach.",
-        icon: {
-          __icon_url__:
-            "https://presenton-public.s3.ap-southeast-1.amazonaws.com/static/icons/bold/fediverse-logo-bold.svg",
-          __icon_query__: "trending up costs chart",
-        },
-      },
-      {
-        title: "Inefficiency",
-        description:
-          "Businesses struggle to find digital tools that meet their needs, causing operational slowdowns.",
-        icon: {
-          __icon_url__:
-            "https://presenton-public.s3.ap-southeast-1.amazonaws.com/static/icons/bold/video-bold.svg",
-          __icon_query__: "warning alert inefficiency",
-        },
-      },
-      {
-        title: "Inefficiency",
-        description:
-          "Businesses struggle to find digital tools that meet their needs, causing operational slowdowns.",
-        icon: {
-          __icon_url__:
-            "https://presenton-public.s3.ap-southeast-1.amazonaws.com/static/icons/bold/users-four-bold.svg",
-          __icon_query__: "warning alert inefficiency",
+          __icon_url__: "https://presenton-public.s3.ap-southeast-1.amazonaws.com/static/icons/bold/checks-bold.svg",
+          __icon_query__: "inefficiency alert",
         },
       },
     ])
     .meta({
-      description:
-        "List of problem categories with titles, descriptions, and optional icons",
+      description: "List of categories with titles, descriptions, and icons",
     }),
-
-
 });
 
 export const Schema = bulletWithIconsSlideSchema;
-
-export type BulletWithIconsSlideData = z.infer<
-  typeof bulletWithIconsSlideSchema
->;
+export type BulletWithIconsSlideData = z.infer<typeof bulletWithIconsSlideSchema>;
 
 interface BulletWithIconsSlideLayoutProps {
   data?: Partial<BulletWithIconsSlideData>;
 }
 
-const BulletWithIconsSlideLayout = ({
+const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
   data: slideData,
-}: BulletWithIconsSlideLayoutProps) => {
+}) => {
   const problemCategories = slideData?.problemCategories || [];
+  const containerRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      const tl = gsap.timeline({ defaults: { ease: "power4.out", duration: 1.2 } });
+      tl.from(containerRef.current.querySelector(".editorial-title"), { y: 60, opacity: 0 })
+        .from(containerRef.current.querySelector(".main-description"), { opacity: 0 }, "-=0.8")
+        .from(itemsRef.current, { x: 100, opacity: 0, stagger: 0.1 }, "-=1");
+    }
+  }, []);
 
   return (
-    <>
-      {/* Import fonts */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
+    <div
+      ref={containerRef}
+      className="w-full h-full aspect-video relative overflow-hidden flex flex-col p-16 lg:p-24"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: "var(--bg-primary, #000)",
+        color: "var(--text-primary, #FFF)",
+      }}
+    >
+      {/* Editorial Watermark */}
+      <div className="absolute top-0 right-0 text-[12rem] font-black opacity-[0.02] select-none pointer-events-none uppercase leading-none translate-x-1/4">
+        {slideData?.title?.split(" ")[0]}
+      </div>
 
-      <div
-        className="w-full max-w-[1280px] aspect-video relative z-20 mx-auto overflow-hidden"
-        style={{
-          fontFamily: "var(--font-main, sans-serif)",
-          backgroundColor: "var(--bg-primary, #FFFFFF)",
-          color: "var(--text-primary, #111827)",
-        }}
-      >
-        {/* Background Decorative Element */}
-        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full opacity-5 blur-[100px]" style={{ backgroundColor: 'var(--accent-primary, #1E4CD9)' }}></div>
-
-        {/* Top Header */}
-        {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-16 pt-8 z-10">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />}
-                {(slideData as any)?.__companyName__ && <span className="text-lg font-bold tracking-tight opacity-60">
-                  {(slideData as any)?.__companyName__ || 'Company Name'}
-                </span>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content Area */}
-        <div className="flex h-full px-20 pb-16 pt-24 items-center">
-          {/* Left side - Main Problem */}
-          <div className="flex-1 pr-12">
-            <div className="flex flex-col items-start">
-              <h2 className="text-6xl font-bold mb-10 leading-none editorial-title" style={{ color: 'var(--text-primary)' }}>
-                {slideData?.title}
-              </h2>
-              <div className="w-20 h-1 mb-8" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
-              <div className="text-xl leading-relaxed opacity-80 max-w-lg" style={{ color: 'var(--text-primary)' }}>
-                {slideData?.description}
-              </div>
-            </div>
-          </div>
-
-          {/* Right side - List with Glass Cards */}
-          <div className="flex-1 pl-12">
-            <div className="w-full max-w-xl mx-auto flex flex-col gap-6">
-              {problemCategories.map((category, index) => (
-                <div
-                  key={index}
-                  className="glass-card flex items-start gap-6 rounded-2xl p-6 shadow-lg border-l-4"
-                  style={{ borderLeftColor: 'var(--accent-primary)' }}
-                >
-                  <div className="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-xl" style={{ backgroundColor: 'rgba(var(--accent-primary-rgb, 30, 76, 217), 0.1)' }}>
-                    {category.icon?.__icon_url__ ? (
-                      <RemoteSvgIcon
-                        url={category.icon.__icon_url__}
-                        strokeColor={"var(--accent-primary)"}
-                        className="w-10 h-10"
-                        color="var(--accent-primary)"
-                        title={category.icon.__icon_query__}
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full opacity-20" style={{ backgroundColor: 'var(--accent-primary)' }} />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-bold mb-2 leading-tight" style={{ color: 'var(--text-primary)' }}>
-                      {category.title}
-                    </h3>
-                    <p className="text-lg leading-snug opacity-70" style={{ color: 'var(--text-primary)' }}>
-                      {category.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-20 relative z-10">
+        <div className="flex items-center gap-4">
+          {(slideData as any)?._logo_url__ && (
+            <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
+          )}
+          <span className="text-xl font-bold tracking-tighter opacity-80 uppercase">
+            {(slideData as any)?.__companyName__ || "COSMO"}
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-[1px] bg-white/20"></div>
+           <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">Problem Statement // 02</span>
         </div>
       </div>
-    </>
+
+      <div className="flex flex-1 gap-20 relative z-10 items-center">
+        {/* Left: Main Content */}
+        <div className="w-[45%] flex flex-col">
+           <div className="inline-block px-3 py-1 rounded-full bg-accent-primary/10 text-accent-primary text-[10px] font-bold tracking-[0.3em] uppercase mb-8 w-fit">
+              Core Conflict
+           </div>
+           <h1 className="editorial-title text-7xl lg:text-8xl uppercase mb-10 leading-[0.85]">
+             {slideData?.title}
+           </h1>
+           <div className="w-20 h-1 bg-accent-primary mb-12"></div>
+           <p className="main-description text-xl lg:text-2xl leading-relaxed opacity-40 font-medium text-balance">
+             {slideData?.description}
+           </p>
+        </div>
+
+        {/* Right: List Items */}
+        <div className="w-[55%] flex flex-col gap-6">
+           {problemCategories.map((category, idx) => (
+             <div
+               key={idx}
+               ref={(el) => (itemsRef.current[idx] = el)}
+               className="obsidian-card rounded-3xl p-8 flex items-center gap-8 group hover:translate-x-4 transition-all duration-700"
+             >
+                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-accent-primary transition-colors duration-500">
+                   {category.icon?.__icon_url__ && (
+                     <RemoteSvgIcon
+                       url={category.icon.__icon_url__}
+                       strokeColor={"currentColor"}
+                       className="w-8 h-8"
+                       color="currentColor"
+                       title={category.icon.__icon_query__}
+                     />
+                   )}
+                </div>
+                <div className="flex flex-col gap-1">
+                   <h2 className="text-2xl font-bold uppercase tracking-tight group-hover:text-accent-primary transition-colors">{category.title}</h2>
+                   <p className="text-sm opacity-40 group-hover:opacity-100 transition-opacity duration-500 max-w-sm">
+                     {category.description}
+                   </p>
+                </div>
+             </div>
+           ))}
+        </div>
+      </div>
+    </div>
   );
 };
 

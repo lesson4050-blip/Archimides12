@@ -30,7 +30,7 @@ export const slideLayoutDescription =
   "A slide with a title at the top, chart in the left content area, and optional metric cards arranged side by side on the right.";
 
 export const Schema = z.object({
-  title: z.string().min(3).max(80).default("Data Analysis").meta({
+  title: z.string().min(2).max(100).default("Data Analysis").meta({
     description: "Slide title shown at the top-left.",
   }),
   seriesALabel: z.string().min(3).max(20).default("Category A").meta({

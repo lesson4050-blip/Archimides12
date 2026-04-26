@@ -8,7 +8,7 @@ export const layoutName = 'Icon Bullet Grid With Image'
 export const layoutDescription = 'A layout featuring a large left-aligned title with a 2-4 icon bullet point grid, each with circular icon badge, title, and optional subtitle. A rounded supporting image sits on the right.'
 
 const bulletIconsOnlySlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Solutions').meta({
+    title: z.string().min(2).max(100).default('Solutions').meta({
         description: "Heading text of the slide",
     }),
     image: ImageSchema.default({
@@ -18,10 +18,10 @@ const bulletIconsOnlySlideSchema = z.object({
         description: "URL of the supporting image",
     }),
     bulletPoints: z.array(z.object({
-        title: z.string().min(2).max(80).meta({
+        title: z.string().min(2).max(100).meta({
             description: "Title text for the bullet point",
         }),
-        subtitle: z.string().min(5).max(150).optional().meta({
+        subtitle: z.string().min(2).max(100).optional().meta({
             description: "Subtitle text for the bullet point",
         }),
         icon: IconSchema,

@@ -23,7 +23,7 @@ const IconSchema = z
 
 const FeatureSchema = z
   .object({
-    title: z.string().min(4).max(28).default("Customizable Workflows"),
+    title: z.string().min(2).max(100).default("Customizable Workflows"),
     body: z
       .string()
       .min(20)

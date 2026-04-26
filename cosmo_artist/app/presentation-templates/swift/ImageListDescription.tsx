@@ -27,7 +27,7 @@ const ImageSchema = z
 
 const ItemSchema = z
   .object({
-    title: z.string().min(2).max(40).default("Sample Title"),
+    title: z.string().min(2).max(100).default("Sample Title"),
     description: z
       .string()
       .min(10)

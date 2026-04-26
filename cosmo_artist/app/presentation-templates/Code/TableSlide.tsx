@@ -23,7 +23,7 @@ export const slideLayoutDescription =
   "A slide with title and a table.";
 
 export const Schema = z.object({
-  title: z.string().min(6).max(18).default("Comparison").meta({
+  title: z.string().min(2).max(100).default("Comparison").meta({
     description: "Slide title shown above the table.",
   }),
   tableColumns: z.array(z.string().max(18)).min(1).max(6).meta({

@@ -84,7 +84,7 @@ export const Schema = z.object({
   ).meta({
     description: "Left-side footnote line.",
   }),
-  chartTitle: z.string().min(8).max(42).default("Students by Grade Level").meta({
+  charttitle: z.string().min(2).max(100).default("Students by Grade Level").meta({
     description: "Right-panel chart heading.",
   }),
   dateRange: z.string().min(8).max(22).default("Apr 10 - Apr 17").meta({
@@ -118,7 +118,7 @@ export const Schema = z.object({
   showStatusMessage: z.boolean().default(false).meta({
     description: "Show callout message under chart (useful for weekly/performance styles).",
   }),
-  statusMessageTitle: z.string().min(8).max(40).default("You are doing good!").meta({
+  statusMessagetitle: z.string().min(2).max(100).default("You are doing good!").meta({
     description: "Callout headline under chart.",
   }),
   statusMessageBody: z.string().min(10).max(80).default("You almost reached your goal").meta({

@@ -88,7 +88,7 @@ const ChartItemSchema = z.object({
 });
 
 export const Schema = z.object({
-    title: z.string().min(3).max(50).default('Data Analytics Dashboard'),
+    title: z.string().min(2).max(100).default('Data Analytics Dashboard'),
     description: z.string().min(10).max(200).default('Comprehensive overview of key metrics and performance indicators across multiple data dimensions.'),
     metrics: z.array(z.object({
         value: z.string().max(12).default('$3.5M'),

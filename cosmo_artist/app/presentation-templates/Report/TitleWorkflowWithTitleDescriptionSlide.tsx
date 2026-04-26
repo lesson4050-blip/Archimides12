@@ -28,7 +28,7 @@ export const slideLayoutDescription =
   "A slide with a title and a horizontal flow. Each step contains a circular icon area, a heading, and a description placed underneath. Directional connectors between the circles indicate sequence, and the activeIndex field determines which step is emphasized.";
 
 export const Schema = z.object({
-  title: z.string().min(3).max(50).default("Services").meta({
+  title: z.string().min(2).max(100).default("Services").meta({
     description: "Slide title shown at the top-left.",
   }),
 

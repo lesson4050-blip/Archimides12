@@ -60,7 +60,7 @@ const Schema = z.object({
         },
     }),
 
-    title: z.string().min(12).max(30).default("Introduction Our Pitchdeck").meta({
+    title: z.string().min(2).max(100).default("Introduction Our Pitchdeck").meta({
         description: "Main title, supports a line break. Max 6 words",
     }),
     titleBreakAfter: z.number().min(1).max(25).default(12).meta({

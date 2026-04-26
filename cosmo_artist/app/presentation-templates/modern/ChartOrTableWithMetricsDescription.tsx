@@ -1,327 +1,226 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
+  Cell,
 } from "recharts";
 import * as z from "zod";
+import { gsap } from "gsap";
 
-export const layoutId = "chart-with-metrics";
-export const layoutName = "Chart With Metrics Slide";
+export const layoutId = "chart-with-metrics-description";
+export const layoutName = "Chart Or Table With Metrics Description";
 export const layoutDescription =
-  "A chart or table with metrics slide layout";
+  "A detailed infographic dashboard featuring a main chart or table, supported by specific metric cards and editorial descriptions.";
 
-const growthStatsSchema = z
-  .object({
-    year: z.string(),
-  })
-  .catchall(z.number())
-  .meta({
-    description:
-      "Growth statistics for a specific year, with any number of metrics as key-value pairs where keys are metric names and values are numbers.",
-  });
-
-// growthStats: list of dicts, each dict is { year: string, <metric1>: number, <metric2>: number, ... }
-const tractionSchema = z.object({
-
-
-  title: z.string().default("Company Traction").meta({
+const metricsWithDescriptionSchema = z.object({
+  title: z.string().min(2).max(100).default("Growth Analysis").meta({
     description: "Main title of the slide",
   }),
   description: z
     .string()
     .min(3)
-    .max(200)
+    .max(250)
     .default(
-      "Traction is a period where the company is feeling momentum during its development period. If traction momentum is not harnessed, sales figures can decline and the customer base can shrink. In general, companies will judge success by the amount of revenue and new customers they receive.",
+      "Our multi-dimensional growth analysis highlights the core drivers of performance across key market segments, demonstrating consistent upward momentum.",
     )
     .meta({
-      description:
-        "Main content text describing the company's traction and growth momentum.",
+      description: "Detailed description of the chart or table data.",
     }),
   tableMode: z.boolean().default(false),
-  tableColumns: z.array(z.string().min(1).max(40)).min(2).max(10).default(["Metric", "Value"]),
-  tableRows: z.array(z.array(z.string().min(0).max(200)).min(2).max(10)).min(1).max(30).default([["Users", "10K+"], ["Revenue", "$1.2M"], ["Satisfaction", "95%"]]),
-  // growthStats is a list of objects, each with a 'year' and any number of metric keys (all numbers)
-  growthStats: z
-    .array(growthStatsSchema)
-    .min(1)
-    .max(20)
+  tableColumns: z.array(z.string()).default(["Category", "Q1", "Q2", "Q3", "Growth"]),
+  tableRows: z.array(z.array(z.string())).default([
+    ["Platform", "120K", "150K", "190K", "+26%"],
+    ["Enterprise", "$2.4M", "$2.9M", "$3.5M", "+21%"],
+    ["Consumer", "$1.1M", "$1.4M", "$1.8M", "+32%"],
+  ]),
+  chartData: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.number(),
+      }),
+    )
+    .min(2)
+    .max(8)
     .default([
-      growthStatsSchema.parse({
-        year: "2020",
-        artificialIntelligence: 5,
-        internetOfThings: 10,
-        others: 8,
+      { label: "Q1", value: 400 },
+      { label: "Q2", value: 600 },
+      { label: "Q3", value: 850 },
+      { label: "Q4", value: 1200 },
+    ]),
+  metricCards: z
+    .array(
+      z.object({
+        label: z.string().min(3).max(20),
+        value: z.string().min(2).max(15),
+        trend: z.string().optional(),
       }),
-      growthStatsSchema.parse({
-        year: "2021",
-        artificialIntelligence: 10,
-        internetOfThings: 20,
-        others: 15,
-      }),
-      growthStatsSchema.parse({
-        year: "2022",
-        artificialIntelligence: 20,
-        internetOfThings: 30,
-        others: 22,
-      }),
-      growthStatsSchema.parse({
-        year: "2023",
-        artificialIntelligence: 28,
-        internetOfThings: 38,
-        others: 29,
-      }),
-      growthStatsSchema.parse({
-        year: "2024",
-        artificialIntelligence: 35,
-        internetOfThings: 45,
-        others: 34,
-      }),
-      growthStatsSchema.parse({
-        year: "2025",
-        artificialIntelligence: 45,
-        internetOfThings: 53,
-        others: 42,
-      }),
-      growthStatsSchema.parse({
-        year: "2026",
-        artificialIntelligence: 55,
-        internetOfThings: 65,
-        others: 52,
-      }),
-      growthStatsSchema.parse({
-        year: "2029",
-        artificialIntelligence: 55,
-        internetOfThings: 65,
-        others: 52,
-      }),
-    ])
-    .meta({
-      description:
-        "Growth statistics for the company, used for chart visualization. Each entry is an object representing a specific year, with the 'year' key as a string (e.g., '2020'), and additional keys for each metric (such as 'artificialIntelligence', 'internetOfThings', 'others'), where the values are numbers representing the metric's value for that year. Example:\n\n[\n  { year: '2020', artificialIntelligence: 5, internetOfThings: 10, others: 8 },\n  { year: '2021', artificialIntelligence: 10, internetOfThings: 20, others: 15 },\n  ...\n]\nThis structure allows the chart to dynamically render multiple series over time, with each metric visualized as a separate line.",
-    }),
+    )
+    .min(1)
+    .max(3)
+    .default([
+      { label: "Active Users", value: "2.4M", trend: "+14%" },
+      { label: "Retention", value: "92%", trend: "+5%" },
+      { label: "CAC", value: "$45", trend: "-12%" },
+    ]),
 });
 
-export const Schema = tractionSchema;
-export type CompanyTractionData = z.infer<typeof tractionSchema>;
+export const Schema = metricsWithDescriptionSchema;
+export type MetricsWithDescriptionData = z.infer<typeof metricsWithDescriptionSchema>;
 
 interface Props {
-  data?: Partial<CompanyTractionData>;
+  data?: Partial<MetricsWithDescriptionData>;
 }
 
-// Helper: assign colors to series
-const defaultColors = [
-  "#1E4CD9",
-  "#3b82f6",
-  "#f59e0b",
-  "#10b981",
-  "#ef4444",
-  "#a21caf",
-  "#6366f1",
-  "#f43f5e",
-  "#fbbf24",
-  "#14b8a6",
-];
+const defaultColors = ["#6366f1", "#818cf8", "#a5b4fc", "#c7d2fe"];
 
-function getSeriesKeys(
-  growthStats: Array<Record<string, string | number>>,
-): string[] {
-  if (!growthStats.length) return [];
-  // Exclude 'year' or any non-numeric keys
-  const first = growthStats[0];
-  return Object.keys(first).filter(
-    (key) => key !== "year" && typeof first[key] === "number",
-  );
-}
+const MetricsWithDescriptionLayout: React.FC<Props> = ({ data }) => {
+  const chartData = data?.chartData || [];
+  const metricCards = data?.metricCards || [];
+  const containerRef = useRef<HTMLDivElement>(null);
 
-// Compute stats for right column, generic for all series
-function computeStats(
-  growthStats: Array<Record<string, string | number>>,
-  seriesKeys: string[],
-) {
-  if (!growthStats.length) return [];
-  const first = growthStats[0];
-  const last = growthStats[growthStats.length - 1];
-  return seriesKeys.map((key) => {
-    const start = typeof first[key] === "number" ? (first[key] as number) : 0;
-    const end = typeof last[key] === "number" ? (last[key] as number) : 0;
-    const growth = start === 0 ? 0 : ((end - start) / Math.abs(start)) * 100;
-    return {
-      label: key
-        .replace(/([A-Z])/g, " $1")
-        .replace(/^./, (str) => str.toUpperCase()),
-      value: `${growth >= 0 ? "+" : ""}${Math.round(growth)}% growth`,
-      description: `${key
-        .replace(/([A-Z])/g, " $1")
-        .replace(/^./, (str) => str.toUpperCase())} growth over the period.`,
-    };
-  });
-}
-
-const CompanyTractionSlideLayout: React.FC<Props> = ({ data }) => {
-  const growthStats = data?.growthStats || [];
-
-  // Dynamically determine series keys
-  const seriesKeys = getSeriesKeys(growthStats);
-
-  // Prepare stats for the right column, generic for all series
-  const stats = computeStats(growthStats, seriesKeys);
+  useEffect(() => {
+    if (containerRef.current) {
+      const tl = gsap.timeline({ defaults: { ease: "power4.out", duration: 1 } });
+      tl.from(containerRef.current.querySelector(".editorial-title"), { x: -50, opacity: 0 })
+        .from(containerRef.current.querySelectorAll(".metric-card"), { y: 30, opacity: 0, stagger: 0.1 }, "-=0.6")
+        .from(containerRef.current.querySelector(".main-viz"), { scale: 0.95, opacity: 0 }, "-=0.8");
+    }
+  }, []);
 
   return (
-    <>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
-      <div
-        className="w-full max-w-[1280px] max-h-[720px] aspect-video mx-auto rounded shadow-lg overflow-hidden relative z-20"
-        style={{
-          fontFamily: "var(--heading-font-family,Montserrat)",
-          backgroundColor: "var(--background-color, #FFFFFF)",
-        }}
-      >
-        {/* Header */}
-        {((data as any)?.__companyName__ || (data as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
+    <div
+      ref={containerRef}
+      className="w-full h-full aspect-video relative overflow-hidden flex flex-col p-16 lg:p-20"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: "var(--bg-primary, #000)",
+        color: "var(--text-primary, #FFF)",
+      }}
+    >
+      {/* Background elements */}
+      <div className="absolute -top-24 -left-24 w-96 h-96 bg-accent-primary/10 blur-[120px] rounded-full pointer-events-none"></div>
 
-                {(data as any)?._logo_url__ && <img src={(data as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                {(data as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                  {(data as any)?.__companyName__ || 'Company Name'}
-                </span>}
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Header */}
+      <div className="flex items-center justify-between mb-12 relative z-10">
+        <div className="flex items-center gap-4">
+          {(data as any)?._logo_url__ && (
+            <img src={(data as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
+          )}
+          <span className="text-xl font-bold tracking-tighter opacity-80 uppercase">
+            {(data as any)?.__companyName__ || "COSMO"}
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-[1px] bg-white/20"></div>
+           <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">Performance Matrix // 2026</span>
+        </div>
+      </div>
 
-        {/* Main Content */}
-        <div className="px-16 py-16 flex h-full gap-8">
-          {/* Left Column - Chart with Title Below */}
-          <div className="flex-1 pr-12 flex flex-col justify-center">
-            <h1 className="text-5xl font-bold mb-4 leading-tight text-left" style={{ color: 'var(--background-text, #234CD9)' }}>
-              {data?.title}
-            </h1>
-            <div className=" rounded-lg shadow p-4 mb-8"
-              style={{ backgroundColor: 'var(--card-color, #ffffff)' }}
-            >
-              <div className="w-full h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={growthStats} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={`var(--background-text, #E5E7EB)`} />
-                    <XAxis
-                      dataKey="year"
-                      stroke="var(--background-text, #234CD9)"
-                      tick={{ fill: "var(--background-text, #234CD9)", fontSize: 12, fontWeight: 600 }}
-                    />
-                    <YAxis
-                      stroke="var(--background-text, #234CD9)"
-                      tick={{ fill: "var(--background-text, #234CD9)", fontSize: 12, fontWeight: 600 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "var(--card-color, #234CD9)",
-                        border: "none",
-                        color: "var(--background-text, #ffffff)",
-                      }}
+      <div className="flex flex-1 gap-12 relative z-10">
+        {/* Left: Info & Metrics */}
+        <div className="w-[35%] flex flex-col">
+          <h1 className="editorial-title text-6xl uppercase mb-8 leading-none">
+            {data?.title}
+          </h1>
+          <p className="text-lg opacity-40 mb-12 font-medium leading-relaxed">
+            {data?.description}
+          </p>
 
-                    />
-                    <Legend
-                      wrapperStyle={{ color: "var(--background-text, #234CD9)", fontSize: 12, fontWeight: 600 }}
-                      iconType="circle"
-                    />
-                    {seriesKeys.map((key, idx) => (
-                      <Line
-                        key={key}
-                        type="monotone"
-                        dataKey={key}
-                        stroke={`var(--graph-${idx}, ${defaultColors[idx % defaultColors.length]})`}
-                        strokeWidth={3}
-                        name={key
-                          .replace(/([A-Z])/g, " $1")
-                          .replace(/^./, (str) => str.toUpperCase())}
-                        dot={{
-                          r: 4,
-                          fill: `var(--graph-${idx}, ${defaultColors[idx % defaultColors.length]})`,
-                        }}
-                        activeDot={{
-                          r: 6,
-                          fill: `var(--graph-${idx}, ${defaultColors[idx % defaultColors.length]})`,
-                        }}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
+          <div className="flex flex-col gap-4">
+            {metricCards.map((card, idx) => (
+              <div key={idx} className="metric-card glass-card rounded-3xl p-6 flex justify-between items-center group">
+                 <div className="flex flex-col">
+                    <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest mb-1">{card.label}</span>
+                    <span className="text-3xl font-bold">{card.value}</span>
+                 </div>
+                 {card.trend && (
+                   <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${card.trend.startsWith("+") ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                     {card.trend}
+                   </div>
+                 )}
               </div>
-            </div>
-          </div>
-
-          {/* Right Column - Description and Stats or Table */}
-          <div className="flex flex-col items-start justify-center w-[52%] gap-8">
-            <p className="text-base leading-relaxed font-normal mb-6 max-w-xl text-left" style={{ color: 'var(--background-text, #234CD9)' }}>
-              {data?.description ||
-                "Traction is a period where the company is feeling momentum during its development period. If traction momentum is not harnessed, sales figures can decline and the customer base can shrink. In general, companies will judge success by the amount of revenue and new customers they receive."}
-            </p>
-            {data?.tableMode ? (
-              <div className="w-full">
-                <div className="rounded-lg ring-1" style={{ borderColor: 'var(--secondary-accent-color, rgba(0,0,0,0.08))' }}>
-                  <table className="w-full border-separate border-spacing-0">
-                    <thead>
-                      <tr>
-                        {data.tableColumns?.map((col, idx) => (
-                          <th key={idx} className="text-left text-sm font-semibold px-4 py-3 border-b" style={{ borderColor: 'var(--stroke, rgba(0,0,0,0.12))', color: 'var(--primary-color, #1E4CD9)' }}>
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.tableRows?.map((row, rIdx) => (
-                        <tr key={rIdx} className="align-top">
-                          {row.map((cell, cIdx) => (
-                            <td key={cIdx} className="text-sm px-4 py-3 border-t" style={{ borderColor: 'var(--stroke, rgba(0,0,0,0.08))', color: 'var(--background-text, #334155)' }}>
-                              {cell}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-row w-full gap-6">
-                {stats.map((stat, index) => (
-                  <div
-                    key={index}
-                    className="flex-1 rounded-lg shadow-sm px-5 py-4 flex flex-col items-start"
-                    style={{ backgroundColor: 'var(--primary-color, #F5F8FE)' }}
-                  >
-                    <div className="text-white text-xs font-semibold px-3 py-1 rounded-sm mb-2" style={{ backgroundColor: 'var(--card-color, #234CD9)', color: 'var(--background-text, #ffffff)' }}>
-                      {stat.label}
-                    </div>
-                    <div className="text-2xl font-bold mb-1" style={{ color: 'var(--primary-text, #234CD9)' }}>
-                      {stat.value}
-                    </div>
-                    <p className="text-sm leading-snug" style={{ color: 'var(--primary-text, #234CD9)' }}>
-                      {stat.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-1" style={{ backgroundColor: 'var(--primary-color, #1E4CD9)' }} />
+
+        {/* Right: Visualization */}
+        <div className="w-[65%] flex flex-col">
+          <div className="main-viz flex-1 obsidian-card rounded-[3rem] p-10 overflow-hidden relative">
+            {data?.tableMode ? (
+              <div className="w-full h-full overflow-auto custom_scrollbar">
+                 <table className="w-full text-left border-separate border-spacing-y-4">
+                   <thead>
+                     <tr>
+                       {data.tableColumns?.map((col, idx) => (
+                         <th key={idx} className="pb-4 px-6 text-[10px] font-mono uppercase tracking-widest opacity-30">{col}</th>
+                       ))}
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {data.tableRows?.map((row, rIdx) => (
+                       <tr key={rIdx} className="group">
+                         {row.map((cell, cIdx) => (
+                           <td key={cIdx} className="bg-white/5 group-hover:bg-white/10 transition-colors px-6 py-5 rounded-2xl text-sm font-bold">
+                             {cell}
+                           </td>
+                         ))}
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+              </div>
+            ) : (
+              <div className="w-full h-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
+                    <XAxis 
+                      dataKey="label" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: "rgba(255,255,255,0.2)", fontSize: 10, fontWeight: 700 }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: "rgba(255,255,255,0.2)", fontSize: 10, fontWeight: 700 }}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: "rgba(255,255,255,0.05)" }}
+                      contentStyle={{ backgroundColor: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "1.5rem" }}
+                    />
+                    <Bar 
+                      dataKey="value" 
+                      radius={[10, 10, 0, 0]}
+                      animationDuration={1500}
+                    >
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={defaultColors[index % defaultColors.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            
+            {/* Aesthetic Detail */}
+            <div className="absolute top-10 right-10 flex gap-2 opacity-10">
+               <div className="w-1 h-1 rounded-full bg-white"></div>
+               <div className="w-1 h-1 rounded-full bg-white"></div>
+               <div className="w-1 h-1 rounded-full bg-white"></div>
+            </div>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   );
 };
 
-export default CompanyTractionSlideLayout;
+export default MetricsWithDescriptionLayout;

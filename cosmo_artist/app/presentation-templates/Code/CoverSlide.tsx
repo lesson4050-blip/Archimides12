@@ -9,7 +9,7 @@ export const Schema = z.object({
   companyName: z.string().min(2).max(18).optional().default("COMPANY NAME").meta({
     description: "Optional organization/institution/presenter name shown above the slide title.",
   }),
-  title: z.string().min(8).max(28).default("Development Roadmap").meta({
+  title: z.string().min(2).max(100).default("Development Roadmap").meta({
     description: "Title/heading of the slide.",
   }),
   subtitle: z

@@ -31,7 +31,7 @@ const CardSchema = z.object({
   numberSymbol: z.string().min(0).max(3).default("%").meta({
     description: "Optional symbol next to the number. Single character",
   }),
-  subtitle: z.string().min(8).max(28).default("Subtitle Here").meta({
+  subtitle: z.string().min(2).max(100).default("Subtitle Here").meta({
     description: "Card subtitle. Max 5 words",
   }),
   body: z.string().min(20).max(100).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do.").meta({
@@ -47,7 +47,7 @@ const CardSchema = z.object({
 
 const Schema = z.object({
 
-  title: z.string().min(12).max(70).default("Scaling New Heights Together").meta({
+  title: z.string().min(2).max(100).default("Scaling New Heights Together").meta({
     description: "Main title. Single line up to ~34 chars or two lines up to ~70 chars. Max 9 words",
   }),
   tagline: z.string().min(40).max(120).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna").meta({

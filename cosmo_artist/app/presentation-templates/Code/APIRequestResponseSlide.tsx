@@ -8,7 +8,7 @@ export const slideLayoutDescription =
   "An API-focused slide with endpoint metadata, request payload, and response payload.";
 
 export const Schema = z.object({
-  title: z.string().min(8).max(26).default("API Request / Response").meta({
+  title: z.string().min(2).max(100).default("API Request / Response").meta({
     description: "Main heading shown at the top-left.",
   }),
   method: z.enum(["GET", "POST", "PATCH", "DELETE"]).default("POST").meta({

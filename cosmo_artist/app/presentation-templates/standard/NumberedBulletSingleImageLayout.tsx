@@ -48,7 +48,7 @@ const Schema = z.object({
       numberText: z.string().min(2).max(2).default("01").meta({
         description: "Two-digit bullet number. Max 2 chars",
       }),
-      title: z.string().min(10).max(36).default("Strategic Execution").meta({
+      title: z.string().min(2).max(100).default("Strategic Execution").meta({
         description: "Bullet title text. Designed for 24px. Max ~36 chars",
       }),
       body: z.string().min(60).max(100).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.").meta({

@@ -18,7 +18,7 @@ export const slideLayoutDescription =
   "A slide with metrics card grid and title at the top.";
 
 export const Schema = z.object({
-  title: z.string().min(6).max(18).default("Metrics").meta({
+  title: z.string().min(2).max(100).default("Metrics").meta({
     description: "Slide heading shown above the KPI cards.",
   }),
   metrics: z

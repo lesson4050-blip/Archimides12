@@ -3,7 +3,7 @@ import { Fragment } from "react";
 import * as z from "zod";
 
 const WorkflowStepSchema = z.object({
-  title: z.string().min(3).max(12).meta({
+  title: z.string().min(2).max(100).meta({
     description: "Step title shown in each workflow card.",
   }),
   description: z.string().min(18).max(50).meta({
@@ -28,7 +28,7 @@ export const slideLayoutDescription =
   "A workflow slide with cards and directional arrows between steps.";
 
 export const Schema = z.object({
-  title: z.string().min(6).max(16).default("Workflow").meta({
+  title: z.string().min(2).max(100).default("Workflow").meta({
     description: "Slide title shown above the workflow row.",
   }),
   steps: z

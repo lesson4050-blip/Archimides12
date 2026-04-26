@@ -120,7 +120,7 @@ const renderPieLabel = (props: any) => {
 };
 
 export const Schema = z.object({
-    title: z.string().min(3).max(50).default('Data Analytics Dashboard').describe('Main title of the slide'),
+    title: z.string().min(2).max(100).default('Data Analytics Dashboard').describe('Main title of the slide'),
     description: z.string().min(10).max(200).default('Comprehensive overview of key metrics and performance indicators across multiple data dimensions.').describe('Description text below the title'),
     charts: z.array(ChartItemSchema).min(1).max(6).default(defaultCharts).describe('Array of 1–6 charts'),
     showLegend: z.boolean().default(true).describe('Whether to show chart legends'),

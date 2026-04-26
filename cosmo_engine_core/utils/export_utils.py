@@ -15,43 +15,70 @@ from services.temp_file_service import TEMP_FILE_SERVICE
 from utils.asset_directory_utils import get_exports_directory
 
 
+import asyncio
+from pptx import Presentation
+from pptx.util import Inches, Emu
+
 async def export_presentation(
     presentation: PresentationModel, slides: List[SlideModel], export_as: Literal["pptx", "pdf"]
 ) -> PresentationAndPath:
     if export_as == "pptx":
-        # Build slide data from the database models
-        slides_data = []
-        for slide in slides:
-            slide_content = {}
-            if hasattr(slide, 'content') and slide.content:
-                if isinstance(slide.content, str):
-                    try:
-                        slide_content = json.loads(slide.content)
-                    except json.JSONDecodeError:
-                        slide_content = {"title": slide.content}
-                else:
-                    slide_content = slide.content
-            
-            slide_entry = {
-                "content": slide_content,
-                "slideType": getattr(slide, 'slide_type', '') or getattr(slide, 'layout', '') or '',
-                "speakerNotes": getattr(slide, 'speaker_notes', '') or '',
-            }
-            slides_data.append(slide_entry)
-
-        # Pick theme based on presentation title
         title = presentation.title or ""
-        theme = guess_theme(title)
-
-        # Build PPTX using DirectPptxBuilder
-        builder = DirectPptxBuilder(theme=theme)
-        await builder.build(slides_data, title=title)
-
-        # Save
         export_directory = get_exports_directory()
         safe_title = sanitize_filename(title or str(uuid.uuid4()))
         pptx_path = os.path.join(export_directory, f"{safe_title}.pptx")
-        builder.save(pptx_path)
+        
+        # 1. Use Puppeteer to capture Next.js slides as images
+        temp_dir = os.path.abspath(TEMP_FILE_SERVICE.create_temp_dir())
+        capture_script = r"d:\Cosmo\cosmo_artist\capture_slides.cjs"
+        
+        print(f"Running puppeteer capture for {presentation.id}")
+        proc = await asyncio.create_subprocess_exec(
+            "node", capture_script, str(presentation.id), temp_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=r"d:\Cosmo\cosmo_artist"
+        )
+        stdout, stderr = await proc.communicate()
+        print(stdout.decode())
+        if stderr:
+            print(f"Puppeteer stderr: {stderr.decode()}")
+            
+        # 2. Build PPTX using the captured images
+        prs = Presentation()
+        # Widescreen 16:9
+        prs.slide_width = Emu(12192000)
+        prs.slide_height = Emu(6858000)
+        blank_slide_layout = prs.slide_layouts[6]
+        
+        # Get sorted screenshots
+        images = []
+        if os.path.exists(temp_dir):
+            for file in os.listdir(temp_dir):
+                if file.endswith('.png'):
+                    images.append(file)
+                    
+        print(f"DEBUG: Found {len(images)} images in {temp_dir}")
+                    
+        # Sort by slide index (e.g., slide_0.png)
+        if images:
+            images.sort(key=lambda x: int(x.split('_')[1].split('.')[0]))
+        
+        for idx, img_file in enumerate(images):
+            slide = prs.slides.add_slide(blank_slide_layout)
+            img_path = os.path.join(temp_dir, img_file)
+            print(f"DEBUG: Adding image to slide {idx}: {img_path}")
+            
+            # Full bleed background image
+            slide.shapes.add_picture(img_path, 0, 0, prs.slide_width, prs.slide_height)
+            
+            # Add speaker notes if available
+            if idx < len(slides):
+                speaker_note = getattr(slides[idx], 'speaker_note', '') or getattr(slides[idx], 'speaker_notes', '') or ''
+                if speaker_note:
+                    slide.notes_slide.notes_text_frame.text = speaker_note
+                    
+        prs.save(pptx_path)
 
         return PresentationAndPath(
             presentation_id=presentation.id,

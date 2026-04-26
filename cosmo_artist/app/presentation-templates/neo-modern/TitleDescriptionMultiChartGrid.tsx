@@ -89,7 +89,7 @@ const ChartItemSchema = z.object({
 });
 
 export const Schema = z.object({
-    title: z.string().min(3).max(50).default('Data Analytics Dashboard'),
+    title: z.string().min(2).max(100).default('Data Analytics Dashboard'),
     description: z.string().min(10).max(200).default('Comprehensive overview of key metrics and performance indicators across multiple data dimensions.'),
     charts: z.array(ChartItemSchema).min(1).max(6).default([
         { title: 'Revenue by Quarter', type: 'bar-vertical', data: [{ name: 'Q1', value: 125000 }, { name: 'Q2', value: 158000 }, { name: 'Q3', value: 142000 }, { name: 'Q4', value: 189000 }], colorPalette: 'vibrant' },

@@ -6,7 +6,7 @@ export const layoutName = 'Table with Info'
 export const layoutDescription = 'A slide layout with a title at the top, structured table in the middle, and descriptive text at the bottom.'
 
 const tableInfoSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Market Comparison').meta({
+    title: z.string().min(2).max(100).default('Market Comparison').meta({
         description: "Main title of the slide",
     }),
     tableData: z.object({

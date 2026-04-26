@@ -64,7 +64,8 @@ class IconFinderService:
                     )
                 print("Indexing complete.")
 
-    async def search_icons(self, query: str, style: str = "regular", k: int = 1):
+    async def search_icons(self, query: str, style: str = "bold", k: int = 1):
+        # Default to bold since that's what we have in static
         result = await asyncio.to_thread(
             self.collection.query,
             query_texts=[query],
@@ -72,9 +73,21 @@ class IconFinderService:
             where={"style": style}
         )
         if not result["ids"] or not result["ids"][0]:
-            return []
+            # Try to search without style filter as fallback
+            result = await asyncio.to_thread(
+                self.collection.query,
+                query_texts=[query],
+                n_results=k
+            )
+            if not result["ids"] or not result["ids"][0]:
+                return []
             
-        return [f"/static/icons/{style}/{name}.svg" for name in result["ids"][0]]
+        # The files in static are only in 'bold' directory and named {name}-bold.svg
+        urls = []
+        for i, name in enumerate(result["ids"][0]):
+            # Force bold since it's the only one we have
+            urls.append(f"/static/icons/bold/{name}-bold.svg")
+        return urls
 
 
 ICON_FINDER_SERVICE = IconFinderService()

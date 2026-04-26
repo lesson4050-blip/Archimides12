@@ -25,7 +25,7 @@ export const slideLayoutDescription =
   "A slide with a title at the top and tall metric cards arranged horizontally below it. Each card can contain one or two stacked metric blocks, and each block includes a main value, a label, and a supporting description.";
 
 export const Schema = z.object({
-  title: z.string().min(3).max(80).default("Performance Snapshot").meta({
+  title: z.string().min(2).max(100).default("Performance Snapshot").meta({
     description: "Slide title shown at the top-left.",
   }),
   columns: z

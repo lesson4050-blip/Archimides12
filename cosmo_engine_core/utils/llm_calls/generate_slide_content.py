@@ -10,6 +10,7 @@ from utils.schema_utils import add_field_in_schema, remove_fields_from_schema
 
 
 def get_system_prompt(
+    language: str,
     tone: Optional[str] = None,
     verbosity: Optional[str] = None,
     instructions: Optional[str] = None,
@@ -37,6 +38,13 @@ def get_system_prompt(
         - If the schema contains an `image` object, you MUST provide a detailed, artistic `__image_prompt__`.
         - Image prompts should be cinematic, professional, or corporate-editorial (e.g., "Cinematic shot of NVIDIA H100 GPU in a high-tech data center, neon blue lighting, hyper-realistic").
         - If the schema contains `icons`, provide precise `__icon_query__` terms (e.g., "artificial intelligence", "database", "revenue growth").
+
+        # Clean Content Requirements
+        - Use ONLY the requested language ({language}) for slide content.
+        - ABSOLUTELY NO meta-commentary, explanations, or notes inside the JSON fields (e.g., do not say "Metrics are not relevant for this slide"). 
+        - If a field is not relevant, leave it empty or follow the schema defaults.
+        - Ensure all text is clean and free of encoding artifacts or stray characters from other languages.
+        - All content must be production-ready and professional.
 
         # Notes
         - Slide body should not use words like "This slide", "This presentation".
@@ -87,7 +95,7 @@ def get_messages(
 
     return [
         LLMSystemMessage(
-            content=get_system_prompt(tone, verbosity, instructions),
+            content=get_system_prompt(language, tone, verbosity, instructions),
         ),
         LLMUserMessage(
             content=get_user_prompt(outline, language),

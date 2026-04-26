@@ -14,39 +14,48 @@ body {
 
   /* Premium Design Tokens */
   .glass-card {
-    background: var(--glass-bg, rgba(255, 255, 255, 0.05));
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    background: var(--glass-bg, rgba(255, 255, 255, 0.03));
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
   .obsidian-card {
-    background: linear-gradient(135deg, rgba(20, 20, 20, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(135deg, rgba(25, 25, 25, 0.95) 0%, rgba(5, 5, 5, 1) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.7);
   }
 
   .premium-shadow {
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    box-shadow: 
+      0 20px 25px -5px rgba(0, 0, 0, 0.2), 
+      0 10px 10px -5px rgba(0, 0, 0, 0.1), 
+      inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   }
 
   .bento-grid {
     display: grid;
     grid-template-columns: repeat(12, 1fr);
-    gap: 1.5rem;
+    gap: 2rem;
   }
 
   .editorial-title {
-    font-family: var(--font-main);
-    line-height: 0.85;
-    letter-spacing: -0.06em;
-    text-transform: uppercase;
-    font-weight: 900;
+    font-family: var(--font-unbounded), var(--font-main);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    font-weight: 800;
   }
 
   .premium-gradient-text {
-    background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary, var(--accent-primary)));
+    background: linear-gradient(135deg, #fff 0%, #a1a1a1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .accent-gradient-text {
+    background: linear-gradient(135deg, var(--accent-primary, #ff4d00) 0%, var(--accent-secondary, #ff9e00) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -571,7 +580,7 @@ thead {
   cursor: help;
 }
 
-.slide-title, [data-slide-title], h1, h2, h3, h4, p, span {
+h1, h2, h3 {
   overflow-wrap: break-word !important;
   word-break: break-word !important;
   hyphens: auto !important;

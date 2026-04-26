@@ -21,6 +21,18 @@ app.mount(
     name="exports"
 )
 
+app.mount(
+    "/static",
+    StaticFiles(directory="static"),
+    name="static"
+)
+
+app.mount(
+    "/app_data",
+    StaticFiles(directory=APP_DATA),
+    name="app_data"
+)
+
 
 # Routers
 app.include_router(API_V1_PPT_ROUTER)

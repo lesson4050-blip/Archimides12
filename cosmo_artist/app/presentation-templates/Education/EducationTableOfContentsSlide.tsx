@@ -16,7 +16,7 @@ const TocItemSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(6).max(32).default("Table of Contents").meta({
+  title: z.string().min(2).max(100).default("Table of Contents").meta({
     description: "Main centered title of the table of contents slide.",
   }),
   items: z

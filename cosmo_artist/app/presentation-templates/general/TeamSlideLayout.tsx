@@ -22,7 +22,7 @@ const teamMemberSchema = z.object({
 });
 
 const teamSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('The Brain Trust').meta({
+    title: z.string().min(2).max(100).default('The Brain Trust').meta({
         description: "Main title of the slide",
     }),
     companyDescription: z.string().min(10).max(150).default('Our team brings together decades of collective experience in engineering, design, and strategic operations to solve the world\'s most complex challenges.').meta({

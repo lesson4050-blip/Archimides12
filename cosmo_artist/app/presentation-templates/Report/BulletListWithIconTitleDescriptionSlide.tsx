@@ -17,7 +17,7 @@ export const slideLayoutDescription =
   "A slide with a title at the top and a two-column list of bullets points underneath. Each point contains a small circular icon badge, a short title on the same row, and a supporting description directly below.";
 
 export const Schema = z.object({
-  title: z.string().min(3).max(12).default("Data Analysis").meta({
+  title: z.string().min(2).max(100).default("Data Analysis").meta({
     description: "Slide title shown at the top-left.",
   }),
   itemIcon: z.object({

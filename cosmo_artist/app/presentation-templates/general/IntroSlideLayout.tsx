@@ -8,7 +8,7 @@ export const layoutName = 'Intro Slide'
 export const layoutDescription = 'A premium slide layout with animated title, glassmorphic presenter info, and a high-end visual style.'
 
 const introSlideSchema = z.object({
-    title: z.string().min(3).max(60).default('Product Overview').meta({
+    title: z.string().min(2).max(100).default('Product Overview').meta({
         description: "Main title of the slide",
     }),
     description: z.string().min(10).max(250).default('Our product offers customizable dashboards for real-time reporting and data-driven decisions.').meta({

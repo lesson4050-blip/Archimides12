@@ -35,7 +35,7 @@ const Schema = z.object({
   headerNumber: z.string().min(1).max(3).default("6").meta({
     description: "Small header number text. Max 3 characters",
   }),
-  rightTitle: z.string().min(24).max(72).default("Disrupting the\nIndustry").meta({
+  righttitle: z.string().min(2).max(100).default("Disrupting the\nIndustry").meta({
     description: "Large heading on the right. Max 8 words",
   }),
   rightDescription: z.string().min(120).max(240).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna").meta({
@@ -52,7 +52,7 @@ const Schema = z.object({
     }).meta({
       description: "Optional icon representation for the round symbol",
     }),
-    title: z.string().min(16).max(38).default("Visionary Leadership").meta({
+    title: z.string().min(2).max(100).default("Visionary Leadership").meta({
       description: "Title for the card item. Max 4 words",
     }),
     description: z.string().min(50).max(100).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor").meta({

@@ -427,7 +427,7 @@ const ChartItemSchema = z.object({
 });
 
 export const Schema = z.object({
-    title: z.string().min(3).max(50).default('Data Analytics Dashboard').describe('Main title of the slide'),
+    title: z.string().min(2).max(100).default('Data Analytics Dashboard').describe('Main title of the slide'),
     description: z.string().min(10).max(200).default('Comprehensive overview of key metrics and performance indicators across multiple data dimensions.').describe('Description text below the title'),
     metrics: z.array(z.object({
         value: z.string().max(12).describe('The metric value'),

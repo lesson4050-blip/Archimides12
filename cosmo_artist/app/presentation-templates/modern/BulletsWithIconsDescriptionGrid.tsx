@@ -10,7 +10,7 @@ export const layoutDescription =
 
 const bulletWithIconsDescriptionGridSlideSchema = z.object({
 
-  title: z.string().min(3).max(25).default("Businesses struggle").meta({
+  title: z.string().min(2).max(100).default("Businesses struggle").meta({
     description: "Main title of the slide",
   }),
   mainDescription: z
@@ -26,7 +26,7 @@ const bulletWithIconsDescriptionGridSlideSchema = z.object({
   sections: z
     .array(
       z.object({
-        title: z.string().min(3).max(30).meta({
+        title: z.string().min(2).max(100).meta({
           description: "Section title",
         }),
         description: z.string().min(5).max(70).meta({
@@ -153,49 +153,54 @@ const BulletWithIconsDescriptionGridSlideLayout = ({
       {/* Content Layout */}
       <div className="flex flex-1 gap-16 items-start relative z-10">
         {/* Left: Title and Main Description */}
-        <div className="w-[40%] flex flex-col">
-          <h1 className="text-6xl lg:text-7xl font-black mb-8 leading-[0.9] editorial-title premium-gradient-text uppercase">
+        <div className="w-[45%] flex flex-col pt-4">
+          <div className="inline-block px-3 py-1 rounded-full bg-accent-primary/10 text-accent-primary text-[10px] font-bold tracking-[0.2em] uppercase mb-6 w-fit">
+            Strategy & Vision
+          </div>
+          <h1 className="text-5xl lg:text-6xl font-bold mb-8 leading-[0.95] tracking-tight uppercase hyphens-none">
             {slideData?.title}
           </h1>
-          <p className="text-lg lg:text-xl leading-relaxed opacity-60 font-light">
+          <div className="w-16 h-1 bg-accent-primary mb-10"></div>
+          <p className="text-xl lg:text-2xl leading-snug opacity-80 font-medium text-balance">
             {slideData?.mainDescription}
           </p>
           
-          <div className="mt-auto pt-12">
-            <div className="flex gap-2">
-              <div className="w-12 h-[2px]" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
-              <div className="w-4 h-[2px] opacity-30" style={{ backgroundColor: 'var(--accent-primary)' }}></div>
-            </div>
+          <div className="mt-auto hidden lg:block">
+             <div className="flex items-center gap-4 opacity-30">
+                <span className="text-xs font-mono">EST. 2026</span>
+                <div className="h-[1px] w-20 bg-current"></div>
+                <span className="text-xs font-mono">CORE_ENGINE</span>
+             </div>
           </div>
         </div>
 
         {/* Right: Bento Grid of Sections */}
-        <div className="w-[60%] grid grid-cols-2 gap-6 h-full content-start">
+        <div className="w-[55%] grid grid-cols-2 gap-4 h-full content-start">
           {sections.map((section, idx) => (
             <div
               key={idx}
-              className="glass-card rounded-2xl p-6 lg:p-8 flex flex-col gap-4 group hover:scale-[1.02] transition-all duration-500"
+              className="glass-card rounded-[2rem] p-8 flex flex-col gap-6 group hover:translate-y-[-4px] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]"
             >
               <div className="flex items-center justify-between">
-                <div className="p-3 rounded-xl bg-white/5 group-hover:bg-accent-primary/20 transition-colors duration-500">
+                <div className="p-4 rounded-2xl bg-white/5 group-hover:bg-accent-primary group-hover:text-black transition-all duration-500">
                   {section?.icon?.__icon_url__ && (
                     <RemoteSvgIcon
                       url={section.icon.__icon_url__}
                       strokeColor={"currentColor"}
                       className="w-8 h-8"
-                      color="var(--accent-primary, #6366f1)"
+                      color="currentColor"
                       title={section.icon.__icon_query__}
                     />
                   )}
                 </div>
-                <span className="text-[10px] font-mono opacity-20 group-hover:opacity-100 transition-opacity">0{idx + 1}</span>
+                <span className="text-[10px] font-mono opacity-30 group-hover:opacity-100 group-hover:text-accent-primary transition-all">/0{idx + 1}</span>
               </div>
               
-              <div>
-                <h2 className="text-xl font-bold mb-2 tracking-tight group-hover:text-accent-primary transition-colors">
+              <div className="space-y-3">
+                <h2 className="text-2xl font-bold tracking-tight uppercase">
                   {section.title}
                 </h2>
-                <p className="text-sm leading-relaxed opacity-50 group-hover:opacity-80 transition-opacity line-clamp-3">
+                <p className="text-sm leading-relaxed opacity-40 group-hover:opacity-100 transition-opacity duration-500 line-clamp-4">
                   {section.description}
                 </p>
               </div>
@@ -206,7 +211,5 @@ const BulletWithIconsDescriptionGridSlideLayout = ({
     </div>
   );
 };
-
-export default BulletWithIconsDescriptionGridSlideLayout;
 
 export default BulletWithIconsDescriptionGridSlideLayout;

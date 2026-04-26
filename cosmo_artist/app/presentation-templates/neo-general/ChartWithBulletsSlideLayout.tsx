@@ -50,7 +50,7 @@ const scatterDataSchema = z.object({
 });
 
 const chartWithBulletsSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Market Size').meta({
+    title: z.string().min(2).max(100).default('Market Size').meta({
         description: "Main title of the slide",
     }),
     description: z.string().min(10).max(150).default('Businesses face challenges with outdated technology and rising costs, limiting efficiency and growth in competitive markets.').meta({
@@ -104,7 +104,7 @@ const chartWithBulletsSlideSchema = z.object({
         description: "Whether to show chart tooltip",
     }),
     bulletPoints: z.array(z.object({
-        title: z.string().min(2).max(80).meta({
+        title: z.string().min(2).max(100).meta({
             description: "Bullet point title",
         }),
         description: z.string().min(10).max(150).meta({

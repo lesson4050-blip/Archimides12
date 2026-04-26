@@ -36,7 +36,7 @@ const TableRowSchema = z.object({
 
 const Schema = z
   .object({
-    title: z.string().min(6).max(60).default("Data Table or Chart"),
+    title: z.string().min(2).max(100).default("Data Table or Chart"),
     description: z
       .string()
       .min(20)

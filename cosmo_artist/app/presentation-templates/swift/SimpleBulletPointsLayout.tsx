@@ -7,7 +7,7 @@ const layoutDescription = "Bullet Points with title and description"
 
 const PointSchema = z
   .object({
-    title: z.string().min(6).max(60).default("Your Title Here"),
+    title: z.string().min(2).max(100).default("Your Title Here"),
     body: z
       .string()
       .min(30)
@@ -20,7 +20,7 @@ const PointSchema = z
 
 const Schema = z
   .object({
-    title: z.string().min(4).max(36).default("Our Commitment"),
+    title: z.string().min(2).max(100).default("Our Commitment"),
     statement: z
       .string()
       .min(20)

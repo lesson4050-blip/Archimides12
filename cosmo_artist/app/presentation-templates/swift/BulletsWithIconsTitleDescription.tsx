@@ -11,7 +11,7 @@ const layoutDescription = "Bullet with icons with title and description and titl
 const ItemSchema = z
   .object({
     icon: IconSchema,
-    title: z.string().min(3).max(40).default("Lorem ipsum dolor"),
+    title: z.string().min(2).max(100).default("Lorem ipsum dolor"),
     description: z
       .string()
       .min(0)

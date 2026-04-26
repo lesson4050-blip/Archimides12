@@ -17,7 +17,7 @@ const KpiSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(3).max(10).default("KPIs").meta({
+  title: z.string().min(2).max(100).default("KPIs").meta({
     description: "Main title shown in the top-left corner.",
   }),
   kpiIcon: z.object({

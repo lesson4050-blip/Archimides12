@@ -45,7 +45,7 @@ const Schema = z.object({
     description: "Small image partially behind the main card",
   }),
   cards: z.array(z.object({
-    title: z.string().min(8).max(16).default("Strategy 01").meta({
+    title: z.string().min(2).max(100).default("Strategy 01").meta({
       description: "Card ribbon title. Max 3 words",
     }),
     body: z.string().min(60).max(160).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor").meta({

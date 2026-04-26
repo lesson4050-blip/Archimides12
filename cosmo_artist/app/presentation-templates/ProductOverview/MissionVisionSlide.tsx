@@ -7,7 +7,7 @@ export const slideLayoutDescription =
   "A slide with a title in the top-left block, text in the top-right , another text block in the bottom-left , and an image in the bottom-right block.";
 
 export const Schema = z.object({
-  title: z.string().min(8).max(30).default("Mission & Vision").meta({
+  title: z.string().min(2).max(100).default("Mission & Vision").meta({
     description: "Primary heading shown in the top-left tile.",
   }),
 

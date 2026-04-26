@@ -6,7 +6,7 @@ export const slideLayoutDescription =
   "A two-column table of contents with numbered entries, labels and description.";
 
 export const Schema = z.object({
-  title: z.string().min(8).max(24).default("Table of Content").meta({
+  title: z.string().min(2).max(100).default("Table of Content").meta({
     description: "Slide heading shown above the index list.",
   }),
   items: z

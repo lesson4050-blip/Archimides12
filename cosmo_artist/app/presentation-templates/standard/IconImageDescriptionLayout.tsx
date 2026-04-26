@@ -40,7 +40,7 @@ const Schema = z.object({
 
     pageNumber: "3",
   }),
-  title: z.string().min(24).max(56).default("Transforming Ideas into\nReality").meta({
+  title: z.string().min(2).max(100).default("Transforming Ideas into\nReality").meta({
     description: "Main title split across up to two lines. Max 10 words",
   }),
   backgroundImage: ImageSchema.default({

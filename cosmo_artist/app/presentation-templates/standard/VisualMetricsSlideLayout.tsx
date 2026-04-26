@@ -26,7 +26,7 @@ const layoutName = "Visual Metrics"
 const layoutDescription = "A slide with a header bar, numeric marker, title, description, and grid of cards with headings, circular metrics, and texts"
 
 const CardSchema = z.object({
-    title: z.string().min(6).max(18).default("Research").meta({
+    title: z.string().min(2).max(100).default("Research").meta({
         description: "Card heading. Max 3 words",
     }),
     value: z.number().min(0).max(9999).default(67).meta({
@@ -55,7 +55,7 @@ const Schema = z.object({
 
         marker: "2",
     }),
-    title: z.string().min(20).max(68).default("Our Vision And Strategy For Excellence").meta({
+    title: z.string().min(2).max(100).default("Our Vision And Strategy For Excellence").meta({
         description: "Main slide title. Max 10 words",
     }),
     description: z.string().min(70).max(200).default("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation").meta({

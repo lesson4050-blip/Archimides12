@@ -1,152 +1,121 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import * as z from "zod";
 import { ImageSchema } from "../defaultSchemes";
+import { gsap } from "gsap";
 
 export const layoutId = "image-and-description";
 export const layoutName = "Image And Description";
 export const layoutDescription =
-  "A slide layout with a title, a description, and an image.";
+  "A high-impact editorial layout featuring a large cinematic image, bold title, and structured description, styled with obsidian glassmorphism.";
 
-const imageWithDescriptionSlideSchema = z.object({
-  title: z.string().min(3).max(30).default("Image With Description").meta({
+const imageAndDescriptionSlideSchema = z.object({
+  title: z.string().min(2).max(100).default("Innovating the Future").meta({
     description: "Main title of the slide",
   }),
-  content: z
-    .string()
-    .min(25)
-    .max(300)
-    .default(
-      "In the presentation session, the background/introduction can be filled with information that is arranged systematically and effectively with respect to an interesting topic to be used as material for discussion at the opening of the presentation session. The introduction can provide a general overview for those who are listening to your presentation so that the key words on the topic of discussion are emphasized during this background/introductory presentation session.",
-    )
-    .meta({
-      description: "Main content text describing the company or topic",
-    }),
-
+  description: z.string().min(20).max(400).default("Detailing the next generation of solutions designed to transform the industry landscape with cutting-edge technology and human-centric design.").meta({
+    description: "Detailed description of the content",
+  }),
   image: ImageSchema.default({
-    __image_url__:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop",
-    __image_prompt__: "Abstract business background",
-  }).meta({
-    description:
-      "Optional supporting image for the slide (building, office, etc.)",
+    __image_url__: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=1600&auto=format&fit=crop",
+    __image_prompt__: "Futuristic robot hands or technology background",
   }),
 });
 
-export const Schema = imageWithDescriptionSlideSchema;
+export const Schema = imageAndDescriptionSlideSchema;
+export type ImageAndDescriptionSlideData = z.infer<typeof imageAndDescriptionSlideSchema>;
 
-export type ImageWithDescriptionSlideData = z.infer<typeof imageWithDescriptionSlideSchema>;
-
-interface ImageWithDescriptionSlideLayoutProps {
-  data?: Partial<ImageWithDescriptionSlideData>;
+interface ImageAndDescriptionSlideLayoutProps {
+  data?: Partial<ImageAndDescriptionSlideData>;
 }
 
-const ImageWithDescriptionSlideLayout: React.FC<ImageWithDescriptionSlideLayoutProps> = ({
+const ImageAndDescriptionSlideLayout: React.FC<ImageAndDescriptionSlideLayoutProps> = ({
   data: slideData,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      const tl = gsap.timeline({ defaults: { ease: "power4.out", duration: 1.2 } });
+      tl.from(containerRef.current.querySelector(".editorial-title"), { x: -60, opacity: 0 })
+        .from(containerRef.current.querySelector(".description-text"), { y: 20, opacity: 0 }, "-=0.8")
+        .from(containerRef.current.querySelector(".hero-image"), { clipPath: "inset(0 100% 0 0)", duration: 1.5 }, "-=1");
+    }
+  }, []);
+
   return (
-    <>
-      {/* Import fonts */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
+    <div
+      ref={containerRef}
+      className="w-full h-full aspect-video relative overflow-hidden flex"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: "var(--bg-primary, #000)",
+        color: "var(--text-primary, #FFF)",
+      }}
+    >
+      {/* Background Accent */}
+      <div className="absolute top-0 right-0 w-1/2 h-full bg-accent-primary/5 blur-[150px] pointer-events-none"></div>
 
-      <div
-        className="w-full rounded-sm max-w-[1280px] shadow-lg  aspect-video relative z-20 mx-auto overflow-hidden"
-        style={{
-          fontFamily: "var(--heading-font-family,Montserrat)",
-          backgroundColor: "var(--background-color, #FFFFFF)",
-        }}
-      >
-        {/* Header */}
-        {((slideData as any)?.__companyName__ || (slideData as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
-
-                {(slideData as any)?._logo_url__ && <img src={(slideData as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                {(slideData as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                  {(slideData as any)?.__companyName__ || 'Company Name'}
-                </span>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Main content area */}
-        <div className="flex h-full px-16 pb-16">
-          {/* Left side - Image */}
-          <div className="flex-1 pr-16 flex items-center pt-8">
-            <div className="w-full h-96 overflow-hidden">
-              {slideData?.image ? (
-                <img
-                  src={slideData.image.__image_url__}
-                  alt={slideData.image.__image_prompt__}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                /* Default building facade */
-                <div className="w-full h-full bg-gray-200 relative">
-                  {/* Building structure simulation */}
-                  <div className="absolute inset-0 bg-gray-300"></div>
-
-                  {/* Horizontal lines (building floors) */}
-                  <div className="absolute inset-0">
-                    {[...Array(12)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="absolute w-full border-t border-gray-400 opacity-60"
-                        style={{ top: `${(i + 1) * 8}%` }}
-                      ></div>
-                    ))}
-                  </div>
-
-                  {/* Vertical lines (building columns) */}
-                  <div className="absolute inset-0">
-                    {[...Array(6)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="absolute h-full border-l border-gray-400 opacity-40"
-                        style={{ left: `${(i + 1) * 16}%` }}
-                      ></div>
-                    ))}
-                  </div>
-
-                  {/* Windows */}
-                  <div className="absolute inset-0 grid grid-cols-4 gap-2 p-4">
-                    {[...Array(32)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="bg-blue-100 opacity-60 rounded-sm border border-gray-300"
-                      ></div>
-                    ))}
-                  </div>
-
-                  {/* Building edge highlight */}
-                  <div className="absolute right-0 top-0 w-1 h-full bg-white opacity-80"></div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right side - Content */}
-          <div className="flex-1 pl-16 flex flex-col justify-center">
-            {slideData?.title && (
-              <h2 className="text-5xl font-bold mb-12 leading-tight" style={{ color: 'var(--background-text, #1E4CD9)' }}>
-                {slideData?.title}
-              </h2>
-            )}
-
-            {slideData?.content && (
-              <div className="text-lg leading-relaxed font-normal max-w-lg" style={{ color: 'var(--background-text, #334155)' }}>
-                {slideData?.content}
-              </div>
-            )}
-          </div>
+      {/* Header */}
+      <div className="absolute top-16 left-20 right-20 flex items-center justify-between z-30">
+        <div className="flex items-center gap-4">
+          {(slideData as any)?._logo_url__ && (
+            <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
+          )}
+          <span className="text-xl font-bold tracking-tighter opacity-80 uppercase">
+            {(slideData as any)?.__companyName__ || "COSMO"}
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+           <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">Vision Strategy // 03</span>
         </div>
       </div>
-    </>
+
+      {/* Main Content Split */}
+      <div className="flex w-full h-full relative z-20">
+        {/* Left: Content */}
+        <div className="w-[50%] h-full flex flex-col justify-center pl-24 pr-16 bg-gradient-to-r from-black via-black/90 to-transparent">
+           <div className="inline-block px-3 py-1 rounded-full bg-accent-primary/10 text-accent-primary text-[10px] font-bold tracking-[0.3em] uppercase mb-8 w-fit">
+              Strategic Insight
+           </div>
+           <h1 className="editorial-title text-7xl lg:text-8xl uppercase mb-10 leading-[0.85]">
+             {slideData?.title}
+           </h1>
+           <div className="w-20 h-1 bg-accent-primary mb-12"></div>
+           <p className="description-text text-xl lg:text-2xl leading-relaxed opacity-50 font-medium text-balance max-w-xl">
+             {slideData?.description}
+           </p>
+           
+           <div className="mt-20 flex items-center gap-8 opacity-20">
+              <div className="flex flex-col">
+                 <span className="text-[10px] font-mono">LATITUDE</span>
+                 <span className="text-[10px] font-mono">40.7128° N</span>
+              </div>
+              <div className="flex flex-col">
+                 <span className="text-[10px] font-mono">LONGITUDE</span>
+                 <span className="text-[10px] font-mono">74.0060° W</span>
+              </div>
+           </div>
+        </div>
+
+        {/* Right: Cinematic Visual */}
+        <div className="w-[50%] h-full relative overflow-hidden">
+           <div className="absolute inset-0 z-10 bg-gradient-to-r from-black to-transparent w-24"></div>
+           <div className="hero-image w-full h-full">
+             {slideData?.image?.__image_url__ && (
+               <img
+                 src={slideData.image.__image_url__}
+                 alt={slideData.image.__image_prompt__ || "Hero"}
+                 className="w-full h-full object-cover grayscale-[0.3] hover:grayscale-0 transition-all duration-1000 scale-105"
+               />
+             )}
+           </div>
+           
+           {/* Glass Frame Overlay */}
+           <div className="absolute inset-10 z-20 border border-white/5 rounded-[3rem] pointer-events-none"></div>
+        </div>
+      </div>
+    </div>
   );
 };
 
-export default ImageWithDescriptionSlideLayout;
+export default ImageAndDescriptionSlideLayout;

@@ -105,7 +105,7 @@ export const Schema = z.object({
   chartStyle: z.enum(["mini-bars", "donut", "grouped-bars", "dual-line"]).default("donut").meta({
     description: "Chart style variant matching Image #1 to Image #4.",
   }),
-  chartTitle: z.string().min(3).max(20).default("Sandro Tavares").meta({
+  charttitle: z.string().min(2).max(100).default("Sandro Tavares").meta({
     description: "Name displayed in the chart card.",
   }),
   miniBars: z

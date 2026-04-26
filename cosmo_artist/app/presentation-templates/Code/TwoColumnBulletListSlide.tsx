@@ -6,7 +6,7 @@ export const slideLayoutDescription =
   "A two-column numbered string list with items.";
 
 export const Schema = z.object({
-  title: z.string().min(6).max(30).default("Usecase").meta({
+  title: z.string().min(2).max(100).default("Usecase").meta({
     description: "Slide title shown above the numbered list.",
   }),
   items: z

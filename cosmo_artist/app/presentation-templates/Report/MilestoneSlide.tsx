@@ -18,7 +18,7 @@ export const slideLayoutDescription =
   "A slide with a title at the top and a single horizontal milestone sequence below it. The sequence contains five circular markers aligned in one row, and each marker has a heading and description placed directly underneath. The activeIndex field controls which marker is emphasized while the remaining markers stay in the default state.";
 
 export const Schema = z.object({
-  title: z.string().min(3).max(12).default("Milestone").meta({
+  title: z.string().min(2).max(100).default("Milestone").meta({
     description: "Slide title shown at the top-left.",
   }),
   activeIndex: z.number().int().min(0).max(4).default(4).meta({

@@ -12,7 +12,7 @@ const tableOfContentsSlideSchema = z.object({
         number: z.number().min(1).meta({
             description: "Section number"
         }),
-        title: z.string().min(1).max(80).meta({
+        title: z.string().min(2).max(100).meta({
             description: "Section title"
         }),
         pageNumber: z.string().min(1).max(10).meta({

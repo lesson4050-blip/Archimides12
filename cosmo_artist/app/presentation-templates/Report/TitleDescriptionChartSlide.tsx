@@ -14,7 +14,7 @@ export const slideLayoutDescription =
 
 
 export const Schema = z.object({
-  title: z.string().min(3).max(80).default("Data Analysis").meta({
+  title: z.string().min(2).max(100).default("Data Analysis").meta({
     description: "Slide title shown at the top-left.",
   }),
   insightIcon: z

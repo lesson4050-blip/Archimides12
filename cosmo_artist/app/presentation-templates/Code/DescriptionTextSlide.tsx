@@ -6,10 +6,10 @@ export const slideLayoutDescription =
   "A text-only description slide tihe title/heading.";
 
 export const Schema = z.object({
-  title: z.string().min(8).max(30).default("Code + Explanation").meta({
+  title: z.string().min(2).max(100).default("Code + Explanation").meta({
     description: "Main slide title shown at the top-left.",
   }),
-  descriptionTitle: z.string().min(4).max(20).default("Explanation").meta({
+  descriptiontitle: z.string().min(2).max(100).default("Explanation").meta({
     description: "Subheading above the paragraph body.",
   }),
   description: z

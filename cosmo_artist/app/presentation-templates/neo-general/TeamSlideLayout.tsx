@@ -20,7 +20,7 @@ const teamMemberSchema = z.object({
 });
 
 const teamSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Our Team Members').meta({
+    title: z.string().min(2).max(100).default('Our Team Members').meta({
         description: "Heading text of the slide",
     }),
     companyDescription: z.string().min(10).max(150).default('Ginyard International Co. is a leading provider of innovative digital solutions tailored for businesses. Our mission is to empower organizations to achieve their goals through cutting-edge technology and strategic partnerships.').meta({

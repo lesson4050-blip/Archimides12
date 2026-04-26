@@ -44,7 +44,7 @@ const Schema = z.object({
       __icon_query__: "green line separator",
     },
   }),
-  title: z.string().min(10).max(50).default("Our Professional Team").meta({
+  title: z.string().min(2).max(100).default("Our Professional Team").meta({
     description: "Centered main title. Max 5 words",
   }),
   cards: z.array(z.object({

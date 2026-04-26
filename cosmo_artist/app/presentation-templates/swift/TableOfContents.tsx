@@ -7,7 +7,7 @@ const layoutDescription = "Swift: Table of contents with up to 10 items (title +
 
 const ToCItemSchema = z
   .object({
-    title: z.string().min(3).max(40).default("Introduction"),
+    title: z.string().min(2).max(100).default("Introduction"),
     description: z
       .string()
       .min(0)

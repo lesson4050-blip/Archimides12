@@ -7,7 +7,7 @@ export const slideLayoutDescription =
   "A team introduction slide with a title and intro text on top, followed by a grid of profile cards where one card can be highlighted with a footer style.";
 
 const MemberSchema = z.object({
-  title: z.string().min(2).max(12).meta({
+  title: z.string().min(2).max(100).meta({
     description: "Member role or short heading.",
   }),
   name: z.string().min(2).max(16).meta({

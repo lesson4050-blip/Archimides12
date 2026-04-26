@@ -2,7 +2,7 @@ import * as z from "zod";
 import { ImageSchema, IconSchema } from "@/app/presentation-templates/defaultSchemes";
 
 export const Schema = z.object({
-  title: z.string().min(5).max(50).default("Quarterly Business Review").meta({
+  title: z.string().min(2).max(100).default("Quarterly Business Review").meta({
     description: "Main slide title",
   }),
 

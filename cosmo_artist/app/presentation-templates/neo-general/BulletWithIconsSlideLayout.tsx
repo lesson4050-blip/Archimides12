@@ -8,7 +8,7 @@ export const layoutName = 'Image With Icon Bullets'
 export const layoutDescription = 'A two-section layout with a full-width title, left-side image with decorative grid pattern, and right-side content featuring description text and 1-3 icon-enhanced bullet points. Each bullet has an icon badge, title, accent line, and description.'
 
 const bulletWithIconsSlideSchema = z.object({
-    title: z.string().min(3).max(40).default('Problem').meta({
+    title: z.string().min(2).max(100).default('Problem').meta({
         description: "Heading text of the slide",
     }),
     description: z.string().max(150).default('Businesses face challenges with outdated technology and rising costs, limiting efficiency and growth in competitive markets.').meta({
@@ -21,7 +21,7 @@ const bulletWithIconsSlideSchema = z.object({
         description: "URL of the supporting image",
     }),
     bulletPoints: z.array(z.object({
-        title: z.string().min(2).max(60).meta({
+        title: z.string().min(2).max(100).meta({
             description: "Title text for the bullet point",
         }),
         description: z.string().min(10).max(100).meta({

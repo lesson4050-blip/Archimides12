@@ -15,7 +15,7 @@ export const Schema = z.object({
   title: z.string().max(18).default("Market Opportunity").meta({
     description: "Main heading shown at the top-left.",
   }),
-  subtitle: z.string().min(40).max(110).default(
+  subtitle: z.string().min(2).max(100).default(
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt."
   ).meta({
     description: "Supporting text under the main heading.",

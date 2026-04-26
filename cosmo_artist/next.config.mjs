@@ -4,12 +4,20 @@ const nextConfig = {
   distDir: ".next-build",
   
 
-  // Rewrites for development - proxy font requests to FastAPI backend
+  // Rewrites for development - proxy requests to FastAPI backend
   async rewrites() {
     return [
       {
-        source: '/app_data/fonts/:path*',
-        destination: 'http://localhost:5000/app_data/fonts/:path*',
+        source: '/app_data/:path*',
+        destination: 'http://localhost:5051/app_data/:path*',
+      },
+      {
+        source: '/static/:path*',
+        destination: 'http://localhost:5051/static/:path*',
+      },
+      {
+        source: '/api/v1/ppt/:path*',
+        destination: 'http://localhost:5051/api/v1/ppt/:path*',
       },
     ];
   },

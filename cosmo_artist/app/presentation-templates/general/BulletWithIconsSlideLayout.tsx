@@ -9,7 +9,7 @@ export const layoutName = 'Bullet with Icons'
 export const layoutDescription = 'A premium bullets style slide with staggered animations, glassmorphic cards, and a high-end visual style.'
 
 const bulletWithIconsSlideSchema = z.object({
-    title: z.string().min(3).max(60).default('Strategic Challenges').meta({
+    title: z.string().min(2).max(100).default('Strategic Challenges').meta({
         description: "Main title of the slide",
     }),
     description: z.string().max(250).default('Navigating complex market dynamics requires precision and advanced operational agility.').meta({
@@ -22,7 +22,7 @@ const bulletWithIconsSlideSchema = z.object({
         description: "Supporting image for the slide",
     }),
     bulletPoints: z.array(z.object({
-        title: z.string().min(2).max(60).meta({
+        title: z.string().min(2).max(100).meta({
             description: "Bullet point title",
         }),
         description: z.string().min(10).max(150).meta({

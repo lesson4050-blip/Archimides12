@@ -7,7 +7,7 @@ const layoutDescription = "Header with brand marker, title, optional description
 
 const ToCItemSchema = z
   .object({
-    title: z.string().min(4).max(50).default("Introduction").meta({
+    title: z.string().min(2).max(100).default("Introduction").meta({
       description: "Section title. Max 50 characters",
     }),
   })

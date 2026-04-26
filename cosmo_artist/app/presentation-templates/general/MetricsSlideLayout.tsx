@@ -8,7 +8,7 @@ export const layoutName = 'Metrics'
 export const layoutDescription = 'A premium slide layout for showcasing key business metrics with large numbers and descriptive text boxes.'
 
 const metricsSlideSchema = z.object({
-    title: z.string().min(3).max(100).default('Key Performance Indicators').meta({
+    title: z.string().min(2).max(100).default('Key Performance Indicators').meta({
         description: "Main title of the slide",
     }),
     metrics: z.array(z.object({

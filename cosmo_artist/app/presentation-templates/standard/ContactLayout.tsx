@@ -82,7 +82,7 @@ const Schema = z.object({
   }),
 
   rightContent: z.object({
-    title: z.string().min(18).max(40).default("Let’s Get in\nTouch with Us").meta({
+    title: z.string().min(2).max(100).default("Let’s Get in\nTouch with Us").meta({
       description: "Main heading. Max 6 words",
     }),
     sections: z.array(z.object({

@@ -1,286 +1,243 @@
-import React from "react";
-import * as z from "zod";
+import React, { useEffect, useRef } from "react";
 import {
-  BarChart,
-  Bar,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
 } from "recharts";
+import * as z from "zod";
+import { gsap } from "gsap";
 
-export const layoutId = "chart-or-table-with-description";
-export const layoutName = "Chart or Table With Description";
+export const layoutId = "chart-with-metrics";
+export const layoutName = "Chart With Metrics Slide";
 export const layoutDescription =
-  "Chart with description slide layout";
+  "A high-end infographic dashboard featuring a chart or table with metrics, styled with obsidian glassmorphism.";
 
-const businessModelSchema = z
+const growthStatsSchema = z
   .object({
-
-    title: z.string().min(3).max(60).default("Data Table or Chart"),
-    description: z
-      .string()
-      .default(
-        "Present structured information in a flexible table or visualize it with a chart.",
-      )
-      .meta({
-        description: "Supporting description for the table/chart",
-      }),
-
-    mode: z.enum(["table", "chart"]).default("chart"),
-
-    // Table configuration (generic)
-    columns: z
-      .array(z.string().min(1).max(40))
-      .min(2)
-      .max(10)
-      .default(["Column 1", "Column 2", "Column 3"]),
-    rows: z
-      .array(
-        z.object({
-          cells: z
-            .array(z.string().min(0).max(200))
-            .min(2)
-            .max(10)
-            .default(["Row 1", "Value", "Value"]),
-        }),
-      )
-      .min(1)
-      .max(30)
-      .default([
-        { cells: ["Row A", "✓", "-"] },
-        { cells: ["Row B", "Text", "123"] },
-        { cells: ["Row C", "More text", "456"] },
-      ]),
-
-    // Chart configuration (parity with Swift TableorChart)
-    chart: z
-      .object({
-        type: z.enum(["bar", "horizontalBar", "line", "pie"]).default("line"),
-        data: z
-          .array(z.object({ label: z.string().min(1).max(12), value: z.number() }))
-          .min(3)
-          .max(12)
-          .default([
-            { label: "A", value: 60 },
-            { label: "B", value: 42 },
-            { label: "C", value: 75 },
-            { label: "D", value: 30 },
-          ]),
-
-        showLabels: z.boolean().default(true),
-      })
-      .default({
-        type: "line",
-        data: [
-          { label: "A", value: 60 },
-          { label: "B", value: 42 },
-          { label: "C", value: 75 },
-          { label: "D", value: 30 },
-        ],
-
-        showLabels: true,
-      }),
+    year: z.string(),
   })
-  .default({
-
-    title: "Data Table or Chart",
+  .catchall(z.number())
+  .meta({
     description:
-      "Present structured information in a flexible table or visualize it with a chart.",
-    mode: "table",
-    columns: ["Column 1", "Column 2", "Column 3"],
-    rows: [
-      { cells: ["Row A", "✓", "-"] },
-      { cells: ["Row B", "Text", "123"] },
-      { cells: ["Row C", "More text", "456"] },
-    ],
-    chart: {
-      type: "line",
-      data: [
-        { label: "A", value: 60 },
-        { label: "B", value: 42 },
-        { label: "C", value: 75 },
-        { label: "D", value: 30 },
-      ],
-
-      showLabels: true,
-    },
+      "Growth statistics for a specific year, with any number of metrics as key-value pairs where keys are metric names and values are numbers.",
   });
 
+const tractionSchema = z.object({
+  title: z.string().default("Company Traction").meta({
+    description: "Main title of the slide",
+  }),
+  description: z
+    .string()
+    .min(3)
+    .max(200)
+    .default(
+      "Traction is a period where the company is feeling momentum during its development period. In general, companies will judge success by the amount of revenue and new customers they receive.",
+    )
+    .meta({
+      description:
+        "Main content text describing the company's traction and growth momentum.",
+    }),
+  tableMode: z.boolean().default(false),
+  tableColumns: z.array(z.string().min(1).max(40)).min(2).max(10).default(["Metric", "Value"]),
+  tableRows: z.array(z.array(z.string().min(0).max(200)).min(2).max(10)).min(1).max(30).default([["Users", "10K+"], ["Revenue", "$1.2M"], ["Satisfaction", "95%"]]),
+  growthStats: z
+    .array(growthStatsSchema)
+    .min(1)
+    .max(20)
+    .default([
+      growthStatsSchema.parse({ year: "2020", revenue: 5, growth: 10 }),
+      growthStatsSchema.parse({ year: "2021", revenue: 15, growth: 25 }),
+      growthStatsSchema.parse({ year: "2022", revenue: 45, growth: 50 }),
+      growthStatsSchema.parse({ year: "2023", revenue: 120, growth: 80 }),
+    ])
+    .meta({
+      description: "Growth statistics for chart visualization.",
+    }),
+});
 
-const CHART_COLORS = [
-  '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
-  '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'
-];
-
-export const Schema = businessModelSchema;
-export type BusinessModelData = z.infer<typeof businessModelSchema>;
+export const Schema = tractionSchema;
+export type CompanyTractionData = z.infer<typeof tractionSchema>;
 
 interface Props {
-  data?: Partial<BusinessModelData>;
+  data?: Partial<CompanyTractionData>;
 }
 
+const defaultColors = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];
 
+function getSeriesKeys(growthStats: Array<Record<string, string | number>>): string[] {
+  if (!growthStats.length) return [];
+  const first = growthStats[0];
+  return Object.keys(first).filter((key) => key !== "year" && typeof first[key] === "number");
+}
 
-const BusinessModelSlide: React.FC<Props> = ({ data }) => {
-  const mode = data?.mode || "table";
-  const columns = data?.columns || [];
-  const rows = data?.rows || [];
+function computeStats(growthStats: Array<Record<string, string | number>>, seriesKeys: string[]) {
+  if (!growthStats.length) return [];
+  const first = growthStats[0];
+  const last = growthStats[growthStats.length - 1];
+  return seriesKeys.map((key) => {
+    const start = typeof first[key] === "number" ? (first[key] as number) : 0;
+    const end = typeof last[key] === "number" ? (last[key] as number) : 0;
+    const growth = start === 0 ? 0 : ((end - start) / Math.abs(start)) * 100;
+    return {
+      label: key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase()),
+      value: `${growth >= 0 ? "+" : ""}${Math.round(growth)}%`,
+      description: `Period growth rate`,
+    };
+  });
+}
 
-  const cData = data?.chart?.data || [];
-  const type = data?.chart?.type || "bar";
+const CompanyTractionSlideLayout: React.FC<Props> = ({ data }) => {
+  const growthStats = data?.growthStats || [];
+  const seriesKeys = getSeriesKeys(growthStats);
+  const stats = computeStats(growthStats, seriesKeys);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const showLabels = data?.chart?.showLabels !== false;
-  const axisProps = {
-    tick: { fill: 'var(--background-text, #7f8491)', fontSize: 12, fontWeight: 600 },
-    axisLine: { stroke: 'var(--background-text, #7f8491)' },
-    tickLine: { stroke: 'var(--background-text, #7f8491)' },
-  };
+  useEffect(() => {
+    if (containerRef.current) {
+      gsap.from(containerRef.current.querySelectorAll(".stat-card"), {
+        y: 40,
+        opacity: 0,
+        stagger: 0.1,
+        duration: 1,
+        ease: "power3.out",
+      });
+    }
+  }, []);
 
   return (
-    <>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap"
-        rel="stylesheet"
-      />
-      <div
-        className="w-full max-w-[1280px] max-h-[720px] aspect-video mx-auto rounded shadow-lg overflow-hidden relative z-20"
-        style={{
-          fontFamily: "var(--heading-font-family,Montserrat)",
-          backgroundColor: "var(--background-color, #FFFFFF)",
-        }}
-      >
-        {/* Header */}
-        {((data as any)?.__companyName__ || (data as any)?._logo_url__) && (
-          <div className="absolute top-0 left-0 right-0 px-8 sm:px-12 lg:px-20 pt-4">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1">
+    <div
+      ref={containerRef}
+      className="w-full h-full aspect-video relative overflow-hidden flex flex-col p-16 lg:p-20"
+      style={{
+        fontFamily: "var(--font-main, sans-serif)",
+        backgroundColor: "var(--bg-primary, #000)",
+        color: "var(--text-primary, #FFF)",
+      }}
+    >
+      {/* Background elements */}
+      <div className="absolute top-0 right-0 w-1/2 h-full bg-accent-primary/5 blur-[150px] pointer-events-none"></div>
+      
+      {/* Header */}
+      <div className="flex items-center justify-between mb-12 relative z-10">
+        <div className="flex items-center gap-4">
+          {(data as any)?._logo_url__ && (
+            <img src={(data as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
+          )}
+          <span className="text-xl font-bold tracking-tighter opacity-80 uppercase">
+            {(data as any)?.__companyName__ || "COSMO"}
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+           <div className="w-12 h-[1px] bg-white/20"></div>
+           <span className="text-[10px] font-mono opacity-40 uppercase tracking-widest">Traction Report // 2026</span>
+        </div>
+      </div>
 
-                {(data as any)?._logo_url__ && <img src={(data as any)?._logo_url__} alt="logo" className="w-6 h-6" />}
-                {(data as any)?.__companyName__ && <span className="text-sm sm:text-base font-semibold" style={{ color: 'var(--background-text, #111827)' }}>
-                  {(data as any)?.__companyName__ || 'Company Name'}
-                </span>}
+      <div className="flex flex-1 gap-12 relative z-10">
+        {/* Left: Info & Stats */}
+        <div className="w-[40%] flex flex-col">
+          <h1 className="editorial-title text-6xl uppercase mb-8 leading-none">
+            {data?.title}
+          </h1>
+          <p className="text-lg opacity-40 mb-12 max-w-md font-medium">
+            {data?.description}
+          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            {stats.slice(0, 4).map((stat, idx) => (
+              <div key={idx} className="stat-card glass-card rounded-3xl p-6 flex flex-col gap-2">
+                <span className="text-[10px] font-mono opacity-30 uppercase tracking-widest">{stat.label}</span>
+                <span className="text-4xl font-bold text-accent-primary">{stat.value}</span>
+                <span className="text-[10px] opacity-20 uppercase font-bold">{stat.description}</span>
               </div>
-            </div>
+            ))}
           </div>
-        )}
+        </div>
 
-        {/* Main Content */}
-        <div className="px-16 py-16 flex h-full gap-8">
-          {/* Left Column - Title and description */}
-          <div className="flex-1 pr-12 flex flex-col justify-center">
-            <h1 className="text-5xl font-bold mb-4 leading-tight text-left" style={{ color: 'var(--background-text, #234CD9)' }}>
-              {data?.title}
-            </h1>
-            <p className="text-base leading-relaxed font-normal max-w-xl text-left" style={{ color: 'var(--background-text, #234CD9)' }}>
-              {data?.description}
-            </p>
-          </div>
-
-          {/* Right Column - Table or Chart (based on mode) */}
-          <div className="flex flex-col items-start justify-center w-[52%] gap-8">
-            {mode === "table" ? (
-              <div className="w-full">
-                <div className="rounded-lg border" style={{ borderColor: 'var(--stroke, rgba(0,0,0,0.08))' }}>
-                  <table className="w-full border-separate border-spacing-0">
-                    <thead>
-                      <tr>
-                        {columns.map((col, idx) => (
-                          <th key={idx} className="text-left text-sm font-semibold px-4 py-3 border-b" style={{ borderColor: 'var(--stroke, rgba(0,0,0,0.12))', color: 'var(--primary-color, #1E4CD9)' }}>
-                            {col}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, rIdx) => (
-                        <tr key={rIdx} className="align-top">
-                          {columns.map((_, cIdx) => (
-                            <td key={cIdx} className="text-sm px-4 py-3 border-t" style={{ borderColor: 'var(--stroke, rgba(0,0,0,0.08))', color: 'var(--background-text, #334155)' }}>
-                              {row.cells[cIdx] || ''}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+        {/* Right: Chart or Table */}
+        <div className="w-[60%] flex flex-col">
+          <div className="flex-1 glass-card rounded-[2.5rem] p-10 overflow-hidden relative">
+            {data?.tableMode ? (
+              <div className="w-full h-full overflow-auto custom_scrollbar">
+                 <table className="w-full text-left border-separate border-spacing-y-3">
+                   <thead>
+                     <tr>
+                       {data.tableColumns?.map((col, idx) => (
+                         <th key={idx} className="pb-4 px-6 text-[10px] font-mono uppercase tracking-widest opacity-30">{col}</th>
+                       ))}
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {data.tableRows?.map((row, rIdx) => (
+                       <tr key={rIdx} className="group">
+                         {row.map((cell, cIdx) => (
+                           <td key={cIdx} className="bg-white/5 group-hover:bg-white/10 transition-colors px-6 py-4 rounded-2xl text-sm font-medium">
+                             {cell}
+                           </td>
+                         ))}
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
               </div>
             ) : (
-              <div className="w-full">
-                <div className="bg-white rounded-lg shadow p-4"
-                  style={{ backgroundColor: 'var(--card-color, #F5F8FE)' }}
-                >
-                  <div className="w-full h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      {type === "bar" ? (
-                        <BarChart data={cData} margin={{ top: 20, right: 20, left: 0, bottom: 10 }} barCategoryGap="30%">
-                          <CartesianGrid strokeDasharray="3 3" stroke={`var(--background-text, #E5E7EB)`} />
-                          <XAxis dataKey="label" {...axisProps} />
-                          <YAxis {...axisProps} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="value" fill={CHART_COLORS[0]} radius={[8, 8, 0, 0]} label={showLabels ? { position: 'top', fill: 'var(--background-text, #111827)', fontSize: 12 } : false} >
-                            {cData.map((_, i) => (
-                              <Cell key={i} fill={`var(--graph-${i}, ${CHART_COLORS[i % CHART_COLORS.length]})`} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      ) : type === "horizontalBar" ? (
-                        <BarChart data={cData} layout="vertical" margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={`var(--background-text, #E5E7EB)`} />
-                          <XAxis type="number" {...axisProps} />
-                          <YAxis type="category" dataKey="label" {...axisProps} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="value" fill={CHART_COLORS[0]} radius={[0, 6, 6, 0]} label={showLabels ? { position: 'right', fill: 'var(--background-text, #111827)', fontSize: 12 } : false} >
-                            {cData.map((_, i) => (
-                              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      ) : type === "line" ? (
-                        <LineChart data={cData} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={`var(--background-text, #E5E7EB)`} />
-                          <XAxis dataKey="label" {...axisProps} />
-                          <YAxis {...axisProps} />
-                          <Tooltip />
-                          <Legend />
-                          <Line type="monotone" dataKey="value" strokeWidth={3} dot={{ r: 4, color: CHART_COLORS[0] }} label={showLabels ? { position: 'top', fill: 'var(--background-text, #111827)', fontSize: 12 } : false} >
-                            {cData.map((_, i) => (
-                              <Cell key={i} fill={`var(--graph-${i}, ${CHART_COLORS[i % CHART_COLORS.length]})`} />
-                            ))}
-                          </Line>
-                        </LineChart>
-                      ) : (
-                        <PieChart >
-                          <Tooltip />
-                          <Legend />
-                          <Pie data={cData} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={100} label={showLabels}>
-                            {cData.map((_, i) => (
-                              <Cell key={i} fill={`var(--graph-${i}, ${CHART_COLORS[i % CHART_COLORS.length]})`} />
-                            ))}
-                          </Pie>
-                        </PieChart>
-                      )}
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+              <div className="w-full h-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={growthStats} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+                    <defs>
+                      {seriesKeys.map((key, idx) => (
+                        <linearGradient key={key} id={`gradient-${idx}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={defaultColors[idx % defaultColors.length]} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={defaultColors[idx % defaultColors.length]} stopOpacity={0}/>
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis 
+                      dataKey="year" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10, fontWeight: 700 }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10, fontWeight: 700 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: "#111", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "1rem" }}
+                      itemStyle={{ fontSize: "12px", fontWeight: "bold" }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: "20px", opacity: 0.6 }} />
+                    {seriesKeys.map((key, idx) => (
+                      <Area
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        stroke={defaultColors[idx % defaultColors.length]}
+                        strokeWidth={4}
+                        fillOpacity={1}
+                        fill={`url(#gradient-${idx})`}
+                        animationDuration={2000}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             )}
           </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-1" style={{ backgroundColor: 'var(--primary-color, #1E4CD9)' }} />
       </div>
-    </>
+    </div>
   );
 };
 
-export default BusinessModelSlide;
+export default CompanyTractionSlideLayout;

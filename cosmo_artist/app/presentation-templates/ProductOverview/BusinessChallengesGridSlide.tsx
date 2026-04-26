@@ -15,7 +15,7 @@ const BlockSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(8).max(24).default("Business Challenges Business").meta({
+  title: z.string().min(2).max(100).default("Business Challenges Business").meta({
     description: "Main title shown in the top.",
   }),
   blocks: z

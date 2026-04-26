@@ -16,7 +16,7 @@ const CardSchema = z.object({
 });
 
 export const Schema = z.object({
-  title: z.string().min(3).max(30).default("Solution").meta({
+  title: z.string().min(2).max(100).default("Solution").meta({
     description: "Slide heading shown in the top-left corner.",
   }),
   showImage: z.boolean().default(true).meta({
