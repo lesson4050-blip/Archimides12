@@ -287,6 +287,31 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register ParallelSearchTool: {e}")
 
+        # ── Domain expansion tools ──
+        try:
+            from backend.tools.audio_synth_tool import AudioSynthTool
+            self.agent.audio_synth_tool = AudioSynthTool()
+            self.agent.register_tool("audio_synth", self.agent.audio_synth_tool.execute)
+            logger.info("AudioSynthTool registered (WAV synthesis)")
+        except Exception as e:
+            logger.error(f"Failed to register AudioSynthTool: {e}")
+
+        try:
+            from backend.tools.bio_tool import BioTool
+            self.agent.bio_tool = BioTool()
+            self.agent.register_tool("bio", self.agent.bio_tool.execute)
+            logger.info("BioTool registered (UniProt, AlphaFold, PubChem)")
+        except Exception as e:
+            logger.error(f"Failed to register BioTool: {e}")
+
+        try:
+            from backend.tools.finance_tool import FinanceTool
+            self.agent.finance_tool_instance = FinanceTool()
+            self.agent.register_tool("finance", self.agent.finance_tool_instance.execute)
+            logger.info("FinanceTool registered (CoinGecko, Fear&Greed)")
+        except Exception as e:
+            logger.error(f"Failed to register FinanceTool: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools

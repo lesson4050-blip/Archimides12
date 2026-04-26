@@ -147,6 +147,9 @@ TOOL SELECTION:
 - parallel_search: run 2-8 search queries simultaneously, returns
   filtered relevant results. Use instead of multiple sequential search
   calls for research tasks. Up to 3x faster for multi-aspect research.
+- audio_synth: generate real WAV audio files (tones, melodies, chords, DTMF). No API needed.
+- bio: query UniProt (protein data), AlphaFold (3D structures), PubChem (drug molecules).
+- finance: live crypto prices (CoinGecko) and Fear & Greed Index. Informational only.
 
 THOUGHT BLOCKS:
 Before every tool call, output a thought block. This is for your internal reasoning and is NOT shown to the user as chat. Use it to plan your next technical move.
