@@ -10,7 +10,7 @@ CodeAct Executor — агент пишет Python-код как действие
 """
 import asyncio
 import logging
-import sys
+
 import traceback
 from typing import Dict, Any, Optional
 
@@ -162,16 +162,22 @@ class CodeActExecutor:
     ) -> Dict[str, Any]:
         """Execute Python code safely via sandbox."""
         try:
-            from backend.sandbox.singleton import sandbox_manager
-            result = await sandbox_manager.executor.execute_code(
-                code=code,
-                session_id=session_id,
-                timeout=30
+            from backend.sandbox.e2b_sandbox import E2BSandbox
+            sandbox = E2BSandbox()
+            # Wrap synchronous run_command in executor
+            loop = asyncio.get_running_loop()
+            stdout, stderr, returncode = await loop.run_in_executor(
+                None,
+                sandbox.run_command,
+                f"python3 -c {repr(code)}",
+                30
             )
+            success = returncode == 0
+            output = stdout if success else stderr
             return {
-                "success": result.get("success", True),
-                "output": str(result.get("output", result.get("stdout", "")))[:2000],
-                "error": result.get("error", result.get("stderr", ""))
+                "success": success,
+                "output": str(output)[:2000],
+                "error": stderr if not success else ""
             }
         except Exception as e:
             return {

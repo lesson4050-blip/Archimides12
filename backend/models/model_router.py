@@ -36,22 +36,24 @@ class ModelRouter:
         except Exception:
             self.gemini = None
 
-    async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
-        # SPEED-FIRST: for simple tasks, always try cloud first
+    def _get_order(
+        self,
+        task_hint: str,
+        tools: list
+    ) -> list:
+        """Single source of truth for model routing order."""
         if task_hint in self.SPEED_TASKS:
             order = [self.groq, self.gemini, self.ollama]
-        # QUALITY: use local model for reasoning (better privacy + quality)
         elif task_hint in self.QUALITY_TASKS:
             order = [self.ollama, self.groq, self.gemini]
-        # TOOL CALLS: Groq has best tool call reliability
         elif tools:
             order = [self.groq, self.gemini, self.ollama]
-        # DEFAULT: Groq first (fast, free), Ollama fallback
         else:
             order = [self.groq, self.gemini, self.ollama]
+        return [c for c in order if c is not None]
 
-        # Filter out None clients (missing API keys)
-        order = [c for c in order if c is not None]
+    async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
+        order = self._get_order(task_hint, tools or [])
 
         errors = []
         for client in order:
@@ -76,17 +78,7 @@ class ModelRouter:
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
 
     async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
-        # SPEED-FIRST routing for streaming too
-        if task_hint in self.SPEED_TASKS:
-            order = [self.groq, self.gemini, self.ollama]
-        elif task_hint in self.QUALITY_TASKS:
-            order = [self.ollama, self.groq, self.gemini]
-        elif tools:
-            order = [self.groq, self.gemini, self.ollama]
-        else:
-            order = [self.groq, self.gemini, self.ollama]
-            
-        order = [c for c in order if c is not None]
+        order = self._get_order(task_hint, tools or [])
 
         errors = []
         for client in order:

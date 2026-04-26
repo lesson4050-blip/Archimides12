@@ -4,6 +4,7 @@ Distinct from git_forensics (which does archaeology/blame).
 This tool handles active development: status, diff, add, commit, push.
 """
 import subprocess
+import asyncio
 import logging
 import os
 from typing import Dict, Any
@@ -78,46 +79,61 @@ class GitTool:
         cwd: str = None,
         **kwargs
     ) -> Dict[str, Any]:
-        cwd = cwd or os.environ.get("WORKSPACE_DIR", "/home/ubuntu/workspace")
-        
-        try:
-            command_map = {
-                "status": ["git", "status", "--short"],
-                "diff": ["git", "diff"],
-                "diff_staged": ["git", "diff", "--staged"],
-                "add": ["git", "add", path],
-                "commit": ["git", "commit", "-m", message or "update"] if message
-                          else ["git", "commit", "--allow-empty-message", "-m", ""],
-                "push": ["git", "push"],
-                "log": ["git", "log", "--oneline", "-10"],
-                "stash": ["git", "stash"] + ([args] if args else []),
-                "checkout": ["git", "checkout"] + ([args] if args else [path]),
-                "branch": ["git", "branch"] + ([args] if args else []),
+        cwd = cwd or os.environ.get(
+            "WORKSPACE_DIR", "/home/ubuntu/workspace"
+        )
+
+        command_map = {
+            "status": ["git", "status", "--short"],
+            "diff": ["git", "diff"],
+            "diff_staged": ["git", "diff", "--staged"],
+            "add": ["git", "add", path],
+            "commit": (
+                ["git", "commit", "-m", message]
+                if message
+                else ["git", "commit", "--allow-empty-message", "-m", ""]
+            ),
+            "push": ["git", "push"],
+            "log": ["git", "log", "--oneline", "-10"],
+            "stash": ["git", "stash"] + ([args] if args else []),
+            "checkout": (
+                ["git", "checkout", args]
+                if args else ["git", "checkout", path]
+            ),
+            "branch": ["git", "branch"] + ([args] if args else []),
+        }
+
+        if action not in command_map:
+            return {
+                "success": False,
+                "error": f"Unknown action: {action}"
             }
-            
-            if action not in command_map:
-                return {"success": False, "error": f"Unknown action: {action}"}
-            
-            cmd = command_map[action]
-            result = subprocess.run(
-                cmd,
+
+        cmd = command_map[action]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
                 cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=30
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            
-            output = result.stdout + result.stderr
-            success = result.returncode == 0
-            
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=30.0
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                return {"success": False, "error": "Git timed out"}
+
+            output = (stdout + stderr).decode("utf-8", errors="replace")
+            success = proc.returncode == 0
             return {
                 "success": success,
                 "output": output.strip() or "(no output)",
-                "return_code": result.returncode
+                "return_code": proc.returncode,
             }
-            
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Git command timed out"}
+        except FileNotFoundError:
+            return {"success": False, "error": "git not found in PATH"}
         except Exception as e:
             logger.error(f"GitTool error: {e}")
             return {"success": False, "error": str(e)}
