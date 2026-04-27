@@ -30,6 +30,32 @@ class FileTool:
             }
         }
 
+    def _safe_path(self, path: str, workspace: str = None) -> tuple[bool, str]:
+        """
+        Validate path is safe.
+        Returns (is_safe, resolved_path or error_message).
+        """
+        import os
+        # Resolve to absolute path
+        resolved = os.path.realpath(os.path.abspath(path))
+        
+        # Block system paths
+        BLOCKED_PREFIXES = [
+            "/etc/", "/sys/", "/proc/", "/dev/",
+            "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/",
+            "C:\\Windows\\", "C:\\System32\\"
+        ]
+        
+        for prefix in BLOCKED_PREFIXES:
+            if resolved.startswith(prefix) or resolved.lower().startswith(prefix.lower()):
+                return False, f"Access to system path blocked: {prefix}"
+        
+        # Block path traversal
+        if ".." in path:
+            return False, "Path traversal (../) is not allowed"
+        
+        return True, resolved
+
     async def _auto_snapshot(self, path: str, action: str):
         """Creates an auto-backup snapshot before editing a file. Uses docker exec to run git inside sandbox if possible, or falls back to local git but with correct cwd."""
         import subprocess
@@ -50,6 +76,12 @@ class FileTool:
             pass  # Fail silently if git fails, don't block the write
 
     async def execute(self, session_id: str, action: str, path: str, content: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+        if action != "list":
+            is_safe, result_path = self._safe_path(path)
+            if not is_safe:
+                return {"success": False, "error": result_path}
+            path = result_path
+
         if action == "read":
             start_line = kwargs.get("start_line")
             end_line = kwargs.get("end_line")

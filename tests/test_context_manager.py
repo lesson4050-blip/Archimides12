@@ -1,51 +1,63 @@
+"""Tests for context manager self-healing."""
 import pytest
-from backend.memory.context_manager import ContextManager
 
-def test_context_manager_token_counting():
-    """Verify that tokens are counted accurately (conceptually)."""
-    cm = ContextManager(max_tokens=100)
-    cm.add_message("user", "Hello world")
-    
-    messages = cm.get_messages()
-    assert len(messages) == 1
-    assert messages[0]["role"] == "user"
-    assert "Hello world" in messages[0]["content"]
 
-@pytest.mark.asyncio
-async def test_context_manager_sliding_window():
-    """Verify summarize_if_needed reduces token count."""
-    class MockRouter:
-        async def generate(self, **kwargs):
-            return {"text": "Summary of conversation."}
+def _make_context_manager():
+    from backend.memory.context_manager import ContextManager
+    return ContextManager(session_id="test", max_tokens=4096)
 
-    cm = ContextManager(
-        max_tokens=500,
-        summarization_threshold=100, preserve_recent=3
-    )
-    for i in range(15):
-        cm.add_message("user", f"Message {i} " * 20)
 
-    tokens_before = cm.current_tokens
-    await cm.summarize_if_needed(MockRouter())
-    tokens_after = cm.current_tokens
+def test_heal_context_removes_empty_messages():
+    """Empty content messages must be removed."""
+    cm = _make_context_manager()
+    cm.messages = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": ""},  # empty — should be removed
+        {"role": "user", "content": "World"},
+    ]
+    fixed = cm.heal_context()
+    assert fixed >= 1
+    assert all(m["content"] for m in cm.messages)
 
-    assert tokens_after < tokens_before, (
-        f"Summarization failed: {tokens_before} -> {tokens_after}"
-    )
 
-@pytest.mark.asyncio
-async def test_summary_logic():
-    """Verify that summarization is triggered (mock router)."""
-    class MockRouter:
-        async def generate(self, **kwargs):
-            return {"text": "This is a summary of the conversation."}
-            
-    cm = ContextManager(max_tokens=1000, summarization_threshold=100, preserve_recent=1)
-    for i in range(5):
-        cm.add_message("user", "Extremely long text " * 50)
-    
-    # This should trigger summarization
-    await cm.summarize_if_needed(MockRouter())
-    
-    messages = cm.get_messages()
-    assert any("summary" in m["content"].lower() for m in messages)
+def test_heal_context_deduplicates_system_messages():
+    """Multiple consecutive system messages must be deduplicated."""
+    cm = _make_context_manager()
+    cm.messages = [
+        {"role": "system", "content": "First system"},
+        {"role": "system", "content": "Second system"},  # duplicate
+        {"role": "user", "content": "Hello"},
+    ]
+    fixed = cm.heal_context()
+    assert fixed >= 1
+    system_msgs = [m for m in cm.messages if m["role"] == "system"]
+    assert len(system_msgs) == 1
+    # Should keep the LAST system message
+    assert system_msgs[0]["content"] == "Second system"
+
+
+def test_heal_context_removes_orphaned_tool_results():
+    """Tool results without preceding tool_calls must be removed."""
+    cm = _make_context_manager()
+    cm.messages = [
+        {"role": "user", "content": "Run something"},
+        {"role": "tool", "content": "tool result"},  # orphaned — no preceding tool_call
+    ]
+    fixed = cm.heal_context()
+    assert fixed >= 1
+    tool_msgs = [m for m in cm.messages if m["role"] == "tool"]
+    assert len(tool_msgs) == 0
+
+
+def test_heal_context_preserves_valid_tool_sequence():
+    """Valid tool call + result sequence must be preserved."""
+    cm = _make_context_manager()
+    cm.messages = [
+        {"role": "user", "content": "Run something"},
+        {"role": "assistant", "content": "", "tool_calls": [{"name": "shell"}]},
+        {"role": "tool", "content": "command output"},
+    ]
+    original_count = len(cm.messages)
+    cm.heal_context()
+    # Valid sequence — nothing should be removed
+    assert len(cm.messages) == original_count

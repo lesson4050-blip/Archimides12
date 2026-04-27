@@ -1,0 +1,47 @@
+import logging
+import uuid
+import contextvars
+from typing import Any, Dict
+
+# Context variables to store session and trace ids per request/task
+_session_id = contextvars.ContextVar("session_id", default="-")
+_trace_id = contextvars.ContextVar("trace_id", default="-")
+
+def set_observability_context(session_id: str, trace_id: str = None):
+    """Set the session and trace ids for the current context."""
+    _session_id.set(session_id)
+    if not trace_id:
+        trace_id = str(uuid.uuid4())
+    _trace_id.set(trace_id)
+    return trace_id
+
+class CorrelatedLogFilter(logging.Filter):
+    """Filter to inject session_id and trace_id into log records."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.session_id = _session_id.get()
+        record.trace_id = _trace_id.get()
+        return True
+
+def setup_correlated_logger(name: str = None) -> logging.Logger:
+    """Setup and return a logger configured with correlation IDs."""
+    logger = logging.getLogger(name)
+    
+    # Avoid adding multiple filters if it's already set up
+    if not any(isinstance(f, CorrelatedLogFilter) for f in logger.filters):
+        logger.addFilter(CorrelatedLogFilter())
+        
+    # Configure formatter if this is the root logger or we want to override
+    # Usually handled globally, but here we can ensure the format is right
+    return logger
+
+def configure_global_observability():
+    """Configure the root logger to use correlated formatter."""
+    root_logger = logging.getLogger()
+    root_logger.addFilter(CorrelatedLogFilter())
+    
+    # Update all handlers to show session and trace IDs
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(levelname)s] [S:%(session_id)s] [T:%(trace_id)s] %(name)s - %(message)s'
+    )
+    for handler in root_logger.handlers:
+        handler.setFormatter(formatter)

@@ -116,6 +116,18 @@ class ShellTool:
     async def execute(self, session_id: str = None, action: str = "exec",
                       command: Optional[str] = None, timeout: int = 60,
                       **kwargs) -> Dict[str, Any]:
+        from backend.agent.self_improvement import check_tool_safety
+        
+        if command:
+            is_safe, reason = await check_tool_safety("shell", {"command": command})
+            if not is_safe:
+                logger.warning(f"BLOCKED command: {command[:50]} — {reason}")
+                return {
+                    "success": False,
+                    "output": f"Command blocked: {reason}",
+                    "blocked": True
+                }
+
         if action == "run":
             action = "exec"
 

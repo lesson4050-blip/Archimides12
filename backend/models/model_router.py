@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 from backend.models.groq_client import GroqClient, RateLimitExceeded as GroqRateLimit
 from backend.models.gemini_client import GeminiClient, RateLimitExceeded as GeminiRateLimit
 from backend.models.ollama_client import OllamaClient
+from backend.models.anthropic_client import AnthropicClient
 from backend.models.retry_wrapper import with_retry, RetryConfig
 
 GROQ_RETRY = RetryConfig(max_retries=3, base_delay=2.0, max_delay=30.0)
@@ -35,6 +36,12 @@ class ModelRouter:
             self.gemini = GeminiClient() if settings.GOOGLE_API_KEY else None
         except Exception:
             self.gemini = None
+            
+        try:
+            from backend.config import settings
+            self.anthropic = AnthropicClient() if getattr(settings, "ANTHROPIC_API_KEY", None) else None
+        except Exception:
+            self.anthropic = None
 
     def _get_order(
         self,
@@ -43,13 +50,13 @@ class ModelRouter:
     ) -> list:
         """Single source of truth for model routing order."""
         if task_hint in self.SPEED_TASKS:
-            order = [self.groq, self.gemini, self.ollama]
+            order = [self.groq, self.anthropic, self.gemini, self.ollama]
         elif task_hint in self.QUALITY_TASKS:
-            order = [self.ollama, self.groq, self.gemini]
+            order = [self.anthropic, self.ollama, self.groq, self.gemini]
         elif tools:
-            order = [self.groq, self.gemini, self.ollama]
+            order = [self.anthropic, self.groq, self.gemini, self.ollama]
         else:
-            order = [self.groq, self.gemini, self.ollama]
+            order = [self.anthropic, self.groq, self.gemini, self.ollama]
         return [c for c in order if c is not None]
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:

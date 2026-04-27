@@ -34,6 +34,12 @@ def is_conversational(text: str) -> bool:
 
 # Semantic routing — maps task intent to agent strategy
 ROUTING_RULES = [
+    # Hydra Swarm routes
+    (r"(hydra.*swarm|system.*refactor|full.*stack.*feature)",
+     "complex", "hydra_swarm"),
+    # Omega CodeAct routes
+    (r"(omega.*codeact|100.*iterations|extreme.*fix|deep.*debug|swe.*bench.*hard)",
+     "complex", "omega_codeact"),
     # CodeAct routes — precise single-file bug fixes
     (r"(fix the bug|patch|apply.*fix|reproduce.*error|failing test|"
      r"исправь.*ошибку|примени.*патч)",
@@ -137,6 +143,8 @@ async def classify_task_with_llm(
         "Classify this task into one routing category.\n"
         f"Task: {text[:300]}\n\n"
         "Categories:\n"
+        "- hydra_swarm: system refactoring, complex full-stack features\n"
+        "- omega_codeact: extreme fix, SWE-bench hard, 100 iterations\n"
         "- codeact: fix a bug, apply a patch, SWE-bench style fix\n"
         "- swarm_code: write new code, build a feature, implement API\n"
         "- swarm_research: research, analyze, compare, summarize\n"
@@ -151,7 +159,7 @@ async def classify_task_with_llm(
             task_hint="quick"
         )
         category = response.get("text", "").strip().lower()
-        valid = {"codeact", "swarm_code", "swarm_research",
+        valid = {"hydra_swarm", "omega_codeact", "codeact", "swarm_code", "swarm_research",
                  "mcts", "single", "direct"}
         if category in valid:
             complexity = "complex" if category not in ("single", "direct") else "simple"
@@ -171,6 +179,8 @@ STRATEGY_AGENTS = {
     "direct": None,
     "mcts": None,
     "codeact": None,
+    "omega_codeact": None,
+    "hydra_swarm": None,
 }
 
 
@@ -389,6 +399,33 @@ class AgentOrchestrator:
                         state.metadata["critic_verdict"] = (
                             "PASS" if codeact_result.get("success") else "RETRY"
                         )
+                    elif strategy == "omega_codeact":
+                        from backend.agent.omega_codeact import OmegaCodeAct
+                        omega = OmegaCodeAct(self.router)
+                        omega_result = await omega.execute(
+                            task=current_target,
+                            context=state.task_description,
+                            session_id=state.session_id,
+                            websocket_send=websocket_send,
+                        )
+                        state.results.append({
+                            "step": i,
+                            "output": omega_result.get("output", ""),
+                        })
+                        state.metadata["critic_verdict"] = (
+                            "PASS" if omega_result.get("success") else "RETRY"
+                        )
+                    elif strategy == "hydra_swarm":
+                        from backend.agent.orchestration.hydra_swarm import HydraSwarm
+                        hydra = HydraSwarm(self.router, self.tool_registry)
+                        hydra_result = await hydra.run(
+                            task=current_target,
+                        )
+                        state.results.append({
+                            "step": i,
+                            "output": str(hydra_result),
+                        })
+                        state.metadata["critic_verdict"] = "PASS"
                     elif agent_override:
                         # Use swarm with strategy-specific agents
                         swarm_result = await self.swarm.run(
