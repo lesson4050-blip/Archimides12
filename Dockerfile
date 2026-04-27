@@ -35,9 +35,10 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && npm install -g pnpm typescript \
     && rm -rf /var/lib/apt/lists/*
+# Security: run as non-root user
+RUN useradd --uid 1000 --create-home --shell /bin/bash archimedes
 
 WORKDIR /app
-
 # Copy built wheels and install them
 COPY --from=builder /app/wheels /wheels
 RUN pip install --no-cache /wheels/* && rm -rf /wheels
@@ -48,12 +49,15 @@ RUN python3 -m playwright install --with-deps chromium || true
 # Copy application
 COPY . /app/
 
+RUN chown -R archimedes:archimedes /app
+USER archimedes
+
 # Create directories and set permissions
 RUN mkdir -p /app/logs /app/data /app/workspace && \
     chmod -R 755 /app
 
 # Expose ports
-EXPOSE 8000 3000 11434
+EXPOSE 8000
 
 # Startup script
 RUN cat > /app/start.sh << 'EOF'

@@ -431,6 +431,19 @@ class OmegaCodeAct:
                 exec_result = await self._execute_code_safe(code, session_id, cwd)
                 output = exec_result.get("output", "")
                 execution_output += output + "\n"
+                
+                # Track modified files via git diff
+                try:
+                    diff_result = subprocess.run(
+                        ["git", "diff", "--name-only"],
+                        cwd=cwd, capture_output=True, text=True, timeout=5
+                    )
+                    for fname in diff_result.stdout.strip().split("\n"):
+                        fname = fname.strip()
+                        if fname and fname not in state.modified_files:
+                            state.modified_files.append(fname)
+                except Exception:
+                    pass
                 state.all_outputs.append(exec_result)
                 
                 if websocket_send:

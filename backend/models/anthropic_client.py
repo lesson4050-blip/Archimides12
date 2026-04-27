@@ -68,22 +68,132 @@ class AnthropicClient:
             logger.error(f"Anthropic API error: {e}")
             raise
             
-    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, **kwargs) -> Dict[str, Any]:
-        """Wrapper for generate_with_tools, ignoring tools for now."""
-        # TODO: Implement native tool calling for Anthropic
-        result = await self.generate(messages, **kwargs)
-        return {
-            "model_used": "anthropic",
-            "thinking": "",
-            "tool_call": None,
-            "text": result.get("text", ""),
-            "tokens_used": result.get("usage", {}).get("completion_tokens", 0)
-        }
-        
-    async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, on_token=None, **kwargs) -> Dict[str, Any]:
-        """Wrapper for streaming, falls back to non-streaming for now."""
-        # TODO: Implement streaming for Anthropic
-        result = await self.generate_with_tools(messages, tools, **kwargs)
-        if on_token and result.get("text"):
-            await on_token({"type": "token", "content": result.get("text")})
-        return result
+    async def generate_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Generate with native Anthropic tool calling."""
+        if not self.is_available:
+            raise ValueError("Anthropic client unavailable")
+
+        system_prompt = ""
+        anthropic_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_prompt += content + "\n"
+            elif role in ("user", "assistant"):
+                if content:
+                    anthropic_messages.append({"role": role, "content": content})
+            elif role == "tool":
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": f"Tool result: {content}"
+                })
+
+        if not anthropic_messages:
+            anthropic_messages = [{"role": "user", "content": "Continue."}]
+
+        import anthropic as anthropic_lib
+
+        # Convert OpenAI-style tools to Anthropic format
+        anthropic_tools = []
+        if tools:
+            for tool in tools:
+                if tool.get("type") == "function":
+                    fn = tool["function"]
+                    anthropic_tools.append({
+                        "name": fn["name"],
+                        "description": fn.get("description", ""),
+                        "input_schema": fn.get("parameters", {"type": "object"})
+                    })
+
+        create_kwargs = dict(
+            model=kwargs.get("model", self.default_model),
+            messages=anthropic_messages,
+            max_tokens=kwargs.get("max_tokens", 4096),
+        )
+        if system_prompt.strip():
+            create_kwargs["system"] = system_prompt.strip()
+        if anthropic_tools:
+            create_kwargs["tools"] = anthropic_tools
+
+        try:
+            response = await self._client.messages.create(**create_kwargs)
+
+            text = ""
+            tool_call = None
+
+            for block in response.content:
+                if block.type == "text":
+                    text += block.text
+                elif block.type == "tool_use":
+                    tool_call = {
+                        "name": block.name,
+                        "params": block.input or {}
+                    }
+
+            return {
+                "model_used": response.model,
+                "thinking": "",
+                "tool_call": tool_call,
+                "text": text,
+                "tokens_used": response.usage.output_tokens
+            }
+        except Exception as e:
+            logger.error(f"Anthropic generate_with_tools error: {e}")
+            raise
+
+    async def generate_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        on_token=None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """True streaming from Anthropic API."""
+        if not self.is_available:
+            raise ValueError("Anthropic client unavailable")
+
+        system_prompt = ""
+        anthropic_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                system_prompt += content + "\n"
+            elif role in ("user", "assistant") and content:
+                anthropic_messages.append({"role": role, "content": content})
+
+        if not anthropic_messages:
+            anthropic_messages = [{"role": "user", "content": "Continue."}]
+
+        full_text = ""
+        create_kwargs = dict(
+            model=kwargs.get("model", self.default_model),
+            messages=anthropic_messages,
+            max_tokens=kwargs.get("max_tokens", 4096),
+        )
+        if system_prompt.strip():
+            create_kwargs["system"] = system_prompt.strip()
+
+        try:
+            async with self._client.messages.stream(**create_kwargs) as stream:
+                async for text_chunk in stream.text_stream:
+                    full_text += text_chunk
+                    if on_token:
+                        await on_token({"type": "token", "content": text_chunk})
+
+            return {
+                "model_used": self.default_model,
+                "thinking": "",
+                "tool_call": None,
+                "text": full_text,
+                "tokens_used": len(full_text.split())
+            }
+        except Exception as e:
+            logger.error(f"Anthropic stream error: {e}, falling back")
+            return await self.generate_with_tools(messages, tools, **kwargs)
