@@ -22,14 +22,19 @@ self_play_loop_instance = None
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Wire correlated observability
-from backend.utils.observability import configure_global_observability
-configure_global_observability()
-logger.info("Correlated logging active — session_id and trace_id in all logs")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Archimedes Backend starting up...")
+    
+    # Configure correlated observability (session_id + trace_id in all logs)
+    try:
+        from backend.utils.observability import configure_global_observability
+        configure_global_observability()
+        logger.info("Correlated logging active — session_id and trace_id enabled")
+    except Exception as e:
+        logger.warning(f"Observability setup failed (non-critical): {e}")
     
     if not settings.JWT_SECRET_KEY:
         import secrets

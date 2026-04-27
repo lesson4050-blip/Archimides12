@@ -59,37 +59,24 @@ RUN mkdir -p /app/logs /app/data /app/workspace && \
 # Expose ports
 EXPOSE 8000
 
-# Startup script
+# Startup script (lightweight init check only)
 RUN cat > /app/start.sh << 'EOF'
 #!/bin/bash
-echo "🚀 ARCHIMEDES COSMO - DOCKER STARTUP"
-echo "======================================"
+set -e
+echo "🚀 ARCHIMEDES — starting up"
 
+# Create required directories
 mkdir -p /app/logs /app/data /app/workspace
 
-echo "📊 Инициализация базы данных..."
+# Initialize database (idempotent)
 python3 -c "
 import asyncio
 from backend.db.crud import init_db
 asyncio.run(init_db())
-print('✅ БД инициализирована')
-" 2>/dev/null || echo "⚠️ БД уже инициализирована"
+print('✅ Database ready')
+" 2>/dev/null || echo "⚠️  DB init skipped (already exists)"
 
-echo "🔧 Запуск backend сервера..."
-cd /app
-nohup python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 2 > /app/logs/backend.log 2>&1 &
-BACKEND_PID=$!
-echo "✅ Backend запущен (PID: $BACKEND_PID)"
-sleep 2
-
-if curl -s http://localhost:8000/api/health > /dev/null; then
-    echo "✅ Backend доступен на http://localhost:8000"
-else
-    echo "⚠️ Backend еще загружается..."
-fi
-
-echo "✅ Archimedes is ready. Backend running on port 8000."
-tail -f /app/logs/backend.log 2>/dev/null || sleep infinity
+echo "✅ Pre-flight complete. Handing off to uvicorn..."
 EOF
 
 RUN chmod +x /app/start.sh
@@ -97,4 +84,12 @@ RUN chmod +x /app/start.sh
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-CMD ["/app/start.sh"]
+# Use shell form so uvicorn is PID 1 and receives SIGTERM directly.
+# --workers 1 inside async FastAPI — multiple workers share no state.
+# Scale horizontally via docker-compose replicas instead.
+ENTRYPOINT ["/app/start.sh"]
+CMD ["python3", "-m", "uvicorn", "backend.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--timeout-graceful-shutdown", "30"]
