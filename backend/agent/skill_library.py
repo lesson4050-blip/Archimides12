@@ -256,7 +256,7 @@ class SkillLibrary:
             return None
         try:
             return json.loads(skill_file.read_text("utf-8"))
-        except Exception as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
             logger.warning(f"Failed to load skill {sig}: {e}")
             return None
 

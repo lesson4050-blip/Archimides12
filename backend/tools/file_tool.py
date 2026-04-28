@@ -43,7 +43,8 @@ class FileTool:
         BLOCKED_PREFIXES = [
             "/etc/", "/sys/", "/proc/", "/dev/",
             "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/",
-            "C:\\Windows\\", "C:\\System32\\"
+            "/var/", "/root/", "/boot/", "/opt/",
+            "C:\\Windows\\", "C:\\System32\\", "C:\\Program Files\\"
         ]
         
         for prefix in BLOCKED_PREFIXES:
@@ -76,11 +77,13 @@ class FileTool:
             pass  # Fail silently if git fails, don't block the write
 
     async def execute(self, session_id: str, action: str, path: str, content: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-        if action != "list":
-            is_safe, result_path = self._safe_path(path)
-            if not is_safe:
-                return {"success": False, "error": result_path}
-            path = result_path
+        # Validation for ALL actions
+        is_safe, result_path = self._safe_path(path)
+        if not is_safe:
+            return {"success": False, "error": result_path}
+        
+        # Normalize path for sandbox
+        path = result_path.replace("\\", "/")
 
         if action == "read":
             start_line = kwargs.get("start_line")

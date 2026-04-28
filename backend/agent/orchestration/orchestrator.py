@@ -164,7 +164,8 @@ async def classify_task_with_llm(
         if category in valid:
             complexity = "complex" if category not in ("single", "direct") else "simple"
             return complexity, category
-    except Exception:
+    except Exception as e:
+        logger.warning(f"LLM classification failed: {e}")
         pass
     return fallback_result or ("medium", "single")
 
@@ -250,7 +251,8 @@ class AgentOrchestrator:
                     fallback_result=(complexity, strategy)
                 )
                 logger.info(f"LLM routing: {complexity}/{strategy}")
-            except Exception:
+            except Exception as e:
+                logger.warning(f"LLM routing failed: {e}")
                 pass  # Keep regex result
         
         if complexity == "simple":
@@ -368,7 +370,8 @@ class AgentOrchestrator:
                         context_str = state.task_description
                         try:
                             context_str += "\n" + "\n".join([msg["content"] for msg in state.history if msg["role"] == "user"])
-                        except Exception:
+                        except (KeyError, TypeError) as e:
+                            logger.debug(f"Failed to build MCTS context: {e}")
                             pass
                             
                         mcts_result = await self.mcts_manager.run_mcts(

@@ -30,9 +30,9 @@ async def lifespan(app: FastAPI):
     
     # Configure correlated observability (session_id + trace_id in all logs)
     try:
-        from backend.utils.observability import configure_global_observability
-        configure_global_observability()
-        logger.info("Correlated logging active — session_id and trace_id enabled")
+        from backend.utils.observability import configure_json_logging
+        configure_json_logging()
+        logger.info("Observability initialized (LOG_FORMAT detection active)")
     except Exception as e:
         logger.warning(f"Observability setup failed (non-critical): {e}")
     

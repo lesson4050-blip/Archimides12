@@ -13,7 +13,18 @@
 
 Archimedes is a fully autonomous AI agent platform. It does not just answer questions — it plans, executes, debugs, and delivers results using real tools: browser automation, code execution, file management, web search, and presentation generation.
 
-Through recent production hardening, Archimedes features robust quality gates, context isolation, and a multi-dimensional swarm synthesis engine to prevent task degradation and ensure high-reliability outputs.
+Through recent production hardening, Archimedes features:
+- **Modular Architecture**: Frontend refactored into decoupled, Zustand-powered components with a clean custom hook architecture.
+- **Production Observability**: Structured JSON logging, correlation IDs (Session/Trace), and Prometheus `/metrics` endpoint for enterprise-grade monitoring.
+- **Hardened Security**: 
+  - JWT Refresh tokens for secure long-lived sessions.
+  - Multi-layer sandbox path validation (`BLOCKED_PREFIXES`) and realpath-based traversal protection.
+  - No-eval() policy in core execution paths.
+- **Cognitive Reliability**: 
+  - **Ollama-first Routing**: Privacy-preserving local execution by default with smart model fallback.
+  - **Hydra Swarm v2**: Hierarchical multi-agent pipeline (Scout → Warrior → Sentinel) with automated synthesis.
+  - **MCTS Exploration**: Monte Carlo Tree Search for complex planning under uncertainty.
+
 
 ---
 

@@ -3,7 +3,7 @@ import pytest
 import os
 import json
 import shutil
-from backend.agent.skills.skill_engine import SkillEngine
+from backend.agent.skill_library import SkillLibrary as SkillEngine
 
 
 @pytest.fixture

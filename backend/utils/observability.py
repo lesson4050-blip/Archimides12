@@ -34,14 +34,43 @@ def setup_correlated_logger(name: str = None) -> logging.Logger:
     # Usually handled globally, but here we can ensure the format is right
     return logger
 
-def configure_global_observability():
+import json
+
+class JSONFormatter(logging.Formatter):
+    """Formatter that outputs logs as JSON."""
+    def format(self, record: logging.LogRecord) -> str:
+        log_obj = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "session_id": getattr(record, "session_id", "-"),
+            "trace_id": getattr(record, "trace_id", "-"),
+            "logger": record.name,
+            "message": record.getMessage()
+        }
+        if record.exc_info:
+            log_obj["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_obj)
+
+def configure_global_observability(use_json: bool = False):
     """Configure the root logger to use correlated formatter."""
     root_logger = logging.getLogger()
     root_logger.addFilter(CorrelatedLogFilter())
     
     # Update all handlers to show session and trace IDs
-    formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [S:%(session_id)s] [T:%(trace_id)s] %(name)s - %(message)s'
-    )
+    if use_json:
+        formatter = JSONFormatter()
+    else:
+        formatter = logging.Formatter(
+            '[%(asctime)s] [%(levelname)s] [S:%(session_id)s] [T:%(trace_id)s] %(name)s - %(message)s'
+        )
     for handler in root_logger.handlers:
         handler.setFormatter(formatter)
+
+def configure_json_logging():
+    """Configure JSON logging based on LOG_FORMAT env var."""
+    import os
+    log_format = os.getenv("LOG_FORMAT", "text").lower()
+    if log_format == "json":
+        configure_global_observability(use_json=True)
+    else:
+        configure_global_observability(use_json=False)

@@ -36,10 +36,14 @@ class RegisterRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user_id: str
     role: str
     expires_in_hours: int
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class UserResponse(BaseModel):
@@ -119,11 +123,48 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             )
         
         token = create_access_token(user.id, user.role)
+        from backend.auth.jwt_handler import create_refresh_token
+        refresh_token = create_refresh_token(user.id, user.role)
         
         logger.info(f"User logged in: {user.email}")
         
         return LoginResponse(
             access_token=token,
+            refresh_token=refresh_token,
+            user_id=user.id,
+            role=user.role,
+            expires_in_hours=settings.JWT_EXPIRATION_HOURS,
+        )
+
+
+@router.post("/refresh", response_model=LoginResponse)
+async def refresh_access_token(request: RefreshRequest):
+    """Refresh access token using refresh token."""
+    from backend.auth.jwt_handler import verify_token, create_access_token, create_refresh_token
+    payload = verify_token(request.refresh_token)
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.id == payload["user_id"]))
+        user = result.scalar_one_or_none()
+        
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or inactive",
+            )
+            
+        new_access = create_access_token(user.id, user.role)
+        new_refresh = create_refresh_token(user.id, user.role)
+        
+        return LoginResponse(
+            access_token=new_access,
+            refresh_token=new_refresh,
             user_id=user.id,
             role=user.role,
             expires_in_hours=settings.JWT_EXPIRATION_HOURS,

@@ -48,15 +48,26 @@ class ModelRouter:
         task_hint: str,
         tools: list
     ) -> list:
-        """Single source of truth for model routing order."""
-        if task_hint in self.SPEED_TASKS:
-            order = [self.groq, self.anthropic, self.gemini, self.ollama]
+        """
+        Single source of truth for model routing order.
+        Ollama-first for local/private/default tasks.
+        Cloud providers as fallback when available.
+        """
+        if task_hint in ("local", "private", "execute"):
+            # Privacy/offline: Ollama always first
+            order = [self.ollama, self.groq, self.gemini, self.anthropic]
         elif task_hint in self.QUALITY_TASKS:
-            order = [self.anthropic, self.ollama, self.groq, self.gemini]
+            # Quality tasks: best model first, Ollama as fallback
+            order = [self.anthropic, self.gemini, self.ollama, self.groq]
+        elif task_hint in self.SPEED_TASKS:
+            # Speed tasks: fastest first
+            order = [self.groq, self.ollama, self.gemini, self.anthropic]
         elif tools:
-            order = [self.anthropic, self.groq, self.gemini, self.ollama]
+            # Tool calling: Ollama first (it handles tools via injection)
+            order = [self.ollama, self.anthropic, self.groq, self.gemini]
         else:
-            order = [self.anthropic, self.groq, self.gemini, self.ollama]
+            # Default: Ollama first as primary local provider
+            order = [self.ollama, self.groq, self.gemini, self.anthropic]
         return [c for c in order if c is not None]
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:

@@ -54,10 +54,16 @@ class HydraAgent:
         done_signal = done_signal or f"{self.role.upper()}_DONE"
         last_text = ""
 
+        ROLE_HINTS = {
+            "scout": "fast",
+            "warrior": "code",
+            "sentinel": "think",
+            "commander": "plan",
+        }
         for _ in range(max_iters):
             response = await self.router.generate(
                 messages=self.history,
-                task_hint="think"
+                task_hint=ROLE_HINTS.get(self.role, "default")
             )
             text = response.get("text", "")
             if not text:

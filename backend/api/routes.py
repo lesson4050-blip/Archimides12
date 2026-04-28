@@ -12,6 +12,8 @@ from pathlib import Path
 import os
 import uuid
 import logging
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,11 @@ async def health_check() -> Dict[str, Any]:
         "timestamp": datetime.now().isoformat(),
         "version": "2.0.0-cosmo"
     }
+
+@router.get("/metrics", summary="Prometheus Metrics")
+async def get_metrics():
+    """Expose Prometheus metrics."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/agent/status", summary="Получить статус агента", response_model=AgentStatus)

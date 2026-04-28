@@ -17,6 +17,23 @@ class OllamaClient:
         )
         self.model = settings.OLLAMA_MODEL
 
+    # Task-specific model selection (if multiple models installed)
+    TASK_MODELS = {
+        "think": "qwen2.5:32b",
+        "plan": "qwen2.5:32b",
+        "code": "qwen2.5-coder:32b",
+        "fast": "qwen2.5:7b",
+        "summarize": "qwen2.5:7b",
+    }
+
+    def _select_model(self, task_hint: str = "default") -> str:
+        """Select optimal Ollama model based on task type.
+        Falls back to default model if task-specific model is not available."""
+        preferred = self.TASK_MODELS.get(task_hint)
+        if preferred:
+            return preferred
+        return self.model
+
     def _get_available_tool_names(
         self, tools: Optional[List[Dict]]
     ) -> List[str]:
@@ -71,7 +88,7 @@ NEVER mix tool JSON with explanation text.
         tools: Optional[List[Dict]] = None
     ) -> Any:
         chat_kwargs = {
-            "model": self.model,
+            "model": self._select_model(self._current_task_hint) if hasattr(self, '_current_task_hint') else self.model,
             "messages": messages,
             "options": {
                 "num_ctx": min(
@@ -106,8 +123,10 @@ NEVER mix tool JSON with explanation text.
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
-        force_json_schema: Optional[Dict] = None
+        force_json_schema: Optional[Dict] = None,
+        task_hint: str = "default"
     ) -> Dict[str, Any]:
+        self._current_task_hint = task_hint
 
         messages = [msg.copy() for msg in messages]
         available_names = self._get_available_tool_names(tools)
@@ -139,7 +158,7 @@ NEVER mix tool JSON with explanation text.
                 # If force_json_schema and no tools, apply format constraint
                 if force_json_schema and not tools:
                     chat_kwargs = {
-                        "model": self.model,
+                        "model": self._select_model(self._current_task_hint) if hasattr(self, '_current_task_hint') else self.model,
                         "messages": messages,
                         "format": force_json_schema,
                         "options": {

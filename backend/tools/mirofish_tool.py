@@ -173,8 +173,9 @@ Return ONLY valid JSON.
                 import json
                 try:
                     data = json.loads(text.strip())
-                except:
+                except json.JSONDecodeError:
                     # Very basic fallback if repair fails
+                    logger.warning(f"MiroFish failed to parse JSON for persona {p['id']}")
                     data = {"reaction": "neutral", "comment": text[:100]}
 
                 return {**p, **data}

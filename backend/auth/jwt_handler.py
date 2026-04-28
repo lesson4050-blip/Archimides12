@@ -19,6 +19,7 @@ def create_access_token(user_id: str, role: str = "user", extra: dict = None) ->
     payload = {
         "sub": user_id,
         "role": role,
+        "type": "access",
         "iat": datetime.now(tz=timezone.utc),
         "exp": datetime.now(tz=timezone.utc) + timedelta(hours=settings.JWT_EXPIRATION_HOURS),
     }
@@ -26,7 +27,21 @@ def create_access_token(user_id: str, role: str = "user", extra: dict = None) ->
         payload.update(extra)
     
     token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
-    logger.info(f"JWT created for user {user_id} (role={role}, expires={settings.JWT_EXPIRATION_HOURS}h)")
+    logger.info(f"JWT access token created for user {user_id} (role={role}, expires={settings.JWT_EXPIRATION_HOURS}h)")
+    return token
+
+
+def create_refresh_token(user_id: str, role: str = "user") -> str:
+    """Create a JWT refresh token."""
+    payload = {
+        "sub": user_id,
+        "role": role,
+        "type": "refresh",
+        "iat": datetime.now(tz=timezone.utc),
+        "exp": datetime.now(tz=timezone.utc) + timedelta(days=7),
+    }
+    token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    logger.info(f"JWT refresh token created for user {user_id} (expires=7d)")
     return token
 
 
