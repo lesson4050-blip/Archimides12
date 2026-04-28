@@ -1,3 +1,4 @@
+"""Tests for SkillEngine (backend.agent.skills.skill_engine)."""
 import pytest
 import os
 import json
@@ -8,8 +9,11 @@ from backend.agent.skills.skill_engine import SkillEngine
 @pytest.fixture
 def engine(tmp_path):
     """Create a SkillEngine with a temporary skills directory."""
-    e = SkillEngine()
-    e.skills_dir = str(tmp_path / "skills")
+    e = SkillEngine(
+        base_dir=str(tmp_path / "skills_data"),
+        chroma_path=str(tmp_path / "chroma_test")
+    )
+    e.skills_dir = str(tmp_path / "skills_playbooks")
     os.makedirs(e.skills_dir, exist_ok=True)
     return e
 
@@ -28,26 +32,38 @@ def test_extract_and_save_skill_trivial(engine):
     ]
     # Should not raise, even if it produces nothing meaningful
     result = engine.extract_and_save_skill("hello", history, success=True)
-    # Result can be None or a valid skill — just verify no crash
-    assert result is None or isinstance(result, dict)
+    # Result can be None or a valid skill id — just verify no crash
+    assert result is None or isinstance(result, str)
 
 
 def test_get_skill_prompt_injection(engine):
     """Should produce a valid prompt from a skill dict."""
     skill = {
-        "task": "deploy app",
+        "id": "test123",
         "trigger": {
             "intent": "deploy app",
             "variables": {}
         },
         "steps": [
-            {"tool": "shell", "params_template": {"cmd": "npm run build"}, "success": True},
-            {"tool": "shell", "params_template": {"cmd": "npm start"}, "success": True},
+            {"tool": "shell", "params_template": {"cmd": "npm run build"}},
+            {"tool": "shell", "params_template": {"cmd": "npm start"}},
         ]
     }
     prompt = engine.get_skill_prompt_injection(skill)
     assert isinstance(prompt, str)
     assert len(prompt) > 0
+
+
+def test_advanced_templatize(engine):
+    """Should detect repeating parameters and create shared variables."""
+    steps = [
+        {"tool": "file", "params": {"path": "/tmp/myfile.py", "content": "print(1)"}},
+        {"tool": "shell", "params": {"command": "python /tmp/myfile.py"}},
+    ]
+    templated, variables = engine._advanced_templatize(steps)
+    assert isinstance(templated, list)
+    assert isinstance(variables, dict)
+    assert len(templated) == 2
 
 
 def test_compress_skill_legacy_bridge():

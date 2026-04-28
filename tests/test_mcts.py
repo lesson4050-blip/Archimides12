@@ -32,7 +32,7 @@ async def test_mcts_run_returns_string(mock_router):
     assert manager is not None
     assert manager.num_simulations == 8
     assert manager.max_depth == 3
-    assert abs(manager.C - 1.414) < 0.01  # sqrt(2)
+    assert abs(manager.exploration_constant - 1.414) < 0.01  # sqrt(2)
 
 
 @pytest.mark.asyncio
@@ -59,4 +59,4 @@ def test_mcts_parameters_are_correct():
     manager = MCTSManager(workspace_dir="/tmp")
     assert manager.num_simulations == 8
     assert manager.max_depth == 3
-    assert abs(manager.C - math.sqrt(2)) < 0.01
+    assert abs(manager.exploration_constant - math.sqrt(2)) < 0.01

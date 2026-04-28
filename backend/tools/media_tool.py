@@ -315,7 +315,7 @@ class MediaTool:
         meta_path = os.path.join(
             ARTIFACTS_DIR, f"{filename}.meta.json"
         )
-        meta["saved_at"] = datetime.utcnow().isoformat()
+        meta["saved_at"] = datetime.now(datetime.timezone.utc).isoformat()
         try:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)

@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-SESSION_DIR = Path("/tmp/archimedes_sessions")
+SESSION_DIR = Path("data/sessions")
 
 
 class SessionStore:

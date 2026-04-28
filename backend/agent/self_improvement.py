@@ -82,19 +82,19 @@ def _normalize_error(error: str) -> str:
     Strips line numbers, file paths, timestamps, and memory addresses.
     """
     pattern = error[:300]
-    # Replace numbers with placeholder
-    pattern = re.sub(r'\b\d+\b', 'N', pattern)
-    # Replace file paths (Unix and Windows)
-    pattern = re.sub(r'[A-Za-z]:\\[^\s]+', 'PATH', pattern)
-    pattern = re.sub(r'/[^\s]+', '/PATH', pattern)
-    # Replace hex addresses
-    pattern = re.sub(r'0x[0-9a-fA-F]+', '0xADDR', pattern)
-    # Replace UUIDs
+    # 1. Replace UUIDs FIRST (before numbers are replaced)
     pattern = re.sub(
         r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
         'UUID', pattern
     )
-    # Normalize whitespace
+    # 2. Replace hex addresses
+    pattern = re.sub(r'0x[0-9a-fA-F]+', '0xADDR', pattern)
+    # 3. Replace file paths (Unix and Windows)
+    pattern = re.sub(r'[A-Za-z]:\\[^\s]+', 'PATH', pattern)
+    pattern = re.sub(r'/[^\s]+', '/PATH', pattern)
+    # 4. Replace numbers LAST
+    pattern = re.sub(r'\b\d+\b', 'N', pattern)
+    # 5. Normalize whitespace
     pattern = re.sub(r'\s+', ' ', pattern).strip()
     return pattern
 

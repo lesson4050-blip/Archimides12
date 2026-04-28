@@ -139,7 +139,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             email="dev@archimedes.local",
             role="admin",
             is_active=True,
-            created_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(datetime.timezone.utc).isoformat(),
             has_api_key=False,
         )
     

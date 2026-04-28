@@ -167,6 +167,11 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Session-ID"],
 )
 
+# Phase 3: Security middleware
+from backend.middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
+app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
+app.add_middleware(SecurityHeadersMiddleware)
+
 app.include_router(auth_router)
 app.include_router(main_router)
 app.include_router(settings_router)
@@ -230,6 +235,12 @@ async def api_health():
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    # Phase 3: Validate session_id format
+    from backend.middleware.security import validate_session_id
+    if not validate_session_id(session_id):
+        await websocket.close(code=4001, reason="Invalid session_id format")
+        return
+
     await manager.connect(websocket, session_id)
     try:
         while True:

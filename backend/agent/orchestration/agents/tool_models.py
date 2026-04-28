@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Union, Tuple
 
 class FileToolModel(BaseModel):
@@ -7,8 +7,9 @@ class FileToolModel(BaseModel):
     content: Optional[str] = Field(None, description="Content to write or append")
     encoding: Optional[str] = Field("utf-8", description="File encoding")
 
-    @validator('action')
-    def validate_action(cls, v):
+    @field_validator('action')
+    @classmethod
+    def validate_action(cls, v: str) -> str:
         allowed = ['read', 'write', 'append', 'delete', 'list', 'exists']
         if v not in allowed:
             raise ValueError(f"Action must be one of {allowed}")

@@ -193,7 +193,7 @@ async def connect_app(
     _write_env_key(app_info["env_key"], req.token)
     data = _load()
     data["apps"][req.app_id] = {
-        "connected_at": datetime.datetime.utcnow().isoformat(),
+        "connected_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "env_key": app_info["env_key"]
     }
     _save(data)
@@ -229,7 +229,7 @@ async def save_api_key(
     _write_env_key(provider["env_key"], req.api_key)
     data = _load()
     data["api_keys"][req.provider_id] = {
-        "connected_at": datetime.datetime.utcnow().isoformat(),
+        "connected_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "env_key": provider["env_key"],
         "masked": "***" + req.api_key[-4:] if len(req.api_key) > 4 else "***"
     }
@@ -266,7 +266,7 @@ async def add_mcp_server(
     data["mcp_servers"][req.name] = {
         "command": req.command, "args": req.args,
         "description": req.description,
-        "added_at": datetime.datetime.utcnow().isoformat()
+        "added_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }
     _save(data)
     return {"success": True}

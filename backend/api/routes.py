@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["cosmo"])
 
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 class TaskRequest(BaseModel):
     """Запрос на выполнение задачи."""
@@ -28,8 +28,9 @@ class TaskRequest(BaseModel):
     priority: int = 1
     timeout: int = 300
 
-    @validator("description")
-    def task_not_empty(cls, v):
+    @field_validator("description")
+    @classmethod
+    def task_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("description cannot be empty or whitespace")
         return v.strip()

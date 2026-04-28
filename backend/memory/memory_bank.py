@@ -6,7 +6,7 @@ On each new session, relevant memories are loaded automatically.
 import logging
 import os
 import aiosqlite
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ async def save_fact(fact: str, session_id: str = "global",
                 "(session_id, fact, category, importance, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (session_id, fact[:2000], category, importance,
-                 datetime.utcnow().isoformat())
+                 datetime.now(timezone.utc).isoformat())
             )
             await conn.commit()
         logger.info(f"Memory Bank: saved fact (category={category})")

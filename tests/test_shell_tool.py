@@ -1,6 +1,13 @@
 """Tests for PersistentShellSession."""
+import os
 import pytest
 import asyncio
+
+# Shell tool spawns /bin/bash — skip on Windows
+pytestmark = pytest.mark.skipif(
+    os.name == "nt",
+    reason="PersistentShellSession requires /bin/bash (Linux only)"
+)
 
 
 @pytest.mark.asyncio

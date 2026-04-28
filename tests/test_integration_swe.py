@@ -18,12 +18,12 @@ async def test_codeact_executor_basic():
         "tool_call": None
     }
 
-    with patch("backend.sandbox.singleton.sandbox_manager") as mock_sandbox:
-        mock_sandbox.executor.execute_code = AsyncMock(return_value={
-            "success": True,
-            "output": "TASK_COMPLETE: hello world"
-        })
-        
+    mock_sandbox_instance = MagicMock()
+    mock_sandbox_instance.run_command = MagicMock(
+        return_value=("TASK_COMPLETE: hello world", "", 0)
+    )
+
+    with patch("backend.sandbox.e2b_sandbox.E2BSandbox", return_value=mock_sandbox_instance):
         executor = CodeActExecutor(mock_router)
         result = await executor.execute(
             task="Print hello world",

@@ -129,7 +129,7 @@ class ErrorRecovery:
             params_hash=self._hash_params(params),
             error=error[:500],
             error_type=error_type,
-            timestamp=datetime.datetime.utcnow().isoformat(),
+            timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             file_path=file_path,
             git_checkpoint=self._checkpoints.get("current")
         )
@@ -278,7 +278,7 @@ class ErrorRecovery:
             )
 
             # Commit checkpoint
-            msg = f"{self.CHECKPOINT_PREFIX}: {label or session_id} @ {datetime.datetime.utcnow().isoformat()}"
+            msg = f"{self.CHECKPOINT_PREFIX}: {label or session_id} @ {datetime.datetime.now(datetime.timezone.utc).isoformat()}"
             result = subprocess.run(
                 ["git", "commit", "-m", msg, "--allow-empty"],
                 cwd=self.workspace_dir,
