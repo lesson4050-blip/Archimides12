@@ -39,7 +39,7 @@ async def start_artist():
         return False
 
     # Check if built
-    build_dir = ARTIST_DIR / ".next"
+    build_dir = ARTIST_DIR / ".next-build"
     npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
     if not build_dir.exists():
         logger.info("Building COSMO Artist (first time)...")
@@ -77,7 +77,7 @@ async def start_artist():
 
     try:
         _process = subprocess.Popen(
-            [npm_cmd, "start", "--", "--port", str(ARTIST_PORT)],
+            [npm_cmd, "run", "dev", "--", "--port", str(ARTIST_PORT)],
             cwd=str(ARTIST_DIR),
             env=env,
             stdout=sys.stdout,

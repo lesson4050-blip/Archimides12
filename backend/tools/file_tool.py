@@ -32,28 +32,46 @@ class FileTool:
 
     def _safe_path(self, path: str, workspace: str = None) -> tuple[bool, str]:
         """
-        Validate path is safe.
+        Validate path is safe and within workspace boundaries.
         Returns (is_safe, resolved_path or error_message).
         """
         import os
-        # Resolve to absolute path
-        resolved = os.path.realpath(os.path.abspath(path))
         
-        # Block system paths
+        # Get absolute path without resolving symlinks first for initial check
+        abs_path = os.path.abspath(path)
+        
+        # Resolve all symlinks to get the REAL location on disk
+        try:
+            resolved = os.path.realpath(abs_path)
+        except Exception as e:
+            return False, f"Invalid path or permission error: {str(e)}"
+        
+        # Block system paths (more comprehensive list)
         BLOCKED_PREFIXES = [
             "/etc/", "/sys/", "/proc/", "/dev/",
             "/usr/bin/", "/usr/sbin/", "/bin/", "/sbin/",
+            "/usr/lib/", "/usr/lib64/", "/lib/", "/lib64/",
             "/var/", "/root/", "/boot/", "/opt/",
-            "C:\\Windows\\", "C:\\System32\\", "C:\\Program Files\\"
+            "C:\\Windows\\", "C:\\System32\\", "C:\\Program Files\\", "C:\\Users\\"
         ]
         
         for prefix in BLOCKED_PREFIXES:
             if resolved.startswith(prefix) or resolved.lower().startswith(prefix.lower()):
+                # Allow access if it's explicitly part of the workspace (e.g. if workspace is in /opt/)
+                # but generally these are off-limits.
                 return False, f"Access to system path blocked: {prefix}"
         
-        # Block path traversal
-        if ".." in path:
-            return False, "Path traversal (../) is not allowed"
+        # Enforce Workspace Root if provided
+        workspace_root = workspace or os.getcwd()
+        resolved_workspace = os.path.realpath(workspace_root)
+        
+        if not resolved.startswith(resolved_workspace):
+            # Check if it's trying to escape via symlink or ..
+            return False, f"Security violation: Path {path} (resolved to {resolved}) is outside the workspace root {resolved_workspace}"
+
+        # Block path traversal in the raw input as an extra layer
+        if ".." in path.replace("\\", "/").split("/"):
+            return False, "Path traversal (../) is explicitly forbidden for security reasons."
         
         return True, resolved
 

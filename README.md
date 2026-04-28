@@ -14,180 +14,124 @@
 Archimedes is a fully autonomous AI agent platform. It does not just answer questions — it plans, executes, debugs, and delivers results using real tools: browser automation, code execution, file management, web search, and presentation generation.
 
 Through recent production hardening, Archimedes features:
-- **Modular Architecture**: Frontend refactored into decoupled, Zustand-powered components with a clean custom hook architecture.
+- **Modular Architecture**: Frontend refactored into decoupled, Zustand-powered components with a clean custom hook architecture (`useSettings`).
 - **Production Observability**: Structured JSON logging, correlation IDs (Session/Trace), and Prometheus `/metrics` endpoint for enterprise-grade monitoring.
 - **Hardened Security**: 
   - JWT Refresh tokens for secure long-lived sessions.
   - Multi-layer sandbox path validation (`BLOCKED_PREFIXES`) and realpath-based traversal protection.
-  - No-eval() policy in core execution paths.
+  - Symbolic link escape prevention in `FileTool`.
 - **Cognitive Reliability**: 
   - **Ollama-first Routing**: Privacy-preserving local execution by default with smart model fallback.
   - **Hydra Swarm v2**: Hierarchical multi-agent pipeline (Scout → Warrior → Sentinel) with automated synthesis.
   - **MCTS Exploration**: Monte Carlo Tree Search for complex planning under uncertainty.
 
-
 ---
 
 ## Architecture
 
-**Agent Core**
-- `backend/agent/core.py` — ArchimedesCosmoAgent (196 lines)
-- `backend/agent/tool_initializer.py` — 25+ tools with per-tool error handling
-- `backend/agent/task_processor.py` — legacy fallback execution path
-- `backend/agent/tool_definition_cache.py` — O(1) tool definition caching
+Archimedes follows a decoupled Backend-Frontend architecture with a heavy focus on tool-use and planning reliability.
 
-**Orchestration**
-- `backend/agent/orchestration/orchestrator.py` — semantic task routing (9 strategies)
-- `backend/agent/orchestration/mcts.py` — real MCTS: UCB1 + LLM simulation (8 iterations)
-- `backend/agent/orchestration/swarm.py` — MicroAgentSwarm (coder/researcher/critic)
-- `backend/agent/codeact_executor.py` — CodeAct v2: Python REPL loop + TASK_COMPLETE
+### Backend Structure
+- `backend/agent/core.py` — **ArchimedesCosmoAgent**: The main cognitive engine.
+- `backend/agent/skill_engine.py` — **SkillEngine**: Dynamic loading of agent capabilities.
+- `backend/tools/` — **Toolbox**: 25+ atomic tools (File, Git, Shell, Vision, etc.).
+- `backend/orchestration/` — **Planning**: MCTS, Swarm logic, and Routing.
+- `backend/cosmo/` — **Artist Engine**: Handles real-time presentation generation.
 
-**Models**
-- `backend/models/model_router.py` — 3-tier routing: Groq → Gemini → Ollama
-- `backend/models/retry_wrapper.py` — exponential backoff with jitter
-- `backend/models/groq_client.py` — streaming SSE support
-- `backend/models/gemini_client.py` — streaming via google.generativeai
-
-**Tools (25+)**
-- `shell_tool.py` — PersistentShellSession (state preserved across calls)
-- `code_editor_tool.py` — surgical edits: find_replace, view_function, insert_after
-- `patch_tool.py` — unified diff generation and application
-- `git_tool.py` — status, diff, add, commit, push (async subprocess)
-- `vision_tool.py` — screenshot → Gemini Vision → analysis
-
-**Memory**
-- `backend/memory/context_manager.py` — self-healing (heal_context)
-- `backend/memory/consolidator.py` — nightly semantic knowledge compression
-- `backend/agent/session_store.py` — disk-backed session persistence
-
-**Benchmarks & Eval**
-- `backend/benchmarks/runner.py` — internal quick benchmark (4 categories)
-- `backend/benchmarks/swe_bench_adapter.py` — SWE-bench harness adapter
-- `scripts/run_swe_bench.py` — CLI evaluation runner
-- `backend/api/routes/benchmark.py` — REST endpoint /benchmark/run
-
-**CI/CD**
-- `.github/workflows/ci.yml` — pytest + eval + no-eval() check
-- `.github/workflows/swe_bench.yml` — SWE-bench CI pipeline
-
-**Extensions**
-- `vscode-extension/` — VSCode extension for direct IDE integration
+### Frontend Structure
+- `frontend/components/` — **UI Components**: Modularized components (Settings, Chat, Canvas).
+- `frontend/hooks/` — **Business Logic**: Decoupled React hooks for state and API interaction.
+- `frontend/lib/` — **State Management**: Zustand stores for global application state.
 
 ---
 
-## Key Features
-
-### 🧠 GraphRAG Memory
-Builds a knowledge graph of everything the agent learns. Not just facts — relationships. "This auth module depends on that DB service, and the user prefers JWT because we discussed it 3 weeks ago."
-
-### 🔌 Native MCP Tooling
-Deep integration with the Model Context Protocol (MCP) allows Archimedes to securely access local file systems, databases, GitHub repositories, and execution environments natively.
-
-### 🐝 Micro-Agent Swarm
-Complex tasks spawn specialized agents that debate: Coder writes, Critic audits for vulnerabilities, Tester verifies. You get the synthesized best result, not the first attempt.
-
-### 📈 Self-Improvement
-Every error is stored with its fix. Next time the same pattern appears, the agent already knows the solution. It gets better with every task.
-
-### 🧪 TDD Executor
-Before showing you code, the agent writes tests, runs them in sandbox, reads failures, fixes, and verifies. You receive tested, working code.
-
-### ⚡ COSMO Presentation
-Built-in Gamma/Kimi-level presentation generator. Say "make a pitch deck" — get a professional PPTX in minutes.
-
----
-
-## Tech Stack
+## 🛠 Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.11, FastAPI, WebSockets |
-| Frontend | Next.js 14, TypeScript, Tailwind CSS |
-| Local Models | Gemma 4 26B via Ollama |
-| Cloud Models | Groq (Llama 3.3 70B), Gemini 2.5 Flash |
-| Memory | ChromaDB, SQLite (GraphRAG + Memory Bank) |
-| Browser | Playwright (Chromium) |
-| Sandbox | Docker |
-| Presentations | COSMO Engine (Presenton, Apache 2.0) |
-| MCP | stdio transport, 10+ catalog servers |
+| **Backend** | Python 3.11, FastAPI, WebSockets, Pydantic v2 |
+| **Frontend** | Next.js 14 (App Router), TypeScript, Framer Motion |
+| **Local Models** | Gemma 2 / Llama 3 via Ollama |
+| **Cloud Models** | Groq (Llama 3.3 70B), Gemini 2.0 Pro/Flash |
+| **Database** | SQLite (Metadata), ChromaDB (Vector Search), Redis (Caching) |
+| **Observability** | Prometheus, Structured JSON Logs |
+| **Browser** | Playwright (Stealth mode) |
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
+### 1. Prerequisites
+- Python 3.11+
+- Node.js 18+
+- Docker (optional, for sandboxing)
+- [Ollama](https://ollama.ai/) installed and running
+
+### 2. Installation
 ```bash
-# 1. Clone
+# Clone the repository
 git clone https://github.com/lesson4050-blip/Archimides12.git
 cd Archimides12
 
-# 2. Install dependencies
+# Install Backend dependencies
 pip install -r requirements.txt
 
-# 3. Install COSMO engine dependencies
-pip install -r cosmo_engine_core/requirements.txt
+# Install Frontend dependencies
+cd frontend && npm install && cd ..
+```
 
-# 4. Set environment variables
+### 3. Environment Setup
+```bash
 cp .env.example .env
-# Edit .env: add GROQ_API_KEY, GOOGLE_API_KEY (optional)
+# Edit .env with your keys:
+# JWT_SECRET_KEY, GROQ_API_KEY, GOOGLE_API_KEY
+```
 
-# 5. Start Ollama with Gemma 4
-ollama pull gemma4:26b
-
-# 6. Run
+### 4. Running the System
+```bash
+# Start the full stack (Backend + Frontend)
 python backend/run.py
-
-# 7. Open
-# http://localhost:3000
 ```
+Open [http://localhost:3000](http://localhost:3000) to start.
 
 ---
 
-## Environment Variables
+## 🔌 API Reference (v1)
 
-```env
-# Required
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma4:26b
-JWT_SECRET_KEY=your-secret-key-here
-
-# Optional (enable cloud models)
-GROQ_API_KEY=gsk_...
-GOOGLE_API_KEY=AIza...
-TAVILY_API_KEY=tvly-...
-PEXELS_API_KEY=...        # For presentation images
-
-# Optional (connectors)
-GITHUB_TOKEN=ghp_...
-SLACK_BOT_TOKEN=xoxb-...
-NOTION_TOKEN=secret_...
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/health` | `GET` | System status and dependency check. |
+| `/api/v1/settings` | `GET/POST` | Manage user profile and preferences. |
+| `/api/v1/agent/chat` | `WS` | Main WebSocket stream for agent interaction. |
+| `/api/v1/skills` | `GET` | List available skills in the SkillEngine. |
+| `/metrics` | `GET` | Prometheus-compatible metrics export. |
 
 ---
 
-## Connectors
+## 🛡 Security & Hardening
 
-Connect 10+ services so the agent can use them autonomously:
+Archimedes is designed with a **Security-First** mindset:
+1. **Workspace Isolation**: All file operations are restricted to the `WORKSPACE_ROOT`. Symlink resolution is enforced to prevent escapes.
+2. **Safe Code Execution**: Python REPL runs in a restricted environment with blocked access to sensitive system paths (`/etc`, `/proc`, `/lib`).
+3. **Authentication**: All endpoints require valid JWT tokens. `AUTH_ENABLED=True` is recommended for any non-local deployment.
 
-| Category | Services |
-|----------|---------|
-| Dev | GitHub, Vercel, Supabase |
-| Communication | Gmail, Slack, Telegram |
-| Productivity | Notion, Airtable, Google Drive |
-| Finance | Stripe |
-| AI | OpenAI, Groq, Gemini, ElevenLabs |
+---
 
-Access via **Settings → Connectors** in the UI.
+## 🧪 Testing & Quality
+
+We maintain high standards for code quality:
+```bash
+# Run backend tests
+pytest backend/tests/
+
+# Check system integrity
+python scripts/health_check.py
+```
 
 ---
 
 ## License
-
 MIT License — free for personal and commercial use.
-
-Presentation engine (COSMO) based on [Presenton](https://github.com/presenton/presenton) — Apache 2.0.
-
----
-
-*Built with obsession. Beats the funded ones.*
+Built with passion. Archimedes is the final polish of the autonomous agent era.
 
 ---

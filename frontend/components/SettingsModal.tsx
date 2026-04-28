@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  X, Sun, Moon, Monitor as MonitorIcon, 
-  RotateCcw, Globe, Search, Plus, Trash2, Edit3, Shield, Mail, Check, Monitor, Layout, Cpu
-} from "lucide-react";
-import { useSettingsStore, Section } from "@/lib/settingsStore";
+import { X } from "lucide-react";
+import { useSettingsStore } from "@/lib/settingsStore";
+import { useSettings } from "@/hooks/useSettings";
 
 import SettingsSidebar from "./settings/SettingsSidebar";
 import AccountSection from "./settings/AccountSection";
@@ -14,7 +11,13 @@ import UsageSection from "./settings/UsageSection";
 import PersonalizationSection from "./settings/PersonalizationSection";
 import IntegrationsSection from "./settings/IntegrationsSection";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// New modular sections
+import GeneralSettingsSection from "./settings/GeneralSettingsSection";
+import SkillsSection from "./settings/SkillsSection";
+import ConnectorsSection from "./settings/ConnectorsSection";
+import ScheduledTasksSection from "./settings/ScheduledTasksSection";
+import MailCosmoSection from "./settings/MailCosmoSection";
+import SystemSection from "./settings/SystemSection";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -22,99 +25,8 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const store = useSettingsStore();
-  const { activeSection, settings, setSettings, setUsageRecords, setLoading, setIsUpdating, isUpdating } = store;
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchSettings();
-      fetchUsage();
-    }
-  }, [isOpen]);
-
-  const fetchSettings = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/settings`);
-      if (!res.ok) throw new Error("Backend offline");
-      const data = await res.json();
-      setSettings(data);
-      if (data.theme) applyTheme(data.theme);
-      setLoading(false);
-    } catch (err) {
-      console.error("Failed to fetch settings", err);
-      setSettings({
-        nickname: "Developer",
-        theme: "dark",
-        credits_remaining: 300,
-        skills_json: {},
-        connectors_json: {},
-        integrations_json: {}
-      });
-      setLoading(false);
-    }
-  };
-
-  const fetchUsage = async () => {
-     try {
-       const res = await fetch(`${API_BASE}/api/v1/settings/usage`);
-       const data = await res.json();
-       setUsageRecords(data);
-     } catch (err) {
-       console.error("Failed to fetch usage", err);
-     }
-  };
-
-  const updateSettings = async (updates: any) => {
-    setIsUpdating("global");
-    const prevSettings = { ...settings };
-    const newSettings = { ...settings, ...updates };
-    setSettings(newSettings);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates)
-      });
-      const data = await res.json();
-      setSettings(data);
-      
-      if (updates.theme) {
-         applyTheme(updates.theme);
-      }
-    } catch (err) {
-      console.error("Failed to update settings", err);
-      setSettings(prevSettings);
-    } finally {
-      setIsUpdating(null);
-    }
-  };
-
-  const applyTheme = (theme: string) => {
-     const html = document.documentElement;
-     const body = document.body;
-     html.classList.remove("light", "dark");
-     body.classList.remove("light", "dark");
-     
-     let effectiveTheme = theme;
-     if (theme === "system") {
-        effectiveTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-     }
-     
-     html.classList.add(effectiveTheme);
-     body.classList.add(effectiveTheme);
-     html.setAttribute("data-theme", effectiveTheme);
-     
-     window.dispatchEvent(new CustomEvent("theme-change", { detail: { theme: effectiveTheme } }));
-  };
-
-  const connectorMarketplace = [
-    { id: "google-search", name: "Google Search", icon: Globe, desc: "Real-time web search and information retrieval." },
-    { id: "brave-search", name: "Brave Search", icon: Shield, desc: "Privacy-focused web search engine." },
-    { id: "github-mcp", name: "GitHub Repository", icon: Cpu, desc: "Search and read GitHub repositories." },
-    { id: "wolfram", name: "Wolfram Alpha", icon: Layout, desc: "Computational intelligence and data analysis." },
-    { id: "slack-mcp", name: "Slack Connect", icon: Mail, desc: "Send and receive messages in Slack channels." },
-  ];
+  const { activeSection } = useSettingsStore();
+  const { updateSettings, fetchSettings } = useSettings(isOpen);
 
   if (!isOpen) return null;
 
@@ -157,358 +69,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     
                     {activeSection === "Integrations" && <IntegrationsSection updateSettings={updateSettings} />}
 
-                    {activeSection === "Settings" && (
-                      <div className="space-y-12 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <section>
-                            <h3 className="text-gray-500 text-[13px] font-bold uppercase tracking-wider mb-4">General</h3>
-                            <div className="space-y-4">
-                               <div>
-                                  <label className="block text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-2">Language</label>
-                                  <select 
-                                    value={settings?.language}
-                                    onChange={(e) => updateSettings({ language: e.target.value })}
-                                    className="w-full max-w-sm bg-white dark:bg-[#141414] border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none text-black dark:text-white cursor-pointer"
-                                  >
-                                     <option value="English">English</option>
-                                     <option value="Russian">Russian</option>
-                                     <option value="German">German</option>
-                                  </select>
-                               </div>
-                            </div>
-                         </section>
+                    {activeSection === "Settings" && <GeneralSettingsSection updateSettings={updateSettings} />}
 
-                         <section>
-                            <h3 className="text-gray-500 text-[13px] font-bold uppercase tracking-wider mb-4">Appearance</h3>
-                            <div className="grid grid-cols-3 gap-4 max-w-xl">
-                               {[
-                                 { id: "light", icon: Sun, label: "Light" },
-                                 { id: "dark", icon: Moon, label: "Dark" },
-                                 { id: "system", icon: MonitorIcon, label: "System" }
-                               ].map((theme) => (
-                                 <button 
-                                   key={theme.id}
-                                   onClick={() => updateSettings({ theme: theme.id })}
-                                   className={`flex flex-col items-center gap-3 p-6 rounded-2xl border transition-all cursor-pointer relative z-10 ${
-                                     settings?.theme === theme.id 
-                                       ? "border-blue-500 bg-blue-500/5 dark:bg-blue-500/10 shadow-sm" 
-                                       : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
-                                   }`}
-                                 >
-                                    <div className={`w-12 h-8 rounded-md flex items-center justify-center ${settings?.theme === theme.id ? "bg-blue-500 text-white" : "bg-gray-100 dark:bg-white/5 text-gray-400"}`}>
-                                       <theme.icon size={18} />
-                                    </div>
-                                    <span className={`text-[13px] font-bold ${settings?.theme === theme.id ? "text-blue-500" : "text-gray-500"}`}>{theme.label}</span>
-                                 </button>
-                               ))}
-                            </div>
-                         </section>
+                    {activeSection === "Skills" && <SkillsSection updateSettings={updateSettings} fetchSettings={fetchSettings} />}
 
-                         <section>
-                            <h3 className="text-gray-500 text-[13px] font-bold uppercase tracking-wider mb-4">Communication</h3>
-                            <div className="space-y-6">
-                               <div className="flex items-center justify-between">
-                                  <div>
-                                     <h4 className="text-[15px] font-bold">Product updates</h4>
-                                     <p className="text-[13px] text-gray-500">Early access to features.</p>
-                                  </div>
-                                  <button 
-                                    onClick={() => updateSettings({ product_updates: !settings?.product_updates })}
-                                    className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${settings?.product_updates ? "bg-blue-500" : "bg-gray-300 dark:bg-white/10"}`}
-                                  >
-                                     <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings?.product_updates ? "left-7" : "left-1"}`} />
-                                  </button>
-                               </div>
-                               <div className="flex items-center justify-between">
-                                  <div>
-                                     <h4 className="text-[15px] font-bold">Email alerts</h4>
-                                     <p className="text-[13px] text-gray-500">Notify when task starts.</p>
-                                  </div>
-                                  <button 
-                                    onClick={() => updateSettings({ task_emails: !settings?.task_emails })}
-                                    className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${settings?.task_emails ? "bg-blue-500" : "bg-gray-300 dark:bg-white/10"}`}
-                                  >
-                                     <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${settings?.task_emails ? "left-7" : "left-1"}`} />
-                                  </button>
-                               </div>
-                            </div>
-                         </section>
-                      </div>
-                    )}
+                    {activeSection === "Connectors" && <ConnectorsSection updateSettings={updateSettings} />}
 
-                    {activeSection === "Scheduled tasks" && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <div className="flex gap-4">
-                            <div className="bg-gray-100 dark:bg-white/5 p-1 rounded-xl flex">
-                               <button className="px-4 py-1.5 rounded-lg text-sm font-bold bg-white dark:bg-white/10 shadow-sm cursor-pointer">Scheduled</button>
-                               <button className="px-4 py-1.5 rounded-lg text-sm font-bold text-gray-500 hover:text-black dark:hover:text-gray-300 transition-colors cursor-pointer">Completed</button>
-                            </div>
-                         </div>
-                         
-                         <div className="w-full border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden">
-                            <table className="w-full text-left">
-                               <thead className="bg-gray-50 dark:bg-white/5 text-[11px] font-bold text-gray-400 uppercase tracking-widest border-b dark:border-white/5 text-black dark:text-white">
-                                  <tr>
-                                     <th className="px-6 py-4">Title</th>
-                                     <th className="px-6 py-4">Schedule at</th>
-                                     <th className="px-6 py-4">Status</th>
-                                  </tr>
-                               </thead>
-                               <tbody className="text-black dark:text-white">
-                                  <tr className="border-b dark:border-white/5">
-                                     <td className="px-6 py-4 font-bold">Live Task Monitor</td>
-                                     <td className="px-6 py-4 text-gray-500 text-sm">Every 1h</td>
-                                     <td className="px-6 py-4"><span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase rounded">Active</span></td>
-                                  </tr>
-                               </tbody>
-                            </table>
-                         </div>
-                      </div>
-                    )}
+                    {activeSection === "Scheduled tasks" && <ScheduledTasksSection />}
 
-                    {activeSection === "Skills" && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4 flex-1 max-w-md">
-                               <div className="relative flex-1">
-                                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                  <input 
-                                    placeholder="Search Skill" 
-                                    className="w-full bg-gray-50 dark:bg-[#141414] border border-gray-100 dark:border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm text-black dark:text-white" 
-                                  />
-                               </div>
-                               <button onClick={fetchSettings} className="p-2 bg-gray-100 dark:bg-white/5 rounded-lg text-gray-400 cursor-pointer"><RotateCcw size={16} /></button>
-                            </div>
-                            <button 
-                              onClick={() => {
-                                const name = prompt("Enter Skill ID:");
-                                if (name) {
-                                   const newSkills = { ...(settings?.skills_json || {}), [name]: true };
-                                   updateSettings({ skills_json: newSkills });
-                                }
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-black shadow-lg cursor-pointer transition-transform hover:scale-105"
-                            >
-                               <Plus size={16} /> Add
-                            </button>
-                         </div>
+                    {activeSection === "Mail Cosmo" && <MailCosmoSection />}
 
-                         <div className="grid grid-cols-2 gap-4">
-                            {[
-                              { id: "bgm-prompter", title: "bgm-prompter", desc: "MUST read this skill BEFORE music tasks." },
-                              { id: "video-gen", title: "video-generator", desc: "Professional AI video production workflow." },
-                              { id: "stock-analysis", title: "stock-analysis", desc: "Analyze markets using financial data." }
-                            ].map(skill => {
-                              const isActive = settings?.skills_json?.[skill.id] ?? false;
-                              return (
-                              <div key={skill.id} className={`p-5 border rounded-2xl space-y-3 transition-all ${isActive ? "border-blue-500 bg-blue-500/[0.03]" : "border-gray-100 dark:border-white/5 bg-gray-50/30 dark:bg-white/[0.02]"}`}>
-                                 <div className="flex items-center justify-between">
-                                    <h4 className="font-black truncate mr-2">{skill.title}</h4>
-                                    <button 
-                                       onClick={() => {
-                                          const newSkills = { ...(settings?.skills_json || {}), [skill.id]: !isActive };
-                                          updateSettings({ skills_json: newSkills });
-                                       }}
-                                       className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer shrink-0 ${isActive ? "bg-blue-500" : "bg-gray-300 dark:bg-white/10"}`}
-                                    >
-                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${isActive ? "left-5" : "left-1"}`} />
-                                    </button>
-                                 </div>
-                                 <p className="text-[11px] text-gray-500 font-medium leading-relaxed line-clamp-2">{skill.desc}</p>
-                                 <div className="flex items-center gap-2 pt-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                                    <div className="w-1 h-1 rounded-full bg-gray-400" /> Official
-                                    <div className="w-1 h-1 rounded-full bg-gray-400 ml-2" /> Updated: Apr 1, 2026
-                                 </div>
-                              </div>
-                            )})}
-                         </div>
-                      </div>
-                    )}
-
-                    {activeSection === "Connectors" && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <h3 className="text-xl font-bold mb-6">Marketplace Gallery</h3>
-                         <div className="grid grid-cols-2 gap-6">
-                            {connectorMarketplace.map(conn => {
-                               const isConnected = !!settings?.connectors_json?.[conn.id];
-                               return (
-                               <div key={conn.id} className={`p-6 border rounded-2xl flex flex-col gap-4 transition-all ${isConnected ? "border-blue-500 bg-blue-500/[0.02]" : "border-gray-100 dark:border-white/5 bg-white dark:bg-white/[0.02]"}`}>
-                                  <div className="flex items-start gap-4">
-                                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${isConnected ? "bg-blue-500 text-white" : "bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400"}`}>
-                                        <conn.icon size={24} />
-                                     </div>
-                                     <div className="flex-1">
-                                        <h4 className="text-[15px] font-black mb-1">{conn.name}</h4>
-                                        <p className="text-[12px] text-gray-500 leading-snug line-clamp-2">{conn.desc}</p>
-                                     </div>
-                                  </div>
-                                  <button 
-                                    onClick={() => {
-                                       const newConn = { ...(settings?.connectors_json || {}), [conn.id]: { command: "npx", args: ["-y", conn.id] } };
-                                       updateSettings({ connectors_json: newConn });
-                                    }}
-                                    disabled={isConnected}
-                                    className={`w-full py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                                       isConnected 
-                                       ? "bg-emerald-500/10 text-emerald-500 cursor-default" 
-                                       : "bg-black dark:bg-white text-white dark:text-black hover:scale-[1.02] relative z-10"
-                                    }`}
-                                  >
-                                     {isConnected ? (
-                                        <span className="flex items-center justify-center gap-2"><Check size={14} /> Connected</span>
-                                     ) : "Connect"}
-                                  </button>
-                               </div>
-                            )})}
-                         </div>
-                      </div>
-                    )}
-
-                    {activeSection === "Mail Cosmo" && (
-                      <div className="space-y-10 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <div className="p-10 bg-blue-500/[0.03] dark:bg-blue-500/[0.05] rounded-3xl border border-blue-500/10 flex flex-col items-center text-center gap-4">
-                            <div className="w-16 h-16 rounded-2xl bg-blue-500 flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
-                               <Mail size={32} />
-                            </div>
-                            <h3 className="text-xl font-black">Enable Mail Tasks</h3>
-                            <p className="text-sm text-gray-500 max-w-sm">Create tasks by sending emails to Cosmo. Simply CC our bot to start collaborative work.</p>
-                            <button className="px-8 py-2.5 bg-black dark:bg-white text-white dark:text-black rounded-xl text-sm font-bold shadow-lg hover:scale-105 transition-all">Get Started</button>
-                         </div>
-
-                         <section className="space-y-6">
-                            <h3 className="text-[15px] font-black border-b border-gray-100 dark:border-white/5 pb-2">Bot Settings</h3>
-                            <div>
-                               <label className="block text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-1">Cosmo&apos;s email</label>
-                               <div className="flex items-center gap-2 text-black dark:text-white">
-                                  <input readOnly value="archimedes-cosmo@cosmo.bot" className="flex-1 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 text-sm text-gray-500" />
-                                  <button className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"><Edit3 size={16} className="text-gray-400" /></button>
-                               </div>
-                            </div>
-                         </section>
-
-                         <section className="space-y-4">
-                            <div className="flex items-center justify-between">
-                               <h3 className="text-[15px] font-black">Approved senders</h3>
-                               <button className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-[11px] font-black transition-colors cursor-pointer">
-                                  <Plus size={14} /> Add sender
-                               </button>
-                            </div>
-                            <div className="p-4 border border-gray-100 dark:border-white/5 rounded-xl flex items-center justify-between">
-                               <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-teal-600/10 flex items-center justify-center text-teal-600">
-                                     <Mail size={16} />
-                                  </div>
-                                  <span className="text-[13px] font-medium text-gray-300">developer@cosmo.ai</span>
-                               </div>
-                               <button className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer"><Trash2 size={16} /></button>
-                            </div>
-                         </section>
-                      </div>
-                    )}
-
-                    {activeSection === "My Computer" && (
-                      <div className="space-y-10 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <h3 className="text-2xl font-black mb-8">Access Local Files</h3>
-                         <div className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-xl text-amber-500 text-xs font-bold flex items-start gap-3">
-                            <Shield size={16} className="shrink-0" />
-                            Archimedes will only access the folders you specify below.
-                         </div>
-                         <button 
-                           onClick={async () => {
-                              const path = prompt("Enter folder path:");
-                              if (path) {
-                                 const res = await fetch(`${API_BASE}/api/v1/settings/folders`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ path })
-                                 });
-                                 if (res.ok) fetchSettings();
-                                 else alert("Failed to add folder.");
-                              }
-                           }}
-                           className="px-8 py-3 bg-black dark:bg-white text-white dark:text-black rounded-2xl text-[13px] font-black shadow-lg cursor-pointer transition-transform hover:scale-105"
-                         >
-                           Add Folder
-                         </button>
-
-                         <div className="space-y-4">
-                            {settings?.connectors_json?.local_folders?.map((path: string, i: number) => (
-                              <div key={i} className="p-4 border border-gray-100 dark:border-white/5 rounded-xl flex items-center justify-between group translate-all hover:border-blue-500/30">
-                                 <div className="flex items-center gap-3">
-                                    <Monitor size={18} className="text-blue-500" />
-                                    <span className="text-[13px] font-medium text-gray-300">{path}</span>
-                                 </div>
-                                 <button className="text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"><Trash2 size={16} /></button>
-                              </div>
-                            ))}
-                         </div>
-                      </div>
-                    )}
-
-                    {activeSection === "Data controls" && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <div className="flex flex-col gap-6">
-                            <div className="p-6 border border-gray-100 dark:border-white/5 rounded-2xl flex items-center justify-between">
-                               <div>
-                                  <h4 className="font-black text-lg">Wipe Browser Session</h4>
-                                  <p className="text-sm text-gray-500">Clears cookies, cache and saved logins from the cloud browser.</p>
-                               </div>
-                               <button 
-                                 onClick={async () => {
-                                    if(confirm("Confirm cleanup? This cannot be undone.")) {
-                                       await fetch(`${API_BASE}/api/v1/settings/cleanup`, { method: "POST" });
-                                       alert("Cloud browser is now fresh.");
-                                    }
-                                 }}
-                                 className="px-6 py-2.5 bg-red-500/10 text-red-500 hover:bg-red-500 text-sm font-black rounded-xl transition-all hover:text-white cursor-pointer"
-                               >
-                                 Fresh Start
-                               </button>
-                            </div>
-                            
-                            <div className="p-6 border border-gray-100 dark:border-white/5 rounded-2xl flex items-center justify-between opacity-40">
-                               <div>
-                                  <h4 className="font-black text-lg text-gray-300 font-bold">Delete Account</h4>
-                                  <p className="text-sm text-gray-500 font-bold">Permanently remove all data and projects.</p>
-                               </div>
-                               <button disabled className="px-6 py-2.5 bg-gray-100 dark:bg-white/5 text-gray-400 text-sm font-black rounded-xl">
-                                 Request Deletion
-                               </button>
-                            </div>
-                         </div>
-                      </div>
-                    )}
-
-                    {activeSection === "Cloud browser" && (
-                      <div className="space-y-8 animate-in fade-in slide-in-from-right-2 duration-300">
-                         <div className="flex flex-col gap-6">
-                            <div className="p-8 bg-blue-500/[0.03] border border-blue-500/10 rounded-3xl flex items-start gap-6">
-                               <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
-                                  <Globe size={32} />
-                               </div>
-                               <div className="flex-1 pt-1">
-                                  <h4 className="font-black text-xl mb-2 text-black dark:text-white">Long-term Session</h4>
-                                  <p className="text-sm text-gray-500 mb-6 font-bold leading-relaxed">By default, Archimedes keeps browser data for up to 30 days. Disable this if you prefer anonymous, fresh browser windows for every task.</p>
-                                  <button 
-                                    onClick={() => updateSettings({ browser_persistence: !settings?.browser_persistence })}
-                                    className={`w-14 h-7 rounded-full transition-colors relative cursor-pointer ${settings?.browser_persistence ? "bg-blue-500" : "bg-gray-300 dark:bg-white/10"}`}
-                                  >
-                                     <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-md ${settings?.browser_persistence ? "left-8" : "left-1"}`} />
-                                  </button>
-                               </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                               <div className="p-6 border border-gray-100 dark:border-white/5 rounded-2xl flex items-center justify-between">
-                                  <h4 className="font-black text-black dark:text-white">Current Region</h4>
-                                  <span className="px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg text-xs font-black tracking-widest uppercase text-black dark:text-white">Oregon (USA)</span>
-                               </div>
-                               <div className="p-6 border border-gray-100 dark:border-white/5 rounded-2xl flex items-center justify-between">
-                                  <h4 className="font-black text-black dark:text-white">Concurrency</h4>
-                                  <span className="px-3 py-1 bg-gray-100 dark:bg-white/5 rounded-lg text-xs font-black tracking-widest uppercase text-black dark:text-white">Up to 3 tabs</span>
-                               </div>
-                            </div>
-                         </div>
-                      </div>
+                    {(activeSection === "My Computer" || activeSection === "Data controls" || activeSection === "Cloud browser") && (
+                      <SystemSection activeSection={activeSection} updateSettings={updateSettings} fetchSettings={fetchSettings} />
                     )}
                  </div>
               </div>

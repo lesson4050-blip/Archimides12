@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
     
     global self_play_loop_instance
     self_play_loop_instance = SelfPlayLoop(
-        model_router=ModelRouter(),
+        router=ModelRouter(),
         skill_library=SkillLibrary(),
         idle_threshold_mins=30
     )

@@ -30,19 +30,33 @@ _MAX_SKILLS = 200  # Hard cap on stored skills
 
 class SkillLibrary:
     """
-    Stores and retrieves proven task-solving trajectories.
-    Skills are indexed by task-type signature.
-    Thread-safe via lock on write operations.
+    Cognitive Experience Library for Archimedes.
+    
+    This class manages the lifecycle of 'skills' — successful task-solving trajectories
+    that can be reused for similar future requests. It uses a combination of 
+    exact Bag-of-Words hashing and fuzzy Jaccard similarity for retrieval.
+    
+    Attributes:
+        storage (Path): Root directory for skill storage.
+        _index (Dict): Metadata index for all stored skills.
+        _lock (threading.Lock): Ensures thread-safety for I/O operations.
     """
 
-    def __init__(self, storage_dir: str = None):
-        self.storage = Path(storage_dir or SKILL_DIR)
+    def __init__(self, storage_dir: Optional[str] = None):
+        """
+        Initializes the skill library and loads the existing index.
+        
+        Args:
+            storage_dir (str, optional): Custom path for skill storage. Defaults to SKILL_DIR.
+        """
+        self.storage: Path = Path(storage_dir or SKILL_DIR)
         self.storage.mkdir(parents=True, exist_ok=True)
-        self._index: Dict[str, Dict] = {}
-        self._lock = threading.Lock()
+        self._index: Dict[str, Dict[str, Any]] = {}
+        self._lock: threading.Lock = threading.Lock()
         self._load_index()
 
-    def _load_index(self):
+    def _load_index(self) -> None:
+        """Loads the skill index from the storage directory. If corrupted, starts with an empty index."""
         idx_file = self.storage / "index.json"
         if idx_file.exists():
             try:
@@ -52,7 +66,8 @@ class SkillLibrary:
                 self._index = {}
         logger.info(f"SkillLibrary loaded: {len(self._index)} skills")
 
-    def _save_index(self):
+    def _save_index(self) -> None:
+        """Persists the current skill index to disk using atomic file write and thread locking."""
         idx_file = self.storage / "index.json"
         with self._lock:
             idx_file.write_text(
@@ -62,8 +77,19 @@ class SkillLibrary:
 
     def _task_signature(self, task_description: str) -> str:
         """
-        Hash the task type using Bag-of-Words for resilience to phrasing.
-        Order-invariant: "create file and deploy" == "deploy and create file"
+        Generates a robust, order-invariant signature for a task.
+        
+        Uses a Bag-of-Words (BoW) approach:
+        1. Lowercases and strips punctuation.
+        2. Tokenizes and removes short stop-words.
+        3. Sorts unique words alphabetically.
+        4. MD5 hashes the result.
+        
+        Args:
+            task_description (str): Natural language task description.
+            
+        Returns:
+            str: A 12-character MD5 hex signature.
         """
         text = task_description.lower()
         text = text.translate(str.maketrans("", "", string.punctuation))
@@ -76,9 +102,17 @@ class SkillLibrary:
 
     def find_skill(self, task: str) -> Optional[Dict[str, Any]]:
         """
-        Find a matching skill for this task type.
-        Priority: exact hash match > Jaccard fuzzy match (>= 0.45).
-        Updates use_count and last_used on hit.
+        Finds a matching skill using exact signature or fuzzy token matching.
+        
+        Retreival logic:
+        1. Exact hash match (fastest).
+        2. Jaccard similarity fuzzy match (score >= 0.45).
+        
+        Args:
+            task (str): The new task description to match against.
+            
+        Returns:
+            Dict, optional: The skill data with hit metadata, or None if no match found.
         """
         sig = self._task_signature(task)
 
@@ -134,13 +168,20 @@ class SkillLibrary:
         self,
         task: str,
         trajectory: List[Dict[str, Any]],
-        label: str = None,
+        label: Optional[str] = None,
         quality_score: float = 1.0,
-    ):
+    ) -> None:
         """
-        Store a successful task trajectory as a reusable skill.
-        Only stores if quality_score >= 0.7 to avoid junk.
-        Auto-evicts stale skills when at capacity.
+        Compresses and stores a successful task trajectory.
+        
+        Only stores if the quality_score meets the threshold (>= 0.7).
+        Automatically evicts older/lower-quality skills if library capacity is reached.
+        
+        Args:
+            task (str): The original task description.
+            trajectory (List[Dict]): The sequence of tool calls and results.
+            label (str, optional): A short name for the skill.
+            quality_score (float): Self-evaluated quality (0.0 to 1.0).
         """
         if quality_score < 0.7:
             logger.debug(f"Skill not stored: quality {quality_score} < 0.7")
@@ -196,8 +237,16 @@ class SkillLibrary:
 
     def get_context_prompt(self, task: str) -> str:
         """
-        If a skill exists, return a prompt suffix for the agent.
-        Includes quality score and similarity info.
+        Returns a prompt injection snippet if a relevant skill is found.
+        
+        This snippet guides the agent by showing how a similar task was
+        solved previously, encouraging reuse and consistency.
+        
+        Args:
+            task (str): Current task description.
+            
+        Returns:
+            str: Markdown-formatted prompt suffix, or empty string.
         """
         skill = self.find_skill(task)
         if not skill:
@@ -228,7 +277,7 @@ class SkillLibrary:
         return "\n".join(lines)
 
     def get_stats(self) -> Dict[str, Any]:
-        """Return skill library statistics."""
+        """Returns statistics and high-use metrics for the library."""
         return {
             "total_skills": len(self._index),
             "storage_dir": str(self.storage),
@@ -243,14 +292,14 @@ class SkillLibrary:
 
     @staticmethod
     def _tokenize(text: str) -> set:
-        """Lowercase, strip punctuation, return set of meaningful words."""
+        """Lowercase, strip punctuation, return set of meaningful words (length > 2)."""
         text = text.lower().translate(
             str.maketrans("", "", string.punctuation)
         )
         return set(w for w in text.split() if len(w) > 2)
 
-    def _load_skill_file(self, sig: str) -> Optional[Dict]:
-        """Load a skill JSON file by signature."""
+    def _load_skill_file(self, sig: str) -> Optional[Dict[str, Any]]:
+        """Loads and parses a skill JSON file."""
         skill_file = self.storage / f"{sig}.json"
         if not skill_file.exists():
             return None
@@ -260,15 +309,15 @@ class SkillLibrary:
             logger.warning(f"Failed to load skill {sig}: {e}")
             return None
 
-    def _record_hit(self, sig: str):
-        """Increment use_count and update last_used in index."""
+    def _record_hit(self, sig: str) -> None:
+        """Updates metadata in the index when a skill is successfully retrieved."""
         if sig in self._index:
             self._index[sig]["use_count"] = self._index[sig].get("use_count", 0) + 1
             self._index[sig]["last_used"] = datetime.now().isoformat()
             self._save_index()
 
-    def _evict_stale(self):
-        """Remove skills unused for > TTL days, lowest quality first."""
+    def _evict_stale(self) -> None:
+        """Removes skills that haven't been used for 30+ days to free up library space."""
         cutoff = (datetime.now() - timedelta(days=_SKILL_TTL_DAYS)).isoformat()
         stale = [
             sig for sig, meta in self._index.items()
@@ -297,8 +346,13 @@ class SkillLibrary:
         trajectory: List[Dict[str, Any]]
     ) -> List[Dict[str, str]]:
         """
-        Compress a full trajectory into tool-call summaries.
-        Keeps only name + truncated params + truncated result.
+        Minifies a trajectory for storage efficiency.
+        
+        Args:
+            trajectory (List[Dict]): Full execution trace.
+            
+        Returns:
+            List[Dict]: Compressed version containing only critical tool interactions.
         """
         compressed = []
         for step in trajectory:

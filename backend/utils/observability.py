@@ -60,7 +60,16 @@ def configure_global_observability(use_json: bool = False):
     if use_json:
         formatter = JSONFormatter()
     else:
-        formatter = logging.Formatter(
+        # Use a custom format that handles missing session_id/trace_id gracefully
+        class SafeFormatter(logging.Formatter):
+            def format(self, record):
+                if not hasattr(record, "session_id"):
+                    record.session_id = "-"
+                if not hasattr(record, "trace_id"):
+                    record.trace_id = "-"
+                return super().format(record)
+        
+        formatter = SafeFormatter(
             '[%(asctime)s] [%(levelname)s] [S:%(session_id)s] [T:%(trace_id)s] %(name)s - %(message)s'
         )
     for handler in root_logger.handlers:
