@@ -85,7 +85,7 @@ def _normalize_error(error: str) -> str:
     # 1. Replace UUIDs FIRST (before numbers are replaced)
     pattern = re.sub(
         r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
-        'UUID', pattern
+        'UUID', pattern, flags=re.IGNORECASE
     )
     # 2. Replace hex addresses
     pattern = re.sub(r'0x[0-9a-fA-F]+', '0xADDR', pattern)
