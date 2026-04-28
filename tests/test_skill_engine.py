@@ -10,7 +10,7 @@ from backend.agent.skill_library import SkillLibrary as SkillEngine
 def engine(tmp_path):
     """Create a SkillEngine with a temporary skills directory."""
     e = SkillEngine(
-        base_dir=str(tmp_path / "skills_data"),
+        storage_dir=str(tmp_path / "skills_data"),
         chroma_path=str(tmp_path / "chroma_test")
     )
     e.skills_dir = str(tmp_path / "skills_playbooks")
