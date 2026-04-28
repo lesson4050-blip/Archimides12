@@ -1,3 +1,12 @@
+"""
+Observability utilities for Archimedes.
+
+Provides:
+- CorrelatedLogFilter: injects session_id and trace_id into all log records
+- JSONFormatter: structured JSON log output for production (ELK/Datadog/CloudWatch)
+- configure_global_observability(): root logger setup with correlation
+- configure_json_logging(): auto-detect LOG_FORMAT env var for JSON output
+"""
 import logging
 import uuid
 import contextvars

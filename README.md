@@ -34,7 +34,7 @@ Archimedes follows a decoupled Backend-Frontend architecture with a heavy focus 
 ### Backend Structure
 - `backend/agent/core.py` — **ArchimedesCosmoAgent**: The main cognitive engine.
 - `backend/agent/skill_engine.py` — **SkillEngine**: Dynamic loading of agent capabilities.
-- `backend/tools/` — **Toolbox**: 25+ atomic tools (File, Git, Shell, Vision, etc.).
+- `backend/tools/` — **Toolbox**: 38+ atomic tools (File, Git, Shell, Vision, etc.).
 - `backend/orchestration/` — **Planning**: MCTS, Swarm logic, and Routing.
 - `backend/cosmo/` — **Artist Engine**: Handles real-time presentation generation.
 

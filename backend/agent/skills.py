@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class SkillManager:
         self.skills_dir = "./backend/skills"
         os.makedirs(self.skills_dir, exist_ok=True)
 
-    def register_skill(self, name: str, code: str):
+    def register_skill(self, name: str, code: str) -> dict:
         """
         Saves a python script and registers it as a tool.
         """
