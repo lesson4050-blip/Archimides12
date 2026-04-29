@@ -1,6 +1,6 @@
 # ⚡ Archimedes AI Agent
 
-> **A production-grade, autonomous AI agent framework with self-correction, multi-agent swarm logic, and native MCP tool integration.**
+> **A production-grade, autonomous AI agent framework with self-correction, multi-agent swarm logic, native MCP tool integration, and GOD MODE hardening.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-violet.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
@@ -24,6 +24,13 @@ Through recent production hardening, Archimedes features:
   - **Ollama-first Routing**: Privacy-preserving local execution by default with smart model fallback.
   - **Hydra Swarm v2**: Hierarchical multi-agent pipeline (Scout → Warrior → Sentinel) with automated synthesis.
   - **MCTS Exploration**: Monte Carlo Tree Search for complex planning under uncertainty.
+- **GOD MODE (v3.0)**:
+  - **Bash Security Engine**: Multi-layer command injection detection with quote-aware parsing.
+  - **Auto-Compact**: Three-level LLM-based context management (MICRO/STANDARD/AGGRESSIVE).
+  - **Verification Agent**: Read-only quality gate (pytest, linter, health checks) after every change.
+  - **Session Memory**: Per-session markdown notes with automated LLM extraction.
+  - **Evaluation Pipeline**: Model comparison (A/B testing) across task categories.
+  - **45+ Tools**: Notebook, Grep, Glob, and expanded domain tooling.
 
 ---
 
@@ -34,8 +41,9 @@ Archimedes follows a decoupled Backend-Frontend architecture with a heavy focus 
 ### Backend Structure
 - `backend/agent/core.py` — **ArchimedesCosmoAgent**: The main cognitive engine.
 - `backend/agent/skill_engine.py` — **SkillEngine**: Dynamic loading of agent capabilities.
-- `backend/tools/` — **Toolbox**: 38+ atomic tools (File, Git, Shell, Vision, etc.).
-- `backend/orchestration/` — **Planning**: MCTS, Swarm logic, and Routing.
+- `backend/tools/` — **Toolbox**: 45+ atomic tools (File, Git, Shell, Vision, Notebook, Grep, Glob, etc.).
+- `backend/agent/orchestration/` — **Planning**: MCTS, Swarm logic, Verification Agent, and Routing.
+- `backend/memory/` — **Context**: Auto-Compact, Session Memory, Context Manager.
 - `backend/cosmo/` — **Artist Engine**: Handles real-time presentation generation.
 
 ### Frontend Structure
@@ -100,7 +108,7 @@ Open [http://localhost:3000](http://localhost:3000) to start.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/health` | `GET` | System status and dependency check. |
+| `/api/v1/health` | `GET` | System status. `?deep=true` for full diagnostics. |
 | `/api/v1/settings` | `GET/POST` | Manage user profile and preferences. |
 | `/api/v1/agent/chat` | `WS` | Main WebSocket stream for agent interaction. |
 | `/api/v1/skills` | `GET` | List available skills in the SkillEngine. |
@@ -132,6 +140,6 @@ python scripts/health_check.py
 
 ## License
 MIT License — free for personal and commercial use.
-Built with passion. Archimedes is the final polish of the autonomous agent era.
+Built with passion. Archimedes GOD MODE — the final evolution.
 
 ---

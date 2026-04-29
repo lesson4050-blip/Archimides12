@@ -11,6 +11,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from backend.sandbox.executor import SandboxExecutor
+from backend.tools.bash_security import validate_command as security_validate_command, SecurityResult
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,20 @@ class ShellTool:
                       **kwargs) -> Dict[str, Any]:
         from backend.agent.self_improvement import check_tool_safety
         
+        # Layer 1: Bash security engine (fast, regex-based)
+        if command:
+            sec_result = security_validate_command(command)
+            if not sec_result.allowed:
+                logger.warning(f"BLOCKED by bash_security: {command[:50]} — {sec_result.message}")
+                return {
+                    "success": False,
+                    "output": f"⛔ Command blocked: {sec_result.message}",
+                    "exit_code": -1,
+                    "blocked": True,
+                    "check_id": sec_result.check_id.name if sec_result.check_id else None
+                }
+        
+        # Layer 2: AI-based safety check
         if command:
             is_safe, reason = await check_tool_safety("shell", {"command": command})
             if not is_safe:

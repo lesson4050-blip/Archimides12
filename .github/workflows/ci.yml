@@ -43,6 +43,20 @@ jobs:
             -m "not integration" \
             -o "addopts="
 
+      - name: Verify GOD MODE module imports
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python3 -c "from backend.tools.bash_security import validate_command; print('✔ bash_security')"
+          python3 -c "from backend.memory.auto_compact import AutoCompact; print('✔ auto_compact')"
+          python3 -c "from backend.agent.orchestration.agents.verification_agent import VerificationAgent; print('✔ verification_agent')"
+          python3 -c "from backend.memory.session_memory import SessionMemory; print('✔ session_memory')"
+          python3 -c "from backend.utils.health import deep_health_check; print('✔ health')"
+          python3 -c "from backend.tools.notebook_tool import NotebookTool; print('✔ notebook_tool')"
+          python3 -c "from backend.tools.grep_tool import GrepTool; print('✔ grep_tool')"
+          python3 -c "from backend.tools.glob_tool import GlobTool; print('✔ glob_tool')"
+          python3 -c "from backend.benchmarks.eval_pipeline import EvalPipeline; print('✔ eval_pipeline')"
+
       - name: Security audit — no eval() in production
         run: |
           if grep -rn "eval(" backend/ --include="*.py" | grep -v "test_" | grep -v "^.*#" | grep -v "\.pyc"; then

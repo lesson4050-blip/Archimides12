@@ -457,3 +457,42 @@ class ContextManager:
             break
         
         return max(1, idx)
+
+    # ──────────────────────────────────────────────
+    # Phase 3: Auto-Compact (additive, LLM-based)
+    # ──────────────────────────────────────────────
+
+    async def prepare_context(self, messages: list = None, router=None) -> list:
+        """
+        Prepare messages for LLM with intelligent auto-compact.
+
+        Pipeline:
+        1. heal_context() — fix malformed messages
+        2. summarize_if_needed() — existing two-phase management
+        3. auto_compact.maybe_compact() — LLM-based summarization
+
+        This is additive — does not replace existing methods.
+        """
+        from backend.memory.auto_compact import AutoCompact, CompactConfig
+
+        # Step 1: Heal context
+        self.heal_context()
+
+        # Step 2: Use existing summarization if router available
+        if router and self._current_tokens >= self.summarization_threshold:
+            await self.summarize_if_needed(router)
+
+        # Step 3: Apply LLM-based auto-compact for further compression
+        msgs = messages or self.history
+        auto_compact = AutoCompact(
+            config=CompactConfig(max_context_tokens=self.max_tokens),
+            router=router
+        )
+        compacted, result = await auto_compact.maybe_compact(msgs)
+        if result.level.value != "none":
+            logger.info(
+                f"Context auto-compacted: {result.level.value} "
+                f"({result.original_tokens} → {result.compacted_tokens} tokens)"
+            )
+        return compacted
+

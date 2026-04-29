@@ -312,6 +312,31 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register FinanceTool: {e}")
 
+        # ── GOD MODE expansion tools ──
+        try:
+            from backend.tools.notebook_tool import NotebookTool
+            self.agent.notebook_tool = NotebookTool()
+            self.agent.register_tool("notebook", self.agent.notebook_tool.execute)
+            logger.info("NotebookTool registered")
+        except Exception as e:
+            logger.warning(f"NotebookTool unavailable: {e}")
+
+        try:
+            from backend.tools.grep_tool import GrepTool
+            self.agent.grep_tool = GrepTool()
+            self.agent.register_tool("grep", self.agent.grep_tool.execute)
+            logger.info("GrepTool registered")
+        except Exception as e:
+            logger.warning(f"GrepTool unavailable: {e}")
+
+        try:
+            from backend.tools.glob_tool import GlobTool
+            self.agent.glob_tool_instance = GlobTool()
+            self.agent.register_tool("glob", self.agent.glob_tool_instance.execute)
+            logger.info("GlobTool registered")
+        except Exception as e:
+            logger.warning(f"GlobTool unavailable: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools

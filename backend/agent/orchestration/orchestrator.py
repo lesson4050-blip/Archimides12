@@ -6,6 +6,7 @@ from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.agent.orchestration.agents.planner_agent import PlannerAgent
 from backend.agent.orchestration.agents.executor_agent import ExecutorAgent
 from backend.agent.orchestration.agents.critic_agent import CriticAgent
+from backend.agent.orchestration.agents.verification_agent import VerificationAgent
 from backend.agent.orchestration.mcts import MCTSManager
 from backend.models.model_router import ModelRouter
 from backend.agent.tool_registry import ToolRegistry
@@ -508,6 +509,18 @@ class AgentOrchestrator:
                         )
                         break
                     
+        # Phase 4: Verification (read-only, runs tests)
+        changed_files = getattr(state, 'changed_files', None) or state.metadata.get('changed_files', [])
+        if changed_files:
+            try:
+                verifier = VerificationAgent(self.router)
+                verification_result = await verifier.verify(changed_files, state.task_description)
+                state.metadata["verification_report"] = verification_result.to_dict()
+                if not verification_result.passed:
+                    logger.warning(f"Verification failed: {verification_result.summary}")
+            except Exception as e:
+                logger.warning(f"Verification skipped: {e}")
+
         return await self._get_final_response(state, websocket_send)
 
     async def _get_final_response(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:

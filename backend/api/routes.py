@@ -70,12 +70,18 @@ agent_data: Dict[str, Any] = {
 
 # Endpoints
 @router.get("/health", summary="Проверка здоровья сервера")
-async def health_check() -> Dict[str, Any]:
-    """Проверить здоровье сервера."""
+async def health_check(deep: bool = False) -> Dict[str, Any]:
+    """Проверить здоровье сервера. Use ?deep=true for comprehensive checks."""
+    if deep:
+        try:
+            from backend.utils.health import deep_health_check
+            return await deep_health_check()
+        except Exception as e:
+            logger.warning(f"Deep health check failed: {e}")
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0-cosmo"
+        "version": "3.0.0-godmode"
     }
 
 @router.get("/metrics", summary="Prometheus Metrics")
