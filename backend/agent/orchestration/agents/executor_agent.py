@@ -9,7 +9,7 @@ from backend.models.model_router import ModelRouter
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
 from backend.agent.error_recovery import ErrorRecovery
-from backend.agent.skills.skill_engine import SkillEngine
+from backend.agent.skill_engine import SkillEngine
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
