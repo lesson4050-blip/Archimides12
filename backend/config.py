@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     
+    # Vector DB
+    CHROMA_DB_PATH: str = "./data/chroma_db"  # Default; override in .env for Docker (/app/data/chroma_db)
+    
     # Auth / JWT — IMPORTANT: override JWT_SECRET_KEY in .env for production!
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"

@@ -103,6 +103,22 @@ async def lifespan(app: FastAPI):
     safe_create_task(start_engine())
     logger.info("COSMO Presentation engine starting...")
 
+    # ChromaDB Monitoring Task
+    async def _monitor_chroma():
+        from backend.memory.vector_store import VectorStore
+        store = VectorStore()
+        while True:
+            stats = store.get_collection_stats()
+            count = stats.get("count", 0)
+            if count > 500000:
+                logger.error(f"ChromaDB Growth Bomb: Collection has {count} documents! Performance will severely degrade.")
+            elif count > 100000:
+                logger.warning(f"ChromaDB Warning: Collection has {count} documents. Consider cleanup.")
+            
+            await asyncio.sleep(3600) # Check every hour
+
+    safe_create_task(_monitor_chroma())
+
     # Start COSMO Artist (Next.js template server)
     from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn
     artist_task = safe_create_task(start_artist())
