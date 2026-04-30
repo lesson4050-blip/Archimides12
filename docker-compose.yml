@@ -7,10 +7,12 @@ services:
       POSTGRES_USER: archimedes
       POSTGRES_PASSWORD: archimedes
       POSTGRES_DB: archimedes
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U archimedes"]
       interval: 10s
@@ -27,8 +29,10 @@ services:
     container_name: archimedes-ollama
     volumes:
       - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
+    expose:
+      - "11434"
+    networks:
+      - internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
@@ -47,6 +51,10 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - DATABASE_URL=postgresql+asyncpg://archimedes:archimedes@postgres:5432/archimedes
       - AUTH_ENABLED=True
+      - METRICS_BEARER_TOKEN=${METRICS_BEARER_TOKEN}
+    networks:
+      - internal
+      - frontend
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +93,8 @@ services:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
       - NEXT_PUBLIC_SERVER_URL=http://archimedes-backend:8000
+    networks:
+      - frontend
     depends_on:
       - archimedes-backend
     restart: unless-stopped
@@ -103,8 +113,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-    ports:
-      - "9090:9090"
+    networks:
+      - internal
     restart: unless-stopped
 
   grafana:
@@ -116,11 +126,21 @@ services:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - internal
+      - frontend
     depends_on:
       - prometheus
     restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  frontend:
+    driver: bridge
 
 volumes:
   postgres_data:

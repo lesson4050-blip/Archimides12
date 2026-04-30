@@ -67,12 +67,12 @@ async def stream_task(
     queue: asyncio.Queue = asyncio.Queue()
     _active_streams[task_id] = queue
 
-    from backend.models.model_router import ModelRouter
+    from backend.models.model_router import get_model_router
     from backend.agent.tool_registry import ToolRegistry
     from backend.memory.context_manager import ContextManager
     from backend.agent.orchestration.orchestrator import AgentOrchestrator
 
-    model_router = ModelRouter()
+    model_router = get_model_router()
     tool_registry = ToolRegistry()
     context_manager = ContextManager(model_router)
     orchestrator = AgentOrchestrator(model_router, tool_registry, context_manager)

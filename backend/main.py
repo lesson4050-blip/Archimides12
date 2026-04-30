@@ -105,17 +105,19 @@ async def lifespan(app: FastAPI):
 
     # ChromaDB Monitoring Task
     async def _monitor_chroma():
-        from backend.memory.vector_store import VectorStore
-        store = VectorStore()
-        while True:
-            stats = store.get_collection_stats()
-            count = stats.get("count", 0)
-            if count > 500000:
-                logger.error(f"ChromaDB Growth Bomb: Collection has {count} documents! Performance will severely degrade.")
-            elif count > 100000:
-                logger.warning(f"ChromaDB Warning: Collection has {count} documents. Consider cleanup.")
-            
-            await asyncio.sleep(3600) # Check every hour
+        try:
+            from backend.memory.vector_store import VectorStore
+            store = VectorStore()
+            while True:
+                stats = await store.get_collection_stats()
+                count = stats.get("count", 0)
+                if count > 500000:
+                    logger.error(f"ChromaDB Growth Bomb: Collection has {count} documents! Performance will severely degrade.")
+                elif count > 100000:
+                    logger.warning(f"ChromaDB Warning: Collection has {count} documents. Consider cleanup.")
+                await asyncio.sleep(3600) # Check every hour
+        except Exception as e:
+            logger.error(f"ChromaDB monitor error: {e}")
 
     safe_create_task(_monitor_chroma())
 
@@ -194,7 +196,15 @@ async def add_metrics(request: Request, call_next):
     return response
 
 @app.get("/metrics")
-async def metrics():
+async def metrics(request: Request):
+    token = os.environ.get("METRICS_BEARER_TOKEN", "")
+    if token:
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {token}":
+            from fastapi import Response
+            return Response(status_code=401)
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from fastapi import Response
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 import os
@@ -299,12 +309,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.error(f"WebSocket error for {session_id}: {e}")
         await manager.disconnect(session_id)
 
-@app.get(\"/api/health/models\")
+@app.get("/api/health/models")
 async def model_health():
-    from backend.models.model_router import ModelRouter
-    router = ModelRouter()
+    from backend.models.model_router import get_model_router
+    router = get_model_router()
     return await router.get_health_status()
 
-if __name__ == \"__main__\":
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

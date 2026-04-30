@@ -36,13 +36,14 @@ class VectorStore:
         self.genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY) if settings.GOOGLE_API_KEY else None
         self.embedding_model = "gemini-embedding-exp-03-07"
 
-    @property
-    def collection(self):
+    async def _get_collection(self):
+        """Lazy async initialization of the collection."""
         if self._collection is None:
-            client = get_chroma_client()
+            client = await asyncio.to_thread(get_chroma_client)
             if client:
                 try:
-                    self._collection = client.get_or_create_collection(
+                    self._collection = await asyncio.to_thread(
+                        client.get_or_create_collection,
                         name=f"archimedes_{self.user_id}",
                         metadata={"hnsw:space": "cosine"}
                     )
@@ -50,12 +51,12 @@ class VectorStore:
                     logger.error(f"Failed to get/create ChromaDB collection: {e}")
         return self._collection
 
-    def get_collection_stats(self) -> Dict[str, Any]:
-        """Returns document count and health status."""
+    async def get_collection_stats(self) -> Dict[str, Any]:
+        """Returns document count and health status (Async)."""
         try:
-            col = self.collection
+            col = await self._get_collection()
             if col:
-                count = col.count()
+                count = await asyncio.to_thread(col.count)
                 return {
                     "count": count,
                     "status": "healthy",
@@ -84,7 +85,7 @@ class VectorStore:
         if not self.genai_client:
             return
         
-        col = self.collection
+        col = await self._get_collection()
         if not col:
             logger.warning("VectorStore: Skipping add_fact (ChromaDB unavailable)")
             return
@@ -92,7 +93,8 @@ class VectorStore:
         embedding = await self._get_embedding(text)
         if embedding:
             try:
-                col.add(
+                await asyncio.to_thread(
+                    col.add,
                     documents=[text],
                     embeddings=[embedding],
                     metadatas=[metadata or {}],
@@ -106,7 +108,7 @@ class VectorStore:
         if not self.genai_client:
             return []
             
-        col = self.collection
+        col = await self._get_collection()
         if not col:
             logger.warning("VectorStore: Skipping retrieve (ChromaDB unavailable)")
             return []
@@ -116,7 +118,8 @@ class VectorStore:
             return []
             
         try:
-            results = col.query(
+            results = await asyncio.to_thread(
+                col.query,
                 query_embeddings=[query_embedding],
                 n_results=limit
             )

@@ -1,3 +1,6 @@
+import asyncio
+import time
+import httpx
 import logging
 from typing import List, Dict, Any, Optional
 from backend.models.groq_client import GroqClient, RateLimitExceeded as GroqRateLimit
@@ -5,6 +8,7 @@ from backend.models.gemini_client import GeminiClient, RateLimitExceeded as Gemi
 from backend.models.ollama_client import OllamaClient
 from backend.models.anthropic_client import AnthropicClient
 from backend.models.retry_wrapper import with_retry, RetryConfig
+from backend.config import settings
 
 GROQ_RETRY = RetryConfig(max_retries=3, base_delay=2.0, max_delay=30.0)
 GEMINI_RETRY = RetryConfig(max_retries=2, base_delay=5.0, max_delay=60.0)
@@ -14,10 +18,6 @@ logger = logging.getLogger(__name__)
 
 class AllModelsExhausted(Exception):
     pass
-
-import time
-import httpx
-from backend.config import settings
 
 class ModelRouter:
     # Speed-first routing categories
@@ -31,6 +31,7 @@ class ModelRouter:
         self._ollama_healthy = True
         self._last_health_check = 0
         self._health_cache_ttl = 30 # seconds
+        self._health_check_lock = asyncio.Lock()
         
         try:
             self.groq = GroqClient() if settings.GROQ_API_KEY else None
@@ -48,21 +49,27 @@ class ModelRouter:
             self.anthropic = None
 
     async def _check_ollama_health(self) -> bool:
-        """Checks if Ollama is reachable and caches the result."""
-        now = time.time()
-        if now - self._last_health_check < self._health_cache_ttl:
+        """Checks if Ollama is reachable and caches the result (with lock)."""
+        # Quick exit if cache is fresh
+        if time.time() - self._last_health_check < self._health_cache_ttl:
             return self._ollama_healthy
 
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
-                self._ollama_healthy = response.status_code == 200
-        except Exception:
-            self._ollama_healthy = False
-            logger.warning("Ollama health check failed! Falling back to cloud providers.")
+        async with self._health_check_lock:
+            # Double-check inside the lock
+            now = time.time()
+            if now - self._last_health_check < self._health_cache_ttl:
+                return self._ollama_healthy
 
-        self._last_health_check = now
-        return self._ollama_healthy
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+                    self._ollama_healthy = response.status_code == 200
+            except Exception:
+                self._ollama_healthy = False
+                logger.warning("Ollama health check failed! Falling back to cloud providers.")
+
+            self._last_health_check = now
+            return self._ollama_healthy
 
     async def get_health_status(self) -> Dict[str, Any]:
         """Returns health status of all providers."""
@@ -166,3 +173,11 @@ class ModelRouter:
                 continue
                 
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
+
+_router_instance: Optional[ModelRouter] = None
+
+def get_model_router() -> ModelRouter:
+    global _router_instance
+    if _router_instance is None:
+        _router_instance = ModelRouter()
+    return _router_instance

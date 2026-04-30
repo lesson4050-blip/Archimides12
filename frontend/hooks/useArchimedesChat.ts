@@ -80,17 +80,18 @@ export function useArchimedesChat(
     }
   };
 
-  // WebSocket Connection with buffering
-  useEffect(() => {
-    const buffer: any[] = [];
-    let flushTimeout: any = null;
+    const bufferRef = useRef<any[]>([]);
+    const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const flushBuffer = () => {
-      if (buffer.length > 0) {
-        store.setMessages(prev => [...prev, ...buffer]);
-        buffer.length = 0;
+      if (bufferRef.current.length > 0) {
+        store.setMessages(prev => [...prev, ...bufferRef.current]);
+        bufferRef.current = [];
       }
-      flushTimeout = null;
+      if (flushTimeoutRef.current) {
+        clearTimeout(flushTimeoutRef.current);
+        flushTimeoutRef.current = null;
+      }
     };
 
     const handleAgentEvent = (event: AgentEvent) => {
@@ -122,27 +123,27 @@ export function useArchimedesChat(
               ) {
                  determinedType = "thought";
               }
-              buffer.push({ role: "assistant", type: determinedType as any, content: cleaned });
+              bufferRef.current.push({ role: "assistant", type: determinedType as any, content: cleaned });
             }
             break;
           }
           case "message_ask": {
             const cleaned = cleanMessageContent(event.text || event.content);
-            if (cleaned) buffer.push({ role: "assistant", type: "ask", content: cleaned });
+            if (cleaned) bufferRef.current.push({ role: "assistant", type: "ask", content: cleaned });
             break;
           }
           case "message_result": {
             const cleaned = cleanMessageContent(event.text || event.content);
-            if (cleaned) buffer.push({ role: "assistant", type: "result", content: cleaned });
+            if (cleaned) bufferRef.current.push({ role: "assistant", type: "result", content: cleaned });
             break;
           }
           case "thought": {
             const cleaned = cleanMessageContent(event.content || event.text);
-            if (cleaned) buffer.push({ role: "assistant", type: "thought", content: cleaned });
+            if (cleaned) bufferRef.current.push({ role: "assistant", type: "thought", content: cleaned });
             break;
           }
           case "tool_call": {
-            buffer.push({ 
+            bufferRef.current.push({ 
               role: "assistant", 
               type: "tool", 
               content: `Вызов инструмента: **${event.tool}**\n\`\`\`json\n${JSON.stringify(event.params, null, 2)}\n\`\`\`` 
@@ -157,7 +158,7 @@ export function useArchimedesChat(
               language: event.language,
             };
             store.setArtifacts(prev => [...prev, artifactData]);
-            buffer.push({ 
+            bufferRef.current.push({ 
               role: "system", 
               type: "artifact", 
               content: event.name || "file",
@@ -166,7 +167,7 @@ export function useArchimedesChat(
             break;
           }
           case "plan_update": {
-             buffer.push({ role: "assistant", type: "plan", content: `Обновление плана: ${event.text || "Выполнение..."}` });
+             bufferRef.current.push({ role: "assistant", type: "plan", content: `Обновление плана: ${event.text || "Выполнение..."}` });
              break;
           }
           case "confidence": {
@@ -183,7 +184,7 @@ export function useArchimedesChat(
               { type: event.mime_type }
             );
             const url = URL.createObjectURL(blob);
-            buffer.push({
+            bufferRef.current.push({
               role: "assistant",
               type: "file_download",
               content: event.label || "Файл сгенерирован",
@@ -208,8 +209,8 @@ export function useArchimedesChat(
         window.dispatchEvent(new CustomEvent("archimedes-event", { detail: event }));
 
         // Batch flushing
-        if (!flushTimeout) {
-          flushTimeout = setTimeout(flushBuffer, 100);
+        if (!flushTimeoutRef.current) {
+          flushTimeoutRef.current = setTimeout(flushBuffer, 100);
         }
     };
 
@@ -219,7 +220,14 @@ export function useArchimedesChat(
     });
     archSocket.connect();
     socketRef.current = archSocket;
-    return () => archSocket.disconnect();
+
+    return () => {
+      if (flushTimeoutRef.current) {
+        clearTimeout(flushTimeoutRef.current);
+      }
+      flushBuffer(); // Final flush before unmount
+      archSocket.disconnect();
+    };
   }, [sessionId]);
 
   const handleSend = () => {
