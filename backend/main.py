@@ -1,8 +1,10 @@
 from backend.utils.task import safe_create_task
 import logging
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from backend.metrics import http_request_duration_seconds, http_requests_total, generate_latest, CONTENT_TYPE_LATEST, active_websocket_connections
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+import time
 
 from backend.config import settings
 from backend.websocket.handler import manager
@@ -18,11 +20,9 @@ from backend.api.streaming import router as streaming_router
 
 self_play_loop_instance = None
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -170,10 +170,32 @@ async def lifespan(app: FastAPI):
     await stop_artist_fn()
 
 app = FastAPI(
-    title="Archimedes API",
-    description="Backend for the Archimedes Autonomous AI Agent",
+    title="Archimedes COSMO",
+    description="AI-powered full-stack development agent with specialized MCTS reasoning.",
+    version="0.2.0",
     lifespan=lifespan
 )
+
+# Prometheus Middleware
+@app.middleware("http")
+async def add_metrics(request: Request, call_next):
+    start_time = time.time()
+    method = request.method
+    endpoint = request.url.path
+    
+    response = await call_next(request)
+    
+    duration = time.time() - start_time
+    status = response.status_code
+    
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+    http_requests_total.labels(method=method, endpoint=endpoint, status=status).inc()
+    
+    return response
+
+@app.get("/metrics")
+async def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 import os
 
