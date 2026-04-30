@@ -337,6 +337,16 @@ class ToolInitializer:
         except Exception as e:
             logger.warning(f"GlobTool unavailable: {e}")
 
+        try:
+            from backend.tools.semantic_search import SemanticSearchEngine
+            import os
+            root = os.environ.get("WORKSPACE_DIR", "/home/ubuntu/workspace")
+            self.agent.semantic_engine = SemanticSearchEngine(root)
+            self.agent.register_tool("semantic_search", self.agent.semantic_engine.execute)
+            logger.info("SemanticSearchEngine registered")
+        except Exception as e:
+            logger.error(f"Failed to register SemanticSearchEngine: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools
