@@ -128,24 +128,55 @@ class SessionMemory:
         return self._current_memory
 
     @staticmethod
-    def list_recent_sessions(limit: int = 5) -> List[Dict]:
-        """Load memories from past sessions."""
-        memories = []
-        try:
-            dir_path = Path(SESSION_MEMORY_DIR)
-            if not dir_path.exists():
-                return []
-            files = sorted(dir_path.glob("*.md"), key=os.path.getmtime, reverse=True)
-            for f in files[:limit]:
-                with open(f) as fh:
-                    memories.append({
-                        "session_id": f.stem,
-                        "memory": fh.read()[:1000],
-                        "updated": datetime.fromtimestamp(os.path.getmtime(f)).isoformat()
+    def search_past_sessions(query: str, top_k: int = 5) -> list:
+        """Search across ALL past session memories for relevant context."""
+        results = []
+        memory_dir = Path(SESSION_MEMORY_DIR)
+        if not memory_dir.exists():
+            return results
+
+        query_terms = set(query.lower().split())
+
+        for memory_file in memory_dir.glob("*.md"):
+            try:
+                content = memory_file.read_text()
+                content_lower = content.lower()
+                score = sum(1 for term in query_terms if term in content_lower)
+                if score > 0:
+                    results.append({
+                        "session_id": memory_file.stem,
+                        "score": score,
+                        "preview": content[:300],
+                        "file": str(memory_file),
                     })
-        except Exception:
-            pass
-        return memories
+            except Exception:
+                continue
+
+        results.sort(key=lambda r: r["score"], reverse=True)
+        return results[:top_k]
+
+    @staticmethod
+    def list_recent_sessions(limit: int = 10) -> list:
+        """List most recent session memories."""
+        memory_dir = Path(SESSION_MEMORY_DIR)
+        if not memory_dir.exists():
+            return []
+        files = sorted(
+            memory_dir.glob("*.md"),
+            key=lambda f: f.stat().st_mtime, reverse=True
+        )
+        results = []
+        for f in files[:limit]:
+            try:
+                content = f.read_text()
+                results.append({
+                    "session_id": f.stem,
+                    "preview": content[:200],
+                    "modified": f.stat().st_mtime,
+                })
+            except Exception:
+                continue
+        return results
 
     @property
     def current_memory(self) -> str:

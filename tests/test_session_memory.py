@@ -32,3 +32,20 @@ def test_list_recent_sessions_empty(tmp_path):
         from backend.memory.session_memory import SessionMemory
         sessions = SessionMemory.list_recent_sessions()
         assert isinstance(sessions, list)
+
+
+class TestCrossSessionSearch:
+    def test_search_returns_list(self, tmp_path):
+        with patch("backend.memory.session_memory.SESSION_MEMORY_DIR", str(tmp_path)):
+            from backend.memory.session_memory import SessionMemory
+            results = SessionMemory.search_past_sessions("test query")
+            assert isinstance(results, list)
+
+    def test_search_finds_relevant_session(self, tmp_path):
+        with patch("backend.memory.session_memory.SESSION_MEMORY_DIR", str(tmp_path)):
+            mem_file = tmp_path / "session_abc.md"
+            mem_file.write_text("## Current Task\nFix the authentication bug")
+            from backend.memory.session_memory import SessionMemory
+            results = SessionMemory.search_past_sessions("authentication bug")
+            assert len(results) > 0
+            assert results[0]["session_id"] == "session_abc"
