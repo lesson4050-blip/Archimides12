@@ -392,10 +392,13 @@ def validate_command(command: str) -> SecurityResult:
     cmd_lower = command.strip().lower()
     for blocked in ALWAYS_BLOCKED:
         if blocked in cmd_lower:
+            # Check if this is a permission-required command that was upgraded to ALWAYS_BLOCKED
+            is_perm = any(perm in blocked for perm in PERMISSION_REQUIRED_COMMANDS)
             return SecurityResult(
                 allowed=False,
                 check_id=SecurityCheckID.DANGEROUS_PATTERNS,
-                message=f"Always-blocked command: {blocked}"
+                message=f"Always-blocked command: {blocked}",
+                severity="permission_required" if is_perm else "blocked"
             )
 
     for safe in SAFE_EXCEPTIONS:

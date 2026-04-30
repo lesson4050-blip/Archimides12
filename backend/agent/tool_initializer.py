@@ -172,6 +172,23 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register CosmoPresentationTool: {e}")
 
+        # --- Intelligence tools (Phase 2 + 5) ---
+        try:
+            from backend.tools.vector_search import VectorSearchEngine
+            self.agent.vector_search = VectorSearchEngine(workspace_dir=".")
+            self.tool_registry.register("vector_search", self.agent.vector_search.execute)
+            logger.info("ChromaDB Vector Search tool registered")
+        except Exception as e:
+            logger.error(f"Failed to register VectorSearchEngine: {e}")
+
+        try:
+            from backend.tools.repo_map import RepoMap
+            self.agent.repo_map = RepoMap(workspace_dir=".")
+            self.tool_registry.register("repo_map", self.agent.repo_map.execute)
+            logger.info("AST Repo Map tool registered")
+        except Exception as e:
+            logger.error(f"Failed to register RepoMap: {e}")
+
         try:
             from backend.tools.plan_tool import PlanTool
             from backend.agent.planner import PlanManager

@@ -387,3 +387,173 @@ class ErrorRecovery:
                 )
 
         return False, ""
+
+    # ── JSON Resilient Parsing (small model fallback) ────────────
+
+    @staticmethod
+    def extract_json_resilient(text: str) -> Optional[Dict]:
+        """
+        Extract JSON from LLM output that may contain markdown fences,
+        trailing commas, or other formatting artifacts.
+
+        Handles:
+        - ```json ... ``` blocks
+        - Leading/trailing prose around JSON
+        - Trailing commas before } or ]
+        - Single quotes instead of double quotes
+        - Missing closing brackets
+        """
+        import json
+
+        if not text or not text.strip():
+            return None
+
+        # Step 1: Extract from markdown code fences
+        fence_match = re.search(r'```(?:json)?\s*\n?(.*?)```', text, re.DOTALL)
+        if fence_match:
+            text = fence_match.group(1).strip()
+
+        # Step 2: Find JSON-like boundaries
+        start = -1
+        for i, c in enumerate(text):
+            if c in ('{', '['):
+                start = i
+                break
+
+        if start == -1:
+            return None
+
+        # Find matching closing bracket
+        opener = text[start]
+        closer = '}' if opener == '{' else ']'
+        depth = 0
+        end = -1
+        in_str = False
+        escape = False
+
+        for i in range(start, len(text)):
+            c = text[i]
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_str:
+                escape = True
+                continue
+            if c == '"' and not escape:
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if c == opener:
+                depth += 1
+            elif c == closer:
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+
+        if end == -1:
+            # Try auto-closing
+            candidate = text[start:] + closer * depth
+        else:
+            candidate = text[start:end]
+
+        # Step 3: Fix common issues
+        # Trailing commas
+        candidate = re.sub(r',\s*([}\]])', r'\1', candidate)
+        # Single quotes to double quotes (rough)
+        if "'" in candidate and '"' not in candidate:
+            candidate = candidate.replace("'", '"')
+
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+        # Step 4: Last resort — use json_repair if available
+        try:
+            from backend.utils.json_repair import repair_and_parse
+            result, _ = repair_and_parse(candidate)
+            return result
+        except Exception:
+            pass
+
+        return None
+
+    # ── Self-Healing Loop Detection ──────────────────────────────
+
+    def self_healing_check(self) -> Dict[str, Any]:
+        """
+        Analyze failure history for stuck patterns and suggest remediation.
+
+        Returns:
+            {
+                "stuck": bool,
+                "pattern": str,  # Description of detected pattern
+                "suggestion": str,  # Remediation action
+                "severity": str,  # "low", "medium", "high", "critical"
+            }
+        """
+        if len(self.tool_failure_history) < 3:
+            return {"stuck": False, "pattern": "", "suggestion": "", "severity": "low"}
+
+        recent = self.tool_failure_history[-6:]
+
+        # Pattern 1: Same file being modified repeatedly with errors (Most Specific)
+        file_paths = [f.file_path for f in recent if f.file_path]
+        if file_paths:
+            most_common_file = max(set(file_paths), key=file_paths.count)
+            file_freq = file_paths.count(most_common_file)
+            if file_freq >= 2:
+                return {
+                    "stuck": True,
+                    "pattern": f"File '{most_common_file}' causing repeated failures ({file_freq}x)",
+                    "suggestion": f"Read '{most_common_file}' fully before attempting changes, or rollback to checkpoint",
+                    "severity": "medium",
+                }
+
+        # Pattern 2: Same tool failing repeatedly
+        tool_names = [f.tool_name for f in recent]
+        most_common_tool = max(set(tool_names), key=tool_names.count)
+        tool_freq = tool_names.count(most_common_tool)
+        if tool_freq >= 3:
+            return {
+                "stuck": True,
+                "pattern": f"Tool '{most_common_tool}' failed {tool_freq}/{len(recent)} times",
+                "suggestion": f"Exclude '{most_common_tool}' and try alternative tools",
+                "severity": "high",
+            }
+
+        # Pattern 3: Same error type oscillating
+        error_types = [f.error_type for f in recent]
+        most_common_type = max(set(error_types), key=error_types.count)
+        type_freq = error_types.count(most_common_type)
+        if type_freq >= 4:
+            return {
+                "stuck": True,
+                "pattern": f"Error type '{most_common_type.value}' repeating ({type_freq}x)",
+                "suggestion": "Change strategy entirely — current approach is fundamentally wrong",
+                "severity": "critical",
+            }
+
+        # Pattern 4: Rapid failures (all within short timeframe)
+        if len(recent) >= 4:
+            timestamps = []
+            for f in recent:
+                try:
+                    ts = datetime.datetime.fromisoformat(f.timestamp.replace("Z", "+00:00"))
+                    timestamps.append(ts)
+                except (ValueError, AttributeError):
+                    pass
+            if len(timestamps) >= 4:
+                time_span = (timestamps[-1] - timestamps[0]).total_seconds()
+                if time_span < 30:  # 4+ failures in 30 seconds
+                    return {
+                        "stuck": True,
+                        "pattern": f"{len(timestamps)} failures in {time_span:.0f}s — thrashing",
+                        "suggestion": "Pause and re-read the task description before continuing",
+                        "severity": "high",
+                    }
+
+        return {"stuck": False, "pattern": "", "suggestion": "", "severity": "low"}
+

@@ -358,7 +358,22 @@ class AgentOrchestrator:
                 state.reset_for_subtask()
                 
                 # Subtask loop (includes critic retries)
+                # Circuit Breaker: hard cap to prevent infinite loops
+                _circuit_breaker_limit = 15
+                _circuit_breaker_count = 0
                 while True:
+                    _circuit_breaker_count += 1
+                    if _circuit_breaker_count > _circuit_breaker_limit:
+                        logger.warning(
+                            f"[{state.session_id}] Circuit breaker tripped on subtask {i} "
+                            f"after {_circuit_breaker_limit} iterations"
+                        )
+                        if websocket_send:
+                            await websocket_send({
+                                "type": "info",
+                                "content": f"⚡ Circuit breaker: subtask {i} exceeded {_circuit_breaker_limit} iterations, moving on"
+                            })
+                        break
                     current_target = subtask.get("description", state.task_description)
                     
                     # Strategy-aware dispatch: use swarm for matching strategies

@@ -14,6 +14,7 @@ from backend.api.settings_routes import router as settings_router
 from backend.api.connectors_router import router as connectors_router
 from backend.api.quick_task_router import router as quick_task_router
 from backend.api.benchmark import router as benchmark_router
+from backend.api.streaming import router as streaming_router
 
 self_play_loop_instance = None
 
@@ -36,13 +37,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Observability setup failed (non-critical): {e}")
     
-    if not settings.JWT_SECRET_KEY:
-        import secrets
-        settings.JWT_SECRET_KEY = secrets.token_hex(32)
-        logger.warning(
-            "JWT_SECRET_KEY not set in .env — generated ephemeral key. "
-            "Sessions will reset on restart. Set JWT_SECRET_KEY in .env to fix."
-        )
+    if settings.AUTH_ENABLED:
+        if not settings.JWT_SECRET_KEY:
+            raise RuntimeError(
+                "CRITICAL SECURITY ERROR: JWT_SECRET_KEY is not set in .env. "
+                "In production, this allows trivial token forgery. "
+                "Set JWT_SECRET_KEY in .env using: python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
+        if len(settings.JWT_SECRET_KEY) < 32:
+            raise RuntimeError(
+                "CRITICAL SECURITY ERROR: JWT_SECRET_KEY is too short (must be at least 32 characters). "
+                "Please generate a stronger key."
+            )
+    else:
+        logger.warning("Authentication is DISABLED. This is insecure for production use.")
     
     await init_db()
 
@@ -178,6 +186,7 @@ app.include_router(settings_router)
 app.include_router(connectors_router)
 app.include_router(quick_task_router)
 app.include_router(benchmark_router)
+app.include_router(streaming_router)
 
 
 

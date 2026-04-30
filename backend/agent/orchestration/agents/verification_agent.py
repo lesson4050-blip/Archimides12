@@ -345,3 +345,116 @@ Output ONLY commands, no explanations."""
         result = await executor("shell", {"action": "execute", "command": f"python3 -c \"import yaml; yaml.safe_load(open('{yml_files[0]}')); print('OK')\" 2>&1"})
         output = result.get("output", "")
         return VerificationCheck(name="validate_syntax", status=VerificationStatus.PASSED if "OK" in output else VerificationStatus.FAILED, output=output)
+
+    # ── Mutation Testing ─────────────────────────────────────────
+
+    MUTATION_OPERATORS = [
+        # (pattern, replacement, description)
+        (r'\breturn True\b', 'return False', 'negate_true'),
+        (r'\breturn False\b', 'return True', 'negate_false'),
+        (r'\b>=\b', '<', 'boundary_gte_to_lt'),
+        (r'\b<=\b', '>', 'boundary_lte_to_gt'),
+        (r'\b==\b', '!=', 'equality_invert'),
+        (r'\b!=\b', '==', 'inequality_invert'),
+        (r'\band\b', 'or', 'logic_and_to_or'),
+        (r'\bor\b', 'and', 'logic_or_to_and'),
+        (r'\b\+ ', '- ', 'arithmetic_add_to_sub'),
+    ]
+
+    async def mutation_test(
+        self,
+        target_file: str,
+        test_command: str = "python -m pytest tests/ -x -q --timeout=30",
+        tool_executor: Optional[Callable] = None,
+        max_mutations: int = 5,
+    ) -> Dict:
+        """
+        Run mutation testing on a target file.
+
+        1. Read the original file
+        2. Apply mutations one at a time
+        3. Run tests after each mutation
+        4. If tests still PASS → mutation survived (test suite gap!)
+        5. If tests FAIL → mutation killed (test suite is good)
+        6. Restore original after each mutation
+
+        Returns: {killed, survived, total, score, survivors: [...]}
+        """
+        executor = tool_executor or self.tool_executor
+        if not executor:
+            return {"error": "No executor available", "score": 0.0}
+
+        # Step 1: Read original file
+        read_result = await executor("shell", {
+            "action": "execute",
+            "command": f"cat {target_file}"
+        })
+        original_content = read_result.get("output", "")
+        if not original_content:
+            return {"error": f"Could not read {target_file}", "score": 0.0}
+
+        killed = 0
+        survived = 0
+        survivors = []
+        total = 0
+        import re as re_mod
+
+        for pattern, replacement, desc in self.MUTATION_OPERATORS:
+            if total >= max_mutations:
+                break
+
+            # Check if pattern exists in file
+            matches = list(re_mod.finditer(pattern, original_content))
+            if not matches:
+                continue
+
+            # Apply mutation to first match only
+            match = matches[0]
+            mutated = (
+                original_content[:match.start()]
+                + replacement
+                + original_content[match.end():]
+            )
+            total += 1
+
+            try:
+                # Write mutated version
+                escaped_content = mutated.replace("'", "'\\''")
+                await executor("shell", {
+                    "action": "execute",
+                    "command": f"echo '{escaped_content}' > {target_file}"
+                })
+
+                # Run tests
+                test_result = await executor("shell", {
+                    "action": "execute",
+                    "command": f"cd /app && timeout 30 {test_command} 2>&1 | tail -5"
+                })
+                test_output = test_result.get("output", "")
+
+                if "failed" in test_output.lower() or "error" in test_output.lower():
+                    killed += 1  # Test caught the mutation!
+                else:
+                    survived += 1  # Test missed the mutation!
+                    survivors.append({
+                        "mutation": desc,
+                        "pattern": pattern,
+                        "line": original_content[:match.start()].count('\n') + 1,
+                    })
+            finally:
+                # Always restore original
+                escaped_orig = original_content.replace("'", "'\\''")
+                await executor("shell", {
+                    "action": "execute",
+                    "command": f"echo '{escaped_orig}' > {target_file}"
+                })
+
+        score = killed / total if total > 0 else 0.0
+        return {
+            "killed": killed,
+            "survived": survived,
+            "total": total,
+            "score": round(score, 2),
+            "survivors": survivors,
+            "verdict": "strong" if score >= 0.8 else "weak" if score >= 0.5 else "inadequate",
+        }
