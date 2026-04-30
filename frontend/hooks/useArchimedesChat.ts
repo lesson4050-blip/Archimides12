@@ -83,6 +83,8 @@ export function useArchimedesChat(
     const bufferRef = useRef<any[]>([]);
     const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // WebSocket Connection with buffering
+  useEffect(() => {
     const flushBuffer = () => {
       if (bufferRef.current.length > 0) {
         store.setMessages(prev => [...prev, ...bufferRef.current]);
