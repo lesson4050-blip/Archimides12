@@ -277,6 +277,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.error(f"WebSocket error for {session_id}: {e}")
         await manager.disconnect(session_id)
 
-if __name__ == "__main__":
+@app.get(\"/api/health/models\")
+async def model_health():
+    from backend.models.model_router import ModelRouter
+    router = ModelRouter()
+    return await router.get_health_status()
+
+if __name__ == \"__main__\":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

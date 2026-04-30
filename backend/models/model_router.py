@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 class AllModelsExhausted(Exception):
     pass
 
+import time
+import httpx
+from backend.config import settings
+
 class ModelRouter:
     # Speed-first routing categories
     SPEED_TASKS = {"search", "browse", "realtime", "summarize",
@@ -24,54 +28,84 @@ class ModelRouter:
 
     def __init__(self):
         self.ollama = OllamaClient()
+        self._ollama_healthy = True
+        self._last_health_check = 0
+        self._health_cache_ttl = 30 # seconds
         
         try:
-            from backend.config import settings
             self.groq = GroqClient() if settings.GROQ_API_KEY else None
         except Exception:
             self.groq = None
             
         try:
-            from backend.config import settings
             self.gemini = GeminiClient() if settings.GOOGLE_API_KEY else None
         except Exception:
             self.gemini = None
             
         try:
-            from backend.config import settings
             self.anthropic = AnthropicClient() if getattr(settings, "ANTHROPIC_API_KEY", None) else None
         except Exception:
             self.anthropic = None
 
-    def _get_order(
+    async def _check_ollama_health(self) -> bool:
+        """Checks if Ollama is reachable and caches the result."""
+        now = time.time()
+        if now - self._last_health_check < self._health_cache_ttl:
+            return self._ollama_healthy
+
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                response = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+                self._ollama_healthy = response.status_code == 200
+        except Exception:
+            self._ollama_healthy = False
+            logger.warning("Ollama health check failed! Falling back to cloud providers.")
+
+        self._last_health_check = now
+        return self._ollama_healthy
+
+    async def get_health_status(self) -> Dict[str, Any]:
+        """Returns health status of all providers."""
+        ollama_ok = await self._check_ollama_health()
+        return {
+            "ollama": "healthy" if ollama_ok else "unreachable",
+            "groq": "available" if self.groq else "no_key",
+            "gemini": "available" if self.gemini else "no_key",
+            "anthropic": "available" if self.anthropic else "no_key"
+        }
+
+    async def _get_order(
         self,
         task_hint: str,
         tools: list
     ) -> list:
         """
         Single source of truth for model routing order.
-        Ollama-first for local/private/default tasks.
-        Cloud providers as fallback when available.
+        If Ollama is down, it is moved to the end of the list.
         """
+        ollama_ok = await self._check_ollama_health()
+        
         if task_hint in ("local", "private", "execute"):
-            # Privacy/offline: Ollama always first
             order = [self.ollama, self.groq, self.gemini, self.anthropic]
         elif task_hint in self.QUALITY_TASKS:
-            # Quality tasks: best model first, Ollama as fallback
             order = [self.anthropic, self.gemini, self.ollama, self.groq]
         elif task_hint in self.SPEED_TASKS:
-            # Speed tasks: fastest first
             order = [self.groq, self.ollama, self.gemini, self.anthropic]
         elif tools:
-            # Tool calling: Ollama first (it handles tools via injection)
             order = [self.ollama, self.anthropic, self.groq, self.gemini]
         else:
-            # Default: Ollama first as primary local provider
             order = [self.ollama, self.groq, self.gemini, self.anthropic]
-        return [c for c in order if c is not None]
+        
+        available = [c for c in order if c is not None]
+        if not ollama_ok and self.ollama in available:
+            # Move ollama to the very end if unhealthy
+            available.remove(self.ollama)
+            available.append(self.ollama)
+            
+        return available
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
-        order = self._get_order(task_hint, tools or [])
+        order = await self._get_order(task_hint, tools or [])
 
         errors = []
         for client in order:
@@ -97,7 +131,7 @@ class ModelRouter:
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
 
     async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
-        order = self._get_order(task_hint, tools or [])
+        order = await self._get_order(task_hint, tools or [])
 
         errors = []
         for client in order:
