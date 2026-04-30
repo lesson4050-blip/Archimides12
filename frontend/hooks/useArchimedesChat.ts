@@ -80,8 +80,19 @@ export function useArchimedesChat(
     }
   };
 
-  // WebSocket Connection
+  // WebSocket Connection with buffering
   useEffect(() => {
+    const buffer: any[] = [];
+    let flushTimeout: any = null;
+
+    const flushBuffer = () => {
+      if (buffer.length > 0) {
+        store.setMessages(prev => [...prev, ...buffer]);
+        buffer.length = 0;
+      }
+      flushTimeout = null;
+    };
+
     const handleAgentEvent = (event: AgentEvent) => {
         if (["message_info", "message_ask", "message_result", "agent_error", "session_end"].includes(event.type)) {
           store.setIsWorking(false);
@@ -111,31 +122,31 @@ export function useArchimedesChat(
               ) {
                  determinedType = "thought";
               }
-              store.setMessages(prev => [...prev, { role: "assistant", type: determinedType as any, content: cleaned }]);
+              buffer.push({ role: "assistant", type: determinedType as any, content: cleaned });
             }
             break;
           }
           case "message_ask": {
             const cleaned = cleanMessageContent(event.text || event.content);
-            if (cleaned) store.setMessages(prev => [...prev, { role: "assistant", type: "ask", content: cleaned }]);
+            if (cleaned) buffer.push({ role: "assistant", type: "ask", content: cleaned });
             break;
           }
           case "message_result": {
             const cleaned = cleanMessageContent(event.text || event.content);
-            if (cleaned) store.setMessages(prev => [...prev, { role: "assistant", type: "result", content: cleaned }]);
+            if (cleaned) buffer.push({ role: "assistant", type: "result", content: cleaned });
             break;
           }
           case "thought": {
             const cleaned = cleanMessageContent(event.content || event.text);
-            if (cleaned) store.setMessages(prev => [...prev, { role: "assistant", type: "thought", content: cleaned }]);
+            if (cleaned) buffer.push({ role: "assistant", type: "thought", content: cleaned });
             break;
           }
           case "tool_call": {
-            store.setMessages(prev => [...prev, { 
+            buffer.push({ 
               role: "assistant", 
               type: "tool", 
               content: `Вызов инструмента: **${event.tool}**\n\`\`\`json\n${JSON.stringify(event.params, null, 2)}\n\`\`\`` 
-            }]);
+            });
             break;
           }
           case "artifact": {
@@ -146,16 +157,16 @@ export function useArchimedesChat(
               language: event.language,
             };
             store.setArtifacts(prev => [...prev, artifactData]);
-            store.setMessages(prev => [...prev, { 
+            buffer.push({ 
               role: "system", 
               type: "artifact", 
               content: event.name || "file",
               artifactData,
-            }]);
+            });
             break;
           }
           case "plan_update": {
-             store.setMessages(prev => [...prev, { role: "assistant", type: "plan", content: `Обновление плана: ${event.text || "Выполнение..."}` }]);
+             buffer.push({ role: "assistant", type: "plan", content: `Обновление плана: ${event.text || "Выполнение..."}` });
              break;
           }
           case "confidence": {
@@ -172,7 +183,7 @@ export function useArchimedesChat(
               { type: event.mime_type }
             );
             const url = URL.createObjectURL(blob);
-            store.setMessages(prev => [...prev, {
+            buffer.push({
               role: "assistant",
               type: "file_download",
               content: event.label || "Файл сгенерирован",
@@ -180,7 +191,7 @@ export function useArchimedesChat(
               download_url: url,
               size_kb: event.size_kb,
               preview_url: event.preview_url
-            }]);
+            });
             break;
           }
           case "browser_navigate": {
@@ -195,7 +206,13 @@ export function useArchimedesChat(
           store.setHasToolEvents(true);
         }
         window.dispatchEvent(new CustomEvent("archimedes-event", { detail: event }));
+
+        // Batch flushing
+        if (!flushTimeout) {
+          flushTimeout = setTimeout(flushBuffer, 100);
+        }
     };
+
 
     const archSocket = new ArchimedesSocket(sessionId, (event: AgentEvent) => {
       handleAgentEvent(event);

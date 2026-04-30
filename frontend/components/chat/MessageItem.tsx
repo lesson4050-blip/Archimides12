@@ -1,11 +1,12 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import MessagePill from "../MessagePill";
 import { useAppStore, Message } from "@/lib/store";
 
-export default function MessageItem({ msg }: { msg: Message }) {
+const MessageItem = memo(({ msg }: { msg: Message }) => {
   const { setViewingArtifact } = useAppStore();
 
   return (
@@ -97,4 +98,7 @@ export default function MessageItem({ msg }: { msg: Message }) {
       )}
     </motion.div>
   );
-}
+});
+
+MessageItem.displayName = "MessageItem";
+export default MessageItem;
