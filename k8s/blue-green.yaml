@@ -1,0 +1,107 @@
+# Blue-Green Deployment for Archimedes 12
+apiVersion: v1
+kind: Service
+metadata:
+  name: archimedes-live
+spec:
+  selector:
+    app: archimedes
+    slot: blue  # Switch to "green" for cutover
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archimedes-blue
+  labels:
+    app: archimedes
+    slot: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: archimedes
+      slot: blue
+  template:
+    metadata:
+      labels:
+        app: archimedes
+        slot: blue
+    spec:
+      containers:
+        - name: archimedes
+          image: archimedes:latest
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "4000m"
+          env:
+            - name: DEPLOYMENT_SLOT
+              value: "blue"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: archimedes-green
+  labels:
+    app: archimedes
+    slot: green
+spec:
+  replicas: 0  # Scale up when deploying new version
+  selector:
+    matchLabels:
+      app: archimedes
+      slot: green
+  template:
+    metadata:
+      labels:
+        app: archimedes
+        slot: green
+    spec:
+      containers:
+        - name: archimedes
+          image: archimedes:next
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "4000m"
+          env:
+            - name: DEPLOYMENT_SLOT
+              value: "green"
