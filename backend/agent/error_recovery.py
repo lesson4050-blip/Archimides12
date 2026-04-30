@@ -475,8 +475,9 @@ class ErrorRecovery:
             from backend.utils.json_repair import repair_and_parse
             result, _ = repair_and_parse(candidate)
             return result
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
         return None
 

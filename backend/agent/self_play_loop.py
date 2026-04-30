@@ -158,8 +158,9 @@ class SelfPlayLoop:
             data, _ = repair_and_parse(resp.get("text", "{}"))
             if data and isinstance(data.get("score"), (int, float)):
                 return float(data["score"])
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
         return 5.0
 
     def get_stats(self) -> dict:

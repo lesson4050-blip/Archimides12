@@ -7,11 +7,6 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Archimedes",
   description: "Archimedes — Beyond Intelligence",
-  icons: {
-    icon: "/logo-transparent.png",
-    shortcut: "/logo-transparent.png",
-    apple: "/logo-transparent.png",
-  },
 };
 
 import ThemeInitializer from "@/components/ThemeInitializer";

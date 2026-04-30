@@ -6,7 +6,7 @@ When AUTH_ENABLED=False, all requests pass through (dev mode).
 
 import logging
 from typing import Optional
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, HTTPException, Header, status, Request
 from fastapi.security import OAuth2PasswordBearer
 
 from backend.config import settings
@@ -20,6 +20,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=F
 
 
 async def get_current_user(
+    request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
 ) -> dict:
@@ -39,9 +40,10 @@ async def get_current_user(
             "auth_method": "dev-bypass",
         }
     
-    # Try JWT token first
-    if token:
-        payload = verify_token(token)
+    # Try JWT token first (from header or cookie)
+    jwt_token = token or request.cookies.get("access_token")
+    if jwt_token:
+        payload = verify_token(jwt_token)
         if payload:
             return {
                 "user_id": payload["user_id"],
@@ -68,6 +70,7 @@ async def get_current_user(
 
 
 async def get_optional_user(
+    request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
 ) -> Optional[dict]:
@@ -76,7 +79,7 @@ async def get_optional_user(
     Used for endpoints that work both authenticated and anonymously.
     """
     try:
-        return await get_current_user(token, x_api_key)
+        return await get_current_user(request, token, x_api_key)
     except HTTPException:
         return None
 

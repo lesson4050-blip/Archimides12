@@ -161,7 +161,7 @@ class MonitorTool:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
                 content = resp.text
-                current_hash = hashlib.md5(content.encode()).hexdigest()
+                current_hash = hashlib.sha256(content.encode()).hexdigest()
                 
                 changed = last_hash is not None and current_hash != last_hash
                 

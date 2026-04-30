@@ -136,7 +136,7 @@ class MediaTool:
 
                 # Generate filename
                 if not filename:
-                    prompt_hash = hashlib.md5(prompt.encode()).hexdigest()[:8]
+                    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:8]
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = f"img_{prompt_hash}_{timestamp}.png"
 
@@ -193,7 +193,7 @@ class MediaTool:
                 response.raise_for_status()
 
                 if not filename:
-                    code_hash = hashlib.md5(mermaid_code.encode()).hexdigest()[:8]
+                    code_hash = hashlib.sha256(mermaid_code.encode()).hexdigest()[:8]
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = f"diagram_{code_hash}_{timestamp}.png"
 
@@ -250,7 +250,7 @@ class MediaTool:
                     ext = ".svg"
 
                 if not filename:
-                    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+                    url_hash = hashlib.sha256(url.encode()).hexdigest()[:8]
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = f"download_{url_hash}_{timestamp}{ext}"
 
@@ -319,8 +319,9 @@ class MediaTool:
         try:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
     def _load_metadata(self, filename: str) -> Optional[dict]:
         """Load metadata for a media file."""

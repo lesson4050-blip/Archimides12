@@ -1,18 +1,15 @@
 import sys
 import io
 import traceback
+import base64
+import logging
 from typing import Dict, Any
-import contextlib
 
-# Persistent state across tool calls within the same worker process
-_SESSION_STATES: dict[str, dict] = {}
-
-def clear_session(session_id: str) -> None:
-    _SESSION_STATES.pop(session_id, None)
+logger = logging.getLogger(__name__)
 
 class ReplTool:
     """
-    Interactive Python REPL with persistent memory for quick code experimentation.
+    Isolated Python REPL execution in the Docker sandbox.
     """
     def __init__(self):
         pass
@@ -22,13 +19,13 @@ class ReplTool:
             "type": "function",
             "function": {
                 "name": "python_repl",
-                "description": "SUPER WEAPON: Execute raw Python code in a persistent sandbox memory state. Use this to quickly test a complex regex, verify a small algorithm, or check how a library works WITHOUT writing a temporary file.",
+                "description": "SUPER WEAPON: Execute raw Python code safely inside the isolated Docker sandbox. Note: Execution is STATELESS. Variables do not persist between calls. If you need to persist data, write it to the workspace filesystem.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "code": {
                             "type": "string", 
-                            "description": "Python code to execute. Variables created here will persist in memory for future repl calls."
+                            "description": "Python code to execute inside the sandbox container."
                         }
                     },
                     "required": ["code"]
@@ -37,53 +34,35 @@ class ReplTool:
         }
 
     async def execute(self, session_id: str, code: str) -> Dict[str, Any]:
-        if session_id not in _SESSION_STATES:
-            _SESSION_STATES[session_id] = {}
-        state = _SESSION_STATES[session_id]
-
-        # Capture stdout and stderr
-        stdout = io.StringIO()
-        stderr = io.StringIO()
+        from backend.sandbox.singleton import sandbox_manager
+        
+        # Encode code to avoid bash injection breaking the command
+        b64_code = base64.b64encode(code.encode("utf-8")).decode("utf-8")
+        cmd = f"echo '{b64_code}' | base64 -d > /tmp/repl.py && python3 /tmp/repl.py"
         
         try:
-            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                # We compile it as 'exec' to run multiple statements
-                # But we want to mimic a REPL where the last expression is printed if it evaluates to something
-                
-                # Split code to execute all but last, and eval the last
-                import ast
-                parsed = ast.parse(code)
-                if len(parsed.body) > 0 and isinstance(parsed.body[-1], ast.Expr):
-                    # Last statement is an expression. We can eval it to return its value
-                    exec_part = ast.unparse(parsed.body[:-1]) if hasattr(ast, 'unparse') else ""
-                    eval_part = ast.unparse(parsed.body[-1].value) if hasattr(ast, 'unparse') else ""
-                    
-                    if exec_part:
-                        exec(compile(parsed.body[:-1], "<repl>", "exec"), state)
-                    
-                    if eval_part:
-                        val = eval(compile(parsed.body[-1].value, "<repl>", "eval"), state)
-                        if val is not None:
-                            print(val)
-                else:
-                    # Just exec the whole block
-                    exec(code, state)
-                    
-            out = stdout.getvalue()
-            err = stderr.getvalue()
+            result = await sandbox_manager.executor.run_command(
+                session_id=session_id,
+                command=cmd,
+                timeout=60
+            )
             
-            result = out
-            if err:
-                result += f"\n[STDERR]\n{err}"
+            out = result.get("output", "").strip()
+            
+            if not result.get("success"):
+                return {
+                    "success": False,
+                    "error": result.get("error", "Unknown execution error") or out
+                }
                 
             return {
                 "success": True, 
-                "result": result.strip() or "[Executed successfully, no output]"
+                "result": out or "[Executed successfully, no output]"
             }
             
-        except Exception:
-            err = traceback.format_exc()
+        except Exception as e:
+            logger.error(f"ReplTool execution failed: {e}")
             return {
                 "success": False,
-                "error": err
+                "error": str(e)
             }

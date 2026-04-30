@@ -10,9 +10,11 @@ Phase 3 hardening:
 import re
 import time
 import logging
+import asyncio
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, Optional
 
+import redis.asyncio as redis
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -24,34 +26,76 @@ logger = logging.getLogger(__name__)
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Token-bucket rate limiter per client IP.
-    Default: 60 requests/minute per IP for API endpoints.
-    Health checks and static assets are exempt.
+    Uses Redis if REDIS_URL is configured, otherwise gracefully degrades to local memory.
     """
 
-    EXEMPT_PATHS = {"/", "/api/health", "/api/v1/health", "/docs", "/openapi.json"}
+    EXEMPT_PATHS = {"/", "/api/health", "/api/v1/health", "/docs", "/openapi.json", "/metrics"}
 
     def __init__(self, app, requests_per_minute: int = 60):
         super().__init__(app)
         self.rpm = requests_per_minute
+        # Local memory fallback
         self._buckets: dict = defaultdict(lambda: {"tokens": requests_per_minute, "last": time.time()})
+        
+        # Redis client initialization
+        from backend.config import settings
+        self.redis_client = None
+        redis_url = getattr(settings, "REDIS_URL", None)
+        if redis_url:
+            try:
+                self.redis_client = redis.from_url(redis_url, decode_responses=True)
+                logger.info(f"Rate Limiter connected to Redis at {redis_url}")
+            except Exception as e:
+                logger.warning(f"Failed to connect to Redis for Rate Limiting: {e}. Falling back to memory.")
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         path = request.url.path
 
-        # Exempt health checks and docs
         if path in self.EXEMPT_PATHS or path.startswith("/docs"):
             return await call_next(request)
 
-        # WebSocket connections are not rate-limited
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # Exempt developer loopback addresses (localhost)
+        if client_ip in ("127.0.0.1", "::1", "localhost"):
+            return await call_next(request)
+
         if "websocket" in request.scope.get("type", ""):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
-        bucket = self._buckets[client_ip]
 
-        # Refill tokens based on elapsed time
+        if self.redis_client:
+            # Redis-based distributed Rate Limiter (Token Bucket using Lua script or simple counters)
+            # For performance, we use a simple rolling window via increment and expire
+            current_minute = int(time.time() / 60)
+            key = f"ratelimit:{client_ip}:{current_minute}"
+            
+            try:
+                # Use pipeline for atomic operations
+                pipe = self.redis_client.pipeline()
+                pipe.incr(key)
+                pipe.expire(key, 60)
+                results = await pipe.execute()
+                
+                requests_this_minute = results[0]
+                if requests_this_minute > self.rpm:
+                    logger.warning(f"Distributed rate limit exceeded for {client_ip} on {path}")
+                    return JSONResponse(
+                        status_code=429,
+                        content={"detail": "Too many requests. Please try again later."},
+                        headers={"Retry-After": "60"}
+                    )
+                return await call_next(request)
+            except Exception as e:
+                logger.error(f"Redis rate limiter failed: {e}. Falling back to memory for this request.")
+                # Fallthrough to memory bucket
+                
+        # Memory-based Rate Limiter (Graceful Degradation)
+        bucket = self._buckets[client_ip]
         now = time.time()
         elapsed = now - bucket["last"]
+        
         bucket["tokens"] = min(
             self.rpm,
             bucket["tokens"] + elapsed * (self.rpm / 60)
@@ -59,7 +103,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         bucket["last"] = now
 
         if bucket["tokens"] < 1:
-            logger.warning(f"Rate limit exceeded for {client_ip} on {path}")
+            logger.warning(f"Local rate limit exceeded for {client_ip} on {path}")
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please try again later."},

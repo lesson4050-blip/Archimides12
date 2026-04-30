@@ -13,6 +13,7 @@
 #   - archimedes-sandbox  (Isolated Execution Env)  :6080 (VNC)
 #   - ollama              (Local LLM Engine)        :11434
 #   - postgres            (Production Database)     :5432
+#   - redis               (Rate Limiting & Cache)   :6379
 # ============================================================
 
 services:
@@ -34,6 +35,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - DATABASE_URL=postgresql+asyncpg://archimedes:${POSTGRES_PASSWORD:-archimedes}@postgres:5432/archimedes
       - DATABASE_URL_SQLITE=sqlite+aiosqlite:///./data/archemidas.db
+      - REDIS_URL=redis://redis:6379/0
       - COSMO_ARTIST_URL=http://cosmo-artist:3005
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
     volumes:
@@ -52,8 +54,28 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       ollama:
         condition: service_healthy
+
+  # ─── Redis Cache & Rate Limiting ────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: archimedes-redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - archimedes-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
 
   # ─── Next.js Dashboard ────────────────────────────────
   frontend:
@@ -186,6 +208,8 @@ volumes:
   backend-logs:
     driver: local
   sandbox-data:
+    driver: local
+  redis-data:
     driver: local
 
 # ─── Network ─────────────────────────────────────────

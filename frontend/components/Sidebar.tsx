@@ -36,9 +36,12 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
         <div className="flex items-center gap-0 group cursor-pointer -ml-2">
           <div className="relative h-[44px] flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105 group-hover:-translate-y-0.5">
             <div className="absolute inset-0 bg-blue-500/10 blur-xl group-hover:bg-blue-500/30 transition-colors"></div>
-            <img 
+            <Image 
                src="/logo-transparent.png" 
-               alt="Archimedes Spiral Logo" 
+               alt="Archimedes Spiral Logo"
+               width={120}
+               height={44}
+               priority
                className="h-full w-auto object-contain relative z-10 drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] transition-transform"
             />
           </div>

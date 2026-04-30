@@ -79,7 +79,7 @@ class VectorSearchEngine:
 
     def _get_collection_name(self) -> str:
         """Generate a unique collection name from workspace path."""
-        path_hash = hashlib.md5(self.workspace_dir.encode()).hexdigest()[:8]
+        path_hash = hashlib.sha256(self.workspace_dir.encode()).hexdigest()[:8]
         return f"code_{path_hash}"
 
     def _get_or_create_collection(self):
@@ -163,7 +163,7 @@ class VectorSearchEngine:
 
     def _compute_workspace_hash(self, files: List[str]) -> str:
         """Quick hash to detect if workspace changed since last index."""
-        h = hashlib.md5()
+        h = hashlib.sha256()
         for f in sorted(files)[:500]:
             try:
                 stat = os.stat(f)
@@ -190,8 +190,9 @@ class VectorSearchEngine:
                 all_ids = collection.get()["ids"]
                 if all_ids:
                     collection.delete(ids=all_ids)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
         ids = []
         documents = []

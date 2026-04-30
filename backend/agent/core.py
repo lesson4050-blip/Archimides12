@@ -255,8 +255,9 @@ class ArchimedesCosmoAgent:
                     task_description=task_description,
                     metadata={"mode": mode.value}
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
             
             orch_result = await self.orchestrator.run_task(
                 task_description=task_description, 
@@ -298,8 +299,9 @@ class ArchimedesCosmoAgent:
             try:
                 from backend.agent.session_store import get_session_store
                 get_session_store().delete_session(self.session_id or "default")
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
                 
         except Exception as e:
             logger.error(f"Task failed: {e}")

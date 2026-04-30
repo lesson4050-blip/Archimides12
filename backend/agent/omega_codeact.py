@@ -442,8 +442,9 @@ class OmegaCodeAct:
                         fname = fname.strip()
                         if fname and fname not in state.modified_files:
                             state.modified_files.append(fname)
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
                 state.all_outputs.append(exec_result)
                 
                 if websocket_send:

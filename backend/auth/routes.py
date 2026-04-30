@@ -6,7 +6,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
@@ -43,7 +43,7 @@ class LoginResponse(BaseModel):
     expires_in_hours: int
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class UserResponse(BaseModel):
@@ -100,7 +100,7 @@ async def register(request: RegisterRequest):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     """
     Login with email/password. Returns JWT access token.
     Uses OAuth2 form format: username=email, password=password.
@@ -128,9 +128,27 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         
         logger.info(f"User logged in: {user.email}")
         
+        # Set HttpOnly cookies
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=settings.JWT_EXPIRATION_HOURS * 3600
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=settings.JWT_EXPIRATION_HOURS * 3600 * 24 * 7 # 7 days
+        )
+        
         return LoginResponse(
-            access_token=token,
-            refresh_token=refresh_token,
+            access_token="",
+            refresh_token="",
             user_id=user.id,
             role=user.role,
             expires_in_hours=settings.JWT_EXPIRATION_HOURS,
@@ -138,10 +156,11 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 @router.post("/refresh", response_model=LoginResponse)
-async def refresh_access_token(request: RefreshRequest):
-    """Refresh access token using refresh token."""
+async def refresh_access_token(request_data: RefreshRequest, request: Request, response: Response):
+    """Refresh access token using refresh token from cookie or body."""
     from backend.auth.jwt_handler import verify_token, create_access_token, create_refresh_token
-    payload = verify_token(request.refresh_token)
+    token_to_verify = request.cookies.get("refresh_token") or request_data.refresh_token
+    payload = verify_token(token_to_verify)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -162,9 +181,26 @@ async def refresh_access_token(request: RefreshRequest):
         new_access = create_access_token(user.id, user.role)
         new_refresh = create_refresh_token(user.id, user.role)
         
+        response.set_cookie(
+            key="access_token",
+            value=new_access,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=settings.JWT_EXPIRATION_HOURS * 3600
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=new_refresh,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=settings.JWT_EXPIRATION_HOURS * 3600 * 24 * 7
+        )
+        
         return LoginResponse(
-            access_token=new_access,
-            refresh_token=new_refresh,
+            access_token="",
+            refresh_token="",
             user_id=user.id,
             role=user.role,
             expires_in_hours=settings.JWT_EXPIRATION_HOURS,

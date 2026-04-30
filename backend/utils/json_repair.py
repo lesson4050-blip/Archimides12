@@ -56,8 +56,9 @@ def _try_extract_json_block(raw: str) -> Tuple[Optional[Any], str]:
         if match:
             try:
                 return json.loads(match.group(1).strip()), ""
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
     return None, "No JSON block found"
 
 
@@ -192,6 +193,7 @@ def _try_aggressive_extraction(raw: str) -> Tuple[Optional[Any], str]:
         try:
             wrapper = '{' + tc_match.group(0) + '}'
             return json.loads(wrapper), ""
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
     return None, "Aggressive extraction failed"

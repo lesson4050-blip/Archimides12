@@ -47,8 +47,9 @@ class ConnectionManager:
             for event in self.buffers[session_id]:
                 try:
                     await websocket.send_json(event)
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
             self.buffers[session_id].clear()
             del self.buffers[session_id]
 

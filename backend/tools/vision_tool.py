@@ -62,9 +62,10 @@ class VisionTool:
         from backend.config import settings
 
         try:
-            # Take screenshot if no path provided
             if not screenshot_path:
-                screenshot_path = f"/tmp/vision_{session_id or 'default'}.png"
+                import tempfile
+                fd, screenshot_path = tempfile.mkstemp(suffix=".png", prefix=f"vision_{session_id or 'default'}_")
+                os.close(fd)
                 result = subprocess.run(
                     ["scrot", "-z", screenshot_path],
                     capture_output=True, timeout=10

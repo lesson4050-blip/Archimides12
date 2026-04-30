@@ -109,8 +109,9 @@ class RepoMap:
             info.size_bytes = stat.st_size
             with open(filepath, 'r', errors='replace') as f:
                 info.line_count = sum(1 for _ in f)
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
         return info
 
     def scan(self) -> Dict[str, FileInfo]:

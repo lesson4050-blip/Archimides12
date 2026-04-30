@@ -256,8 +256,9 @@ async def api_health():
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
         db_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
     # Check Ollama
     ollama_ok = False
@@ -266,8 +267,9 @@ async def api_health():
         client = ollama.AsyncClient(host=settings.OLLAMA_BASE_URL)
         await client.list()
         ollama_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
     # Check Memory Bank
     memory_ok = False
@@ -275,8 +277,9 @@ async def api_health():
         from backend.memory.memory_bank import get_relevant_facts
         facts = await get_relevant_facts(limit=1)
         memory_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
     return {
         "status": "healthy" if db_ok else "degraded",

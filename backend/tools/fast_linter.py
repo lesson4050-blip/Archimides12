@@ -96,8 +96,9 @@ class FastLinterTool:
         try:
             tree = ast.parse(code)
             issues.extend(self._check_ast(tree, code))
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
         # 3. Pattern-based checks
         issues.extend(self._check_patterns(code))

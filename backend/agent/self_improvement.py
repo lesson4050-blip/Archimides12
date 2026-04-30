@@ -302,8 +302,9 @@ async def check_tool_safety(tool_name: str, params: dict) -> Tuple[bool, str]:
                 f"Tool '{tool_name}' has failed {recent_errors[0]} times in the last 5 minutes. "
                 f"Consider switching strategy."
             )
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
     
     return True, ""
 

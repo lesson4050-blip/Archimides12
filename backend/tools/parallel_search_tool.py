@@ -99,8 +99,9 @@ class ParallelSearchTool:
             )
             if result.get("success"):
                 return result.get("output", "")[:1000]
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
         
         try:
             # Fallback: web search via requests

@@ -99,8 +99,9 @@ class VoiceTool:
             
             try:
                 os.remove("temp_stt.mp3")
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
                 
             return {"success": True, "output": transcription.text}
         except Exception as e:

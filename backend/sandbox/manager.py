@@ -225,12 +225,14 @@ class SandboxManager:
                 logger.info(f"Cleaning up stale container: {c.name}")
                 try:
                     c.stop(timeout=5)
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
                 try:
                     c.remove(force=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
         except Exception as e:
             logger.warning(f"Stale container cleanup error: {e}")
 
@@ -412,12 +414,14 @@ class SandboxManager:
             
         try:
             await loop.run_in_executor(None, lambda: container.stop(timeout=10))
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
         try:
             await loop.run_in_executor(None, lambda: container.remove(force=True))
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
             
         logger.info(
             f"Destroyed container {container_name}. "

@@ -36,7 +36,6 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
   const [searchQuery, setSearchQuery] = useState("");
 
   const authHeader = () => ({
-    Authorization: `Bearer ${localStorage.getItem("token")}`,
     "Content-Type": "application/json",
   });
 
@@ -45,6 +44,7 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
     try {
       const r = await fetch(`${API_BASE}/api/v1/connectors/catalog`, {
         headers: authHeader(),
+        credentials: "include"
       });
       const data = await r.json();
       setServices(data.services || {});
@@ -83,6 +83,7 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
       // 1. Get a short-lived session token from our backend
       const tokenRes = await fetch(`${API_BASE}/api/v1/connectors/session-token`, {
         headers: authHeader(),
+        credentials: "include"
       });
       if (!tokenRes.ok) {
         throw new Error(`Failed to get session token: ${await tokenRes.text()}`);
@@ -110,6 +111,7 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
       await fetch(`${API_BASE}/api/v1/connectors/sync`, {
         method: "POST",
         headers: authHeader(),
+        credentials: "include",
       });
     } catch (e: any) {
       if (!e.message?.includes("cancelled")) {
@@ -130,6 +132,7 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
       const r = await fetch(`${API_BASE}/api/v1/connectors/connect/token`, {
         method: "POST",
         headers: authHeader(),
+        credentials: "include",
         body: JSON.stringify({ service_id: serviceId, api_key: token }),
       });
       if (!r.ok) throw new Error(await r.text());
@@ -147,6 +150,7 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
     await fetch(`${API_BASE}/api/v1/connectors/disconnect/${serviceId}`, {
       method: "POST",
       headers: authHeader(),
+      credentials: "include"
     });
     await fetchCatalog();
   };

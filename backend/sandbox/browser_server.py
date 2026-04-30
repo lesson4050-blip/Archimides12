@@ -166,8 +166,9 @@ async def execute_action(page, context, data: dict) -> dict:
             # Navigate with smart wait
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=25000)
-            except Exception:
-                pass  # Timeout is OK, page might still have content
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")  # Timeout is OK, page might still have content
 
             # Detect SPA framework and wait accordingly
             try:
@@ -187,8 +188,9 @@ async def execute_action(page, context, data: dict) -> dict:
                     await page.wait_for_load_state(
                         "networkidle", timeout=8000
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
                 # Additional wait for hydration
                 await asyncio.sleep(1.5)
             else:
@@ -281,24 +283,27 @@ async def execute_action(page, context, data: dict) -> dict:
                 try:
                     await page.click(f"text={target}", timeout=5000)
                     clicked = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
             
             # Try CSS selector
             if not clicked and data.get("selector"):
                 try:
                     await page.click(target, timeout=5000)
                     clicked = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
             
             # Try partial text match
             if not clicked:
                 try:
                     await page.click(f"text=/{re.escape(target)}/i", timeout=3000)
                     clicked = True
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
             
             if not clicked:
                 return {"success": False, "error": f"Could not find clickable element: '{target}'"}

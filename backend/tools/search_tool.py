@@ -124,8 +124,9 @@ class SearchTool:
                         full_content.append(
                             f"[From {url}]:\n{content[:1500]}"
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
         return "\n\n".join(full_content)
 
     async def _multi_hop_search(self, initial_query: str, max_hops: int = 3) -> str:
@@ -191,8 +192,9 @@ Do not output any reasoning, just 'DONE' or the new query.
             synthesized = synth_resp.get("text", "")
             if synthesized and len(synthesized) > 100:
                 return synthesized
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
 
         return "\n\n".join(all_results)
 
