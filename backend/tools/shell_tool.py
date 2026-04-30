@@ -124,12 +124,23 @@ class ShellTool:
             sec_result = security_validate_command(command)
             if not sec_result.allowed:
                 logger.warning(f"BLOCKED by bash_security: {command[:50]} — {sec_result.message}")
+                if getattr(sec_result, 'severity', None) == "permission_required":
+                    return {
+                        "success": False,
+                        "output": (
+                            f"⚠️ PERMISSION REQUIRED: {sec_result.message}\n"
+                            f"Command: {command}\n"
+                            f"To execute, user must explicitly approve this command."
+                        ),
+                        "permission_required": True,
+                        "blocked_command": command,
+                    }
                 return {
                     "success": False,
-                    "output": f"⛔ Command blocked: {sec_result.message}",
+                    "output": f"🛡️ BLOCKED by security engine: {sec_result.message}",
                     "exit_code": -1,
                     "blocked": True,
-                    "check_id": sec_result.check_id.name if sec_result.check_id else None
+                    "check_id": getattr(sec_result.check_id, 'name', None) if getattr(sec_result, 'check_id', None) else None
                 }
         
         # Layer 2: AI-based safety check

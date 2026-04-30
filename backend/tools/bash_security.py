@@ -33,6 +33,11 @@ class SecurityCheckID(IntEnum):
     PROC_ENVIRON = 12
     HEREDOC_IN_SUBSTITUTION = 13
     COMMENT_QUOTE_DESYNC = 14
+    ZSH_SPECIFIC = 15
+    HEREDOC_INJECTION = 16
+    INVISIBLE_CHARACTERS = 17
+    NESTED_SUBSTITUTION = 18
+    PERMISSION_REQUIRED = 19
 
 
 @dataclass
@@ -77,6 +82,68 @@ SAFE_EXCEPTIONS = {
     "curl -f http://localhost",
     # Allow pip/npm
     "pip install", "pip3 install", "npm install", "pnpm install",
+}
+
+
+# ── Zsh-specific attack patterns ──
+
+ZSH_DANGEROUS_BUILTINS = {
+    "zmodload", "emulate", "ztcp", "zsocket",
+    "zcompile", "autoload", "zle", "bindkey",
+    "sched", "zpty", "zformat", "zstyle",
+}
+
+ZSH_ATTACK_PATTERNS = [
+    (re.compile(r'emulate\s+-[LR]?\s*(?:sh|ksh|csh)'), "Zsh emulation mode switch"),
+    (re.compile(r'zmodload\s+zsh/'), "Zsh module loading"),
+    (re.compile(r'ztcp\s'), "Zsh TCP socket access"),
+    (re.compile(r'zsocket\s'), "Zsh socket access"),
+    (re.compile(r'zcompile\s'), "Zsh bytecode compilation"),
+    (re.compile(r'autoload\s+-U?z?\s'), "Zsh function autoloading"),
+]
+
+# ── Heredoc patterns ──
+
+HEREDOC_PATTERNS = [
+    (re.compile(r'<<\s*(\w+).*<<\s*\1', re.DOTALL), "Nested heredoc with same delimiter"),
+    (re.compile(r'<<\s*["\']?EOF["\']?\s*.*\$\(', re.DOTALL), "Command substitution inside heredoc"),
+    (re.compile(r'<<\s*\\'), "Escaped heredoc delimiter"),
+]
+
+# ── Invisible character patterns ──
+
+INVISIBLE_CHARS = [
+    ('\u200b', 'zero-width space'),
+    ('\u200c', 'zero-width non-joiner'),
+    ('\u200d', 'zero-width joiner'),
+    ('\u2060', 'word joiner'),
+    ('\ufeff', 'BOM'),
+    ('\u00ad', 'soft hyphen'),
+    ('\u200e', 'left-to-right mark'),
+    ('\u200f', 'right-to-left mark'),
+    ('\u202a', 'left-to-right embedding'),
+    ('\u202b', 'right-to-left embedding'),
+    ('\u202c', 'pop directional formatting'),
+    ('\u2066', 'left-to-right isolate'),
+    ('\u2067', 'right-to-left isolate'),
+    ('\u2068', 'first strong isolate'),
+    ('\u2069', 'pop directional isolate'),
+    ('\u061c', 'Arabic letter mark'),
+]
+
+# ── Commands requiring explicit user approval ──
+
+PERMISSION_REQUIRED_COMMANDS = {
+    "rm -rf", "rm -r", "rmdir",
+    "chmod", "chown", "chgrp",
+    "kill", "killall", "pkill",
+    "systemctl", "service",
+    "mount", "umount",
+    "iptables", "ufw",
+    "crontab",
+    "useradd", "userdel", "usermod",
+    "passwd",
+    "docker rm", "docker rmi", "docker system prune",
 }
 
 
@@ -214,53 +281,167 @@ def validate_brace_expansion(unquoted: str) -> Optional[SecurityResult]:
     return None
 
 
+def validate_zsh_attacks(command: str, unquoted: str) -> Optional[SecurityResult]:
+    """Detect Zsh-specific attack vectors."""
+    cmd_lower = unquoted.lower()
+    for builtin in ZSH_DANGEROUS_BUILTINS:
+        if builtin in cmd_lower:
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.ZSH_SPECIFIC,
+                message=f"Zsh dangerous builtin blocked: {builtin}"
+            )
+    for pattern, desc in ZSH_ATTACK_PATTERNS:
+        if pattern.search(unquoted):
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.ZSH_SPECIFIC,
+                message=f"Zsh attack blocked: {desc}"
+            )
+    return None
+
+
+def validate_heredoc(command: str, unquoted: str) -> Optional[SecurityResult]:
+    """Detect heredoc injection attempts."""
+    for pattern, desc in HEREDOC_PATTERNS:
+        if pattern.search(command):
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.HEREDOC_INJECTION,
+                message=f"Heredoc injection blocked: {desc}"
+            )
+    heredoc_count = len(re.findall(r'<<[-~]?\s*["\']?\w+["\']?', command))
+    if heredoc_count > 2:
+        return SecurityResult(
+            allowed=False,
+            check_id=SecurityCheckID.HEREDOC_INJECTION,
+            message=f"Excessive heredocs ({heredoc_count}) — possible injection"
+        )
+    return None
+
+
+def validate_invisible_chars(command: str) -> Optional[SecurityResult]:
+    """Detect invisible/Unicode control characters that obfuscate commands."""
+    for char, name in INVISIBLE_CHARS:
+        if char in command:
+            hex_repr = f"U+{ord(char):04X}"
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.INVISIBLE_CHARACTERS,
+                message=f"Invisible character: {name} ({hex_repr})"
+            )
+    for i, char in enumerate(command):
+        if ord(char) < 32 and char not in ('\n', '\r', '\t'):
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.INVISIBLE_CHARACTERS,
+                message=f"Control character U+{ord(char):04X} at position {i}"
+            )
+    return None
+
+
+def validate_nested_substitution(command: str, unquoted: str) -> Optional[SecurityResult]:
+    """Detect deeply nested command substitutions."""
+    depth = 0
+    max_depth = 0
+    for i, char in enumerate(unquoted):
+        if i > 0 and unquoted[i-1:i+1] == '$(':
+            depth += 1
+            max_depth = max(max_depth, depth)
+        elif char == ')' and depth > 0:
+            depth -= 1
+    if max_depth > 2:
+        return SecurityResult(
+            allowed=False,
+            check_id=SecurityCheckID.NESTED_SUBSTITUTION,
+            message=f"Deeply nested command substitution (depth={max_depth})"
+        )
+    return None
+
+
+def check_permission_required(command: str) -> Optional[SecurityResult]:
+    """Check if command requires explicit user approval (HITL)."""
+    cmd_lower = command.strip().lower()
+    for perm_cmd in PERMISSION_REQUIRED_COMMANDS:
+        if cmd_lower.startswith(perm_cmd) or f" {perm_cmd}" in cmd_lower:
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.PERMISSION_REQUIRED,
+                message=f"Command requires user approval: {perm_cmd}",
+                severity="permission_required"
+            )
+    return None
+
+
 def validate_command(command: str) -> SecurityResult:
     """
-    Main entry point: validate a shell command for security.
-    Returns SecurityResult with allowed=True if safe, False if blocked.
+    Main entry point — validate a shell command through all security layers.
+
+    Layer order: invisible chars → always blocked → safe exceptions →
+    zsh → heredoc → nested substitution → command substitution →
+    redirections → dangerous patterns → brace expansion → permission check.
     """
     if not command or not command.strip():
-        return SecurityResult(allowed=True)
+        return SecurityResult(allowed=True, message="Empty command")
 
-    command = command.strip()
+    # Layer 0: Invisible characters (check RAW command, before any parsing)
+    result = validate_invisible_chars(command)
+    if result:
+        return result
 
-    cmd_lower = command.lower()
+    cmd_lower = command.strip().lower()
     for blocked in ALWAYS_BLOCKED:
         if blocked in cmd_lower:
             return SecurityResult(
                 allowed=False,
                 check_id=SecurityCheckID.DANGEROUS_PATTERNS,
-                message=f"Command contains blocked pattern: {blocked}"
+                message=f"Always-blocked command: {blocked}"
             )
 
     for safe in SAFE_EXCEPTIONS:
-        if cmd_lower.startswith(safe.lower()):
-            return SecurityResult(allowed=True)
-
-    for dangerous in DANGEROUS_COMMANDS:
-        if dangerous in cmd_lower and not any(safe in cmd_lower for safe in SAFE_EXCEPTIONS):
-            return SecurityResult(
-                allowed=False,
-                check_id=SecurityCheckID.DANGEROUS_PATTERNS,
-                message=f"Potentially dangerous command: {dangerous}",
-                severity="warning"
-            )
+        if cmd_lower.startswith(safe):
+            return SecurityResult(allowed=True, message="Safe exception matched")
 
     unquoted = extract_unquoted_content(command)
 
-    validators = [
-        validate_command_substitution,
-        validate_redirections,
-        validate_dangerous_patterns,
-    ]
+    # Layer 1: Zsh-specific attacks
+    result = validate_zsh_attacks(command, unquoted)
+    if result:
+        return result
 
-    for validator in validators:
-        result = validator(command, unquoted)
-        if result and not result.allowed:
-            return result
+    # Layer 2: Heredoc injection
+    result = validate_heredoc(command, unquoted)
+    if result:
+        return result
 
-    brace_result = validate_brace_expansion(unquoted)
-    if brace_result and not brace_result.allowed:
-        return brace_result
+    # Layer 3: Nested command substitution
+    result = validate_nested_substitution(command, unquoted)
+    if result:
+        return result
 
-    return SecurityResult(allowed=True)
+    # Layer 4: Command substitution
+    result = validate_command_substitution(command, unquoted)
+    if result:
+        return result
+
+    # Layer 5: Redirections
+    result = validate_redirections(command, unquoted)
+    if result:
+        return result
+
+    # Layer 6: Dangerous patterns
+    result = validate_dangerous_patterns(command, unquoted)
+    if result:
+        return result
+
+    # Layer 7: Brace expansion
+    result = validate_brace_expansion(unquoted)
+    if result:
+        return result
+
+    # Layer 8: Permission check (HITL)
+    result = check_permission_required(command)
+    if result:
+        return result
+
+    return SecurityResult(allowed=True, message="All security checks passed")

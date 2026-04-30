@@ -68,3 +68,74 @@ class TestDangerousPatterns:
     def test_allows_pip_install(self):
         r = validate_command("pip install requests")
         assert r.allowed
+
+class TestZshSecurity:
+    def test_zmodload_blocked(self):
+        result = validate_command("zmodload zsh/net/tcp")
+        assert not result.allowed
+        assert result.check_id == SecurityCheckID.ZSH_SPECIFIC
+
+    def test_emulate_blocked(self):
+        result = validate_command("emulate -L sh")
+        assert not result.allowed
+
+    def test_ztcp_blocked(self):
+        result = validate_command("ztcp google.com 80")
+        assert not result.allowed
+
+
+class TestHeredocSecurity:
+    def test_heredoc_with_substitution(self):
+        result = validate_command("cat <<EOF\n$(rm -rf /)\nEOF")
+        assert not result.allowed
+
+    def test_excessive_heredocs(self):
+        result = validate_command("cat <<A\nfoo\nA\ncat <<B\nbar\nB\ncat <<C\nbaz\nC")
+        assert not result.allowed
+
+    def test_normal_heredoc_allowed(self):
+        result = validate_command("cat <<EOF\nhello world\nEOF")
+        assert result.allowed
+
+
+class TestInvisibleChars:
+    def test_zero_width_space(self):
+        result = validate_command("rm\u200b -rf /")
+        assert not result.allowed
+        assert result.check_id == SecurityCheckID.INVISIBLE_CHARACTERS
+
+    def test_rtl_override(self):
+        result = validate_command("echo \u202bhello")
+        assert not result.allowed
+
+    def test_control_char(self):
+        result = validate_command("echo \x01hello")
+        assert not result.allowed
+
+
+class TestPermissionRequired:
+    def test_rm_rf_needs_permission(self):
+        result = validate_command("rm -rf tmp/mydir")
+        assert not result.allowed
+        assert result.severity == "permission_required"
+
+    def test_chmod_needs_permission(self):
+        result = validate_command("chmod 755 script.sh")
+        assert not result.allowed
+        assert result.severity == "permission_required"
+
+    def test_docker_prune_needs_permission(self):
+        result = validate_command("docker system prune -a")
+        assert not result.allowed
+        assert result.severity == "permission_required"
+
+    def test_normal_command_no_permission(self):
+        result = validate_command("ls -la")
+        assert result.allowed
+
+
+class TestNestedSubstitution:
+    def test_deep_nesting_blocked(self):
+        result = validate_command("echo $(echo $(echo $(cat /etc/passwd)))")
+        assert not result.allowed
+        assert result.check_id == SecurityCheckID.NESTED_SUBSTITUTION
