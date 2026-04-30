@@ -5,6 +5,8 @@ import asyncio
 import os
 import sys
 import time
+import json
+import shutil
 from typing import Dict, Optional, Any, List
 from dataclasses import dataclass, field
 from backend.config import settings
@@ -22,6 +24,136 @@ class SessionInfo:
     session_id: str
     last_activity: float = field(default_factory=time.time)
     created_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class Snapshot:
+    """A point-in-time snapshot of the sandbox filesystem."""
+    snapshot_id: str
+    session_id: str
+    created_at: float
+    description: str = ""
+    files_captured: int = 0
+    size_bytes: int = 0
+
+
+class SnapshotManager:
+    """
+    Replit-style filesystem snapshots for safe agent operations.
+    Creates snapshots before destructive operations, allows instant rollback.
+    """
+
+    SNAPSHOT_DIR = "data/snapshots"
+    MAX_SNAPSHOTS_PER_SESSION = 20
+
+    def __init__(self):
+        os.makedirs(self.SNAPSHOT_DIR, exist_ok=True)
+        self._snapshots: Dict[str, List[Snapshot]] = {}
+
+    async def create_snapshot(
+        self, session_id: str, workspace_path: str, description: str = ""
+    ) -> Optional[Snapshot]:
+        """Create a snapshot of the current workspace state."""
+        snapshot_id = f"snap_{session_id}_{int(time.time())}"
+        snapshot_path = os.path.join(self.SNAPSHOT_DIR, snapshot_id)
+
+        try:
+            os.makedirs(snapshot_path, exist_ok=True)
+            manifest = {}
+            file_count = 0
+            total_size = 0
+
+            for root, dirs, files in os.walk(workspace_path):
+                dirs[:] = [d for d in dirs if d not in {
+                    '.git', 'node_modules', '__pycache__', 'venv',
+                    '.venv', 'dist', 'build', '.next', 'data'
+                }]
+                for filename in files:
+                    filepath = os.path.join(root, filename)
+                    rel_path = os.path.relpath(filepath, workspace_path)
+                    try:
+                        stat = os.stat(filepath)
+                        if stat.st_size > 10 * 1024 * 1024:
+                            continue
+                        dest = os.path.join(snapshot_path, rel_path)
+                        os.makedirs(os.path.dirname(dest), exist_ok=True)
+                        shutil.copy2(filepath, dest)
+                        manifest[rel_path] = {"size": stat.st_size, "mtime": stat.st_mtime}
+                        file_count += 1
+                        total_size += stat.st_size
+                    except (PermissionError, OSError):
+                        continue
+
+            with open(os.path.join(snapshot_path, ".manifest.json"), "w") as f:
+                json.dump(manifest, f)
+
+            snapshot = Snapshot(
+                snapshot_id=snapshot_id,
+                session_id=session_id,
+                created_at=time.time(),
+                description=description,
+                files_captured=file_count,
+                size_bytes=total_size,
+            )
+
+            if session_id not in self._snapshots:
+                self._snapshots[session_id] = []
+            self._snapshots[session_id].append(snapshot)
+
+            # Auto-rotation
+            if len(self._snapshots[session_id]) > self.MAX_SNAPSHOTS_PER_SESSION:
+                oldest = self._snapshots[session_id].pop(0)
+                self._cleanup_snapshot(oldest.snapshot_id)
+
+            logger.info(f"Snapshot created: {snapshot_id} ({file_count} files)")
+            return snapshot
+
+        except Exception as e:
+            logger.error(f"Snapshot creation failed: {e}")
+            return None
+
+    async def rollback(
+        self, session_id: str, snapshot_id: str, workspace_path: str
+    ) -> bool:
+        """Restore workspace to a previous snapshot."""
+        snapshot_path = os.path.join(self.SNAPSHOT_DIR, snapshot_id)
+        if not os.path.exists(snapshot_path):
+            logger.error(f"Snapshot not found: {snapshot_id}")
+            return False
+
+        try:
+            manifest_path = os.path.join(snapshot_path, ".manifest.json")
+            with open(manifest_path, "r") as f:
+                manifest = json.load(f)
+
+            restored = 0
+            for rel_path in manifest:
+                src = os.path.join(snapshot_path, rel_path)
+                dst = os.path.join(workspace_path, rel_path)
+                if os.path.exists(src):
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(src, dst)
+                    restored += 1
+
+            logger.info(f"Rollback complete: {snapshot_id} ({restored} files restored)")
+            return True
+
+        except Exception as e:
+            logger.error(f"Rollback failed: {e}")
+            return False
+
+    def list_snapshots(self, session_id: str) -> List[Snapshot]:
+        return self._snapshots.get(session_id, [])
+
+    def _cleanup_snapshot(self, snapshot_id: str):
+        snapshot_path = os.path.join(self.SNAPSHOT_DIR, snapshot_id)
+        if os.path.exists(snapshot_path):
+            shutil.rmtree(snapshot_path, ignore_errors=True)
+
+    def cleanup_session(self, session_id: str):
+        for snap in self._snapshots.get(session_id, []):
+            self._cleanup_snapshot(snap.snapshot_id)
+        self._snapshots.pop(session_id, None)
 
 
 class SandboxManager:
@@ -48,6 +180,7 @@ class SandboxManager:
         self.executor = SandboxExecutor(self)
         self.filesystem = SandboxFilesystem(self)
         self.novnc = NoVNCManager(self.executor)
+        self.snapshots = SnapshotManager()
 
     @property
     def client(self):
