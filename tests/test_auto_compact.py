@@ -1,6 +1,6 @@
 """Tests for auto-compact engine."""
 import pytest
-from backend.memory.auto_compact import AutoCompact, CompactConfig, CompactLevel
+from backend.memory.auto_compact import AutoCompact, CompactConfig, CompactLevel, MessagePriority, TokenBudget
 
 
 def _make_messages(n: int, content_size: int = 100) -> list:
@@ -49,3 +49,66 @@ class TestAutoCompact:
         ]
         summary = ac._extractive_summary(msgs)
         assert "Error" in summary
+
+
+class TestMessagePriority:
+    def test_system_is_critical(self):
+        msg = {"role": "system", "content": "You are Archimedes"}
+        assert MessagePriority.for_message(msg, 0, 10) == MessagePriority.CRITICAL
+
+    def test_recent_user_is_critical(self):
+        msg = {"role": "user", "content": "Fix this bug"}
+        assert MessagePriority.for_message(msg, 9, 10) == MessagePriority.CRITICAL
+
+    def test_error_is_high(self):
+        msg = {"role": "tool", "content": "Error: file not found"}
+        assert MessagePriority.for_message(msg, 3, 10) == MessagePriority.HIGH
+
+    def test_old_tool_is_ephemeral(self):
+        msg = {"role": "tool", "content": "output data"}
+        assert MessagePriority.for_message(msg, 1, 10) == MessagePriority.EPHEMERAL
+
+
+class TestPriorityPrune:
+    def test_prune_removes_low_priority(self):
+        ac = AutoCompact(CompactConfig(max_context_tokens=500))
+        messages = [{"role": "system", "content": "system"}]
+        for i in range(10):
+            messages.append({"role": "user" if i % 2 == 0 else "assistant", "content": "old msg"})
+        messages.extend([
+            {"role": "tool", "content": "x" * 200},
+            {"role": "tool", "content": "y" * 200},
+            {"role": "user", "content": "recent question"},
+        ])
+        result = ac.priority_prune(messages, 50)
+        assert len(result) < len(messages)
+        assert result[0]["role"] == "system"
+        assert result[-1]["role"] == "user"
+
+
+class TestPostCompactCleanup:
+    def test_remove_empty_messages(self):
+        ac = AutoCompact()
+        messages = [
+            {"role": "system", "content": "system"},
+            {"role": "assistant", "content": ""},
+            {"role": "user", "content": "hello"},
+        ]
+        result = ac.post_compact_cleanup(messages)
+        assert len(result) == 2
+
+    def test_remove_orphaned_tool_response(self):
+        ac = AutoCompact()
+        messages = [
+            {"role": "system", "content": "system"},
+            {"role": "tool", "content": "result", "tool_call_id": "orphan_123"},
+            {"role": "user", "content": "hello"},
+        ]
+        result = ac.post_compact_cleanup(messages)
+        assert len(result) == 2
+
+
+class TestTokenBudget:
+    def test_remaining_calculation(self):
+        budget = TokenBudget(total=28000)
+        assert budget.remaining(20000) == 7000

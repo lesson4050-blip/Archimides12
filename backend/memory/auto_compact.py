@@ -10,7 +10,7 @@ import logging
 import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, IntEnum
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,51 @@ class CompactConfig:
     summary_max_tokens: int = 500
     preserve_tool_results: bool = True
     preserve_errors: bool = True
+
+
+class MessagePriority(IntEnum):
+    """Priority levels for prompt components (higher = keep longer)."""
+    CRITICAL = 100    # System prompt, current task
+    HIGH = 80         # Recent errors, active tool results
+    MEDIUM = 60       # Recent conversation turns
+    LOW = 40          # Older conversation turns
+    EPHEMERAL = 20    # Old tool outputs, verbose logs
+    DISPOSABLE = 0    # Can always be removed
+
+    @classmethod
+    def for_message(cls, msg: dict, index: int, total: int) -> "MessagePriority":
+        """Determine priority of a message based on role and position."""
+        role = msg.get("role", "")
+        content = str(msg.get("content", ""))
+        is_recent = index >= total - 5
+
+        if role == "system":
+            return cls.CRITICAL
+        if is_recent:
+            return cls.CRITICAL
+        if role == "tool":
+            # Error tool results are HIGH, normal ones EPHEMERAL
+            if any(kw in content.lower() for kw in ["error", "exception", "failed", "traceback"]):
+                return cls.HIGH
+            return cls.EPHEMERAL
+        if role == "assistant" and msg.get("tool_calls"):
+            return cls.MEDIUM
+        if role == "user":
+            return cls.MEDIUM if is_recent else cls.LOW
+        return cls.LOW
+
+
+@dataclass
+class TokenBudget:
+    """Token budget allocation for context management."""
+    total: int = 28000
+    system_reserve: int = 2000   # ~7% for system messages
+    recent_reserve: int = 8000   # ~28% for last N messages
+    tool_reserve: int = 4000     # ~14% for active tool results
+    safety_margin: int = 1000    # ~4%
+
+    def remaining(self, used: int) -> int:
+        return max(0, self.total - used - self.safety_margin)
 
 
 @dataclass
@@ -170,23 +215,135 @@ class AutoCompact:
                 unique.append(p)
         return "\n".join(unique[:10])
 
-    async def maybe_compact(self, messages: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], CompactResult]:
-        total_tokens = self.estimate_tokens(messages)
-        usage_ratio = total_tokens / self.config.max_context_tokens
+    def priority_prune(self, messages: list, target_tokens: int) -> list:
+        """
+        Copilot-style priority-based pruning.
+        Remove lowest-priority messages first until within budget.
+        """
+        if not messages:
+            return messages
+
+        scored = []
+        total = len(messages)
+        for i, msg in enumerate(messages):
+            priority = MessagePriority.for_message(msg, i, total)
+            tokens = self.estimate_tokens([msg])
+            scored.append((priority, i, tokens, msg))
+
+        current_tokens = sum(s[2] for s in scored)
+
+        if current_tokens <= target_tokens:
+            return messages
+
+        scored_sorted = sorted(scored, key=lambda s: (s[0], s[1]))
+
+        removed_indices = set()
+        for priority, idx, tokens, msg in scored_sorted:
+            if current_tokens <= target_tokens:
+                break
+            if priority >= MessagePriority.CRITICAL:
+                break
+            removed_indices.add(idx)
+            current_tokens -= tokens
+
+        result = [msg for i, msg in enumerate(messages) if i not in removed_indices]
+
+        if removed_indices:
+            logger.info(f"Priority pruning: removed {len(removed_indices)} messages")
+
+        return result
+
+    def post_compact_cleanup(self, messages: list) -> list:
+        """
+        Claude Code style: fix orphaned tool_call_ids, remove empty messages.
+        """
+        if not messages:
+            return messages
+
+        assistant_tool_ids = set()
+        for msg in messages:
+            if msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    tc_id = tc.get("id", "")
+                    if tc_id:
+                        assistant_tool_ids.add(tc_id)
+
+        tool_response_ids = set()
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tc_id = msg.get("tool_call_id", "")
+                if tc_id:
+                    tool_response_ids.add(tc_id)
+
+        cleaned = []
+        for msg in messages:
+            if msg.get("role") == "tool":
+                tc_id = msg.get("tool_call_id", "")
+                if tc_id and tc_id not in assistant_tool_ids:
+                    logger.debug(f"Removing orphaned tool response: {tc_id}")
+                    continue
+
+            if msg.get("tool_calls"):
+                valid_calls = [
+                    tc for tc in msg["tool_calls"]
+                    if tc.get("id", "") in tool_response_ids
+                    or tc.get("id", "") not in assistant_tool_ids
+                ]
+                if not valid_calls and not msg.get("content"):
+                    continue
+                msg = msg.copy()
+                msg["tool_calls"] = valid_calls if valid_calls else None
+                if msg["tool_calls"] is None:
+                    del msg["tool_calls"]
+
+            content = msg.get("content", "")
+            if not content and not msg.get("tool_calls") and msg.get("role") != "system":
+                continue
+
+            cleaned.append(msg)
+
+        return cleaned
+
+    async def maybe_compact(self, messages: list) -> tuple:
+        """Auto-compact with priority-based pruning + post-compact cleanup."""
+        current_tokens = self.estimate_tokens(messages)
+        usage_ratio = current_tokens / self.config.max_context_tokens
         level = self._get_compact_level(usage_ratio)
+
         if level == CompactLevel.NONE:
-            return messages, CompactResult(level=CompactLevel.NONE, original_count=len(messages), compacted_count=len(messages), original_tokens=total_tokens, compacted_tokens=total_tokens)
-        logger.info(f"Auto-compact triggered: level={level.value}, usage={usage_ratio:.1%}, tokens={total_tokens}")
+            return messages, CompactResult(
+                level=level, original_count=len(messages),
+                compacted_count=len(messages),
+                original_tokens=current_tokens, compacted_tokens=current_tokens
+            )
+
+        budget = TokenBudget(total=self.config.max_context_tokens)
+        summary = ""
+
         if level == CompactLevel.MICRO:
             compacted = self.micro_compact(messages)
-            summary = ""
+            compacted = self.priority_prune(compacted, budget.total)
         elif level == CompactLevel.STANDARD:
             compacted, summary = await self.standard_compact(messages)
+            compacted = self.priority_prune(compacted, budget.total)
         else:
-            _, summary = await self.standard_compact(messages) if self.router else (messages, self._extractive_summary(messages))
-            compacted = self.aggressive_compact(messages, summary)
-        new_tokens = self.estimate_tokens(compacted)
-        result = CompactResult(level=level, original_count=len(messages), compacted_count=len(compacted), original_tokens=total_tokens, compacted_tokens=new_tokens, summary=summary)
+            compacted, summary = await self.standard_compact(messages)
+            compacted = self.aggressive_compact(compacted, summary)
+            compacted = self.priority_prune(compacted, budget.total - budget.safety_margin)
+
+        compacted = self.post_compact_cleanup(compacted)
+        compacted_tokens = self.estimate_tokens(compacted)
+
+        result = CompactResult(
+            level=level, original_count=len(messages),
+            compacted_count=len(compacted),
+            original_tokens=current_tokens,
+            compacted_tokens=compacted_tokens,
+            summary=summary
+        )
         self._compact_history.append(result)
-        logger.info(f"Compacted: {result.original_count} -> {result.compacted_count} msgs, {result.original_tokens} -> {result.compacted_tokens} tokens")
+        logger.info(
+            f"Auto-compact [{level.value}]: {current_tokens}→{compacted_tokens} tokens "
+            f"({len(messages)}→{len(compacted)} msgs)"
+        )
         return compacted, result
