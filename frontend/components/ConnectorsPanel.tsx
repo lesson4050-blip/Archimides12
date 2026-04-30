@@ -92,7 +92,7 @@ export default function ConnectorsPanel({ isOpen, onClose }: ConnectorsPanelProp
       // 2. Initialize Nango SDK with the session token (not publicKey)
       const NangoModule = await import("@nangohq/frontend");
       const Nango = NangoModule.default;
-      const nangoSDK = new Nango({ host: NANGO_HOST, connectSessionToken: sessionToken });
+      const nangoSDK = new Nango({ host: NANGO_HOST, connectSessionToken: sessionToken } as any);
 
       // 3. Trigger the OAuth flow (connectionId not needed with session token)
       const result = await Promise.race([

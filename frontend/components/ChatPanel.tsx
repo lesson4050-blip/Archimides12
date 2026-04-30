@@ -151,7 +151,7 @@ export default function ChatPanel({
       )}
 
       {store.showSettingsModal && (
-        <SettingsModal onClose={() => store.setShowSettingsModal(false)} />
+        <SettingsModal isOpen={store.showSettingsModal} onClose={() => store.setShowSettingsModal(false)} />
       )}
 
       <AnimatePresence>

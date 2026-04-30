@@ -36,16 +36,27 @@ def test_list_recent_sessions_empty(tmp_path):
 
 class TestCrossSessionSearch:
     def test_search_returns_list(self, tmp_path):
-        with patch("backend.memory.session_memory.SESSION_MEMORY_DIR", str(tmp_path)):
+        db_path = str(tmp_path / "test_session_memory.db")
+        with patch("backend.memory.session_memory.SESSION_MEMORY_DB", db_path):
             from backend.memory.session_memory import SessionMemory
             results = SessionMemory.search_past_sessions("test query")
             assert isinstance(results, list)
 
     def test_search_finds_relevant_session(self, tmp_path):
-        with patch("backend.memory.session_memory.SESSION_MEMORY_DIR", str(tmp_path)):
-            mem_file = tmp_path / "session_abc.md"
-            mem_file.write_text("## Current Task\nFix the authentication bug")
-            from backend.memory.session_memory import SessionMemory
+        db_path = str(tmp_path / "test_session_memory.db")
+        with patch("backend.memory.session_memory.SESSION_MEMORY_DB", db_path):
+            import sqlite3
+            from backend.memory.session_memory import SessionMemory, _ensure_db
+            
+            _ensure_db()
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "INSERT INTO session_memory (session_id, content, current_task, updated_at) VALUES (?, ?, ?, ?)",
+                ("session_abc", "## Current Task\nFix the authentication bug", "Fix the authentication bug", "2026-05-01")
+            )
+            conn.commit()
+            conn.close()
+
             results = SessionMemory.search_past_sessions("authentication bug")
             assert len(results) > 0
             assert results[0]["session_id"] == "session_abc"
