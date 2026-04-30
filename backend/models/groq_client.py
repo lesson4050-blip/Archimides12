@@ -14,7 +14,7 @@ class GroqClient:
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
         self.model = settings.GROQ_MODEL
 
-    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", **kwargs) -> Dict[str, Any]:
         retries = 0
         backoff = 2
         
@@ -116,7 +116,8 @@ class GroqClient:
         messages: list, 
         tools: list = None, 
         on_token=None,
-        task_hint: str = "default"
+        task_hint: str = "default",
+        **kwargs
     ) -> dict:
         """True token-by-token streaming from Groq API."""
         import httpx

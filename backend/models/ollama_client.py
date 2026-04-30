@@ -13,7 +13,7 @@ MAX_TOOL_CALL_RETRIES = 3
 class OllamaClient:
     def __init__(self):
         self.client = ollama.AsyncClient(
-            host=settings.OLLAMA_BASE_URL, timeout=600
+            host=settings.OLLAMA_BASE_URL, timeout=15.0
         )
         self.model = settings.OLLAMA_MODEL
 
@@ -290,10 +290,10 @@ NEVER mix tool JSON with explanation text.
             f"{last_error}"
         )
 
-    async def generate_stream(self, messages, tools=None, on_token=None):
+    async def generate_stream(self, messages, tools=None, on_token=None, task_hint="default", **kwargs):
         if tools:
             # Can't stream with tools reliably — use non-stream
-            return await self.generate_with_tools(messages, tools)
+            return await self.generate_with_tools(messages, tools, task_hint=task_hint)
 
         # True streaming for non-tool responses
         messages = [msg.copy() for msg in messages]

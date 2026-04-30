@@ -2,7 +2,7 @@ from typing import Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
-_env_path = Path(__file__).resolve().parent / ".env"
+_env_path = Path(__file__).resolve().parent.parent / ".env"
 
 class Settings(BaseSettings):
     # API Keys

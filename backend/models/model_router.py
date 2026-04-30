@@ -95,9 +95,9 @@ class ModelRouter:
         if task_hint in ("local", "private", "execute"):
             order = [self.ollama, self.groq, self.gemini, self.anthropic]
         elif task_hint in self.QUALITY_TASKS:
-            order = [self.anthropic, self.gemini, self.ollama, self.groq]
+            order = [self.ollama, self.anthropic, self.gemini, self.groq]
         elif task_hint in self.SPEED_TASKS:
-            order = [self.groq, self.ollama, self.gemini, self.anthropic]
+            order = [self.ollama, self.groq, self.gemini, self.anthropic]
         elif tools:
             order = [self.ollama, self.anthropic, self.groq, self.gemini]
         else:

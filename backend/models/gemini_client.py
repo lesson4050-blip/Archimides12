@@ -81,9 +81,9 @@ class GeminiClient:
 
         # Route model based on task complexity
         if task_hint in ("think", "plan"):
-            selected_model = "gemini-2.5-pro-preview-05-06"
+            selected_model = "gemini-1.5-pro"
         elif task_hint in ("quick", "default"):
-            selected_model = "gemini-2.5-flash-preview-04-17"
+            selected_model = "gemini-1.5-flash"
         else:
             selected_model = self.model_name
 
@@ -221,7 +221,8 @@ class GeminiClient:
         messages: list,
         tools: list = None,
         on_token=None,
-        task_hint: str = "default"
+        task_hint: str = "default",
+        **kwargs
     ) -> dict:
         """True streaming from Gemini API."""
         import google.generativeai as genai
@@ -230,7 +231,7 @@ class GeminiClient:
         
         try:
             genai.configure(api_key=self.client.api_key)
-            model_name = "gemini-2.5-flash-preview-04-17" if task_hint in ("quick", "default") else "gemini-2.5-pro-preview-05-06"
+            model_name = "gemini-1.5-flash" if task_hint in ("quick", "default") else "gemini-1.5-pro"
             model = genai.GenerativeModel(model_name)
             
             # Simple message format for genai directly

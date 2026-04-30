@@ -90,10 +90,16 @@ async def run_chaos_cycle(cycle_id: int, dry_run: bool = False) -> ChaosResult:
                     if chaos_injected:
                         result.events_after_chaos += 1
                         # Detect Failover
+                        model_used = str(event.get("model_used", "")).lower()
                         content = str(event.get("text", "") or event.get("content", "")).lower()
-                        if any(x in content for x in ["gemini", "groq", "anthropic", "cloud", "failover"]):
+                        
+                        # Check both model metadata and content
+                        is_failover_model = any(x in model_used for x in ["gemini", "groq", "claude", "anthropic"])
+                        is_failover_text = any(x in content for x in ["failover"])
+                        
+                        if is_failover_model or is_failover_text:
                             if not result.failover_detected:
-                                logger.info("🎯 FAILOVER DETECTED in agent output!")
+                                logger.info(f"🎯 FAILOVER DETECTED! (Model: {model_used or 'Unknown'})")
                                 result.failover_detected = True
                         
                         if event.get("type") == "message_result":
@@ -110,15 +116,29 @@ async def run_chaos_cycle(cycle_id: int, dry_run: bool = False) -> ChaosResult:
                     # Check if it's time for chaos
                     elapsed = time.time() - start_time
                     if not chaos_injected and elapsed > random.uniform(2, 5):
-                        logger.info(f"💥 INJECTING CHAOS: Pausing {OLLAMA_CONTAINER} at T+{elapsed:.2f}s")
+                        logger.info(f"💥 INJECTING CHAOS: Pausing Ollama at T+{elapsed:.2f}s")
                         if not dry_run:
-                            try:
-                                subprocess.run(["docker", "pause", OLLAMA_CONTAINER], check=True, capture_output=True)
-                            except Exception as e:
-                                logger.error(f"Failed to pause docker: {e}. Is Docker running? Are you using the right container name?")
-                                return result
+                            import psutil
+                            paused_any = False
+                            # Try pausing native Windows process
+                            for proc in psutil.process_iter(['name']):
+                                if proc.info['name'] and 'ollama' in proc.info['name'].lower():
+                                    try:
+                                        proc.suspend()
+                                        paused_any = True
+                                        logger.info(f"Suspended native process {proc.info['name']} (PID: {proc.pid})")
+                                    except Exception as e:
+                                        pass
+                            
+                            # If no native process was paused, try Docker
+                            if not paused_any:
+                                try:
+                                    subprocess.run(["docker", "pause", OLLAMA_CONTAINER], check=True, capture_output=True)
+                                except Exception as e:
+                                    logger.error(f"Failed to pause docker: {e}")
+                                    return result
                         else:
-                            logger.info("(Dry-run: skipping actual docker pause)")
+                            logger.info("(Dry-run: skipping actual pause)")
                             
                         chaos_injected = True
                         result.chaos_time = elapsed
@@ -136,7 +156,17 @@ async def run_chaos_cycle(cycle_id: int, dry_run: bool = False) -> ChaosResult:
                          chaos_injected = True
                          logger.info("💥 CHAOS (Forced): No events yet, but pausing Ollama...")
                          if not dry_run:
-                             subprocess.run(["docker", "pause", OLLAMA_CONTAINER], capture_output=True)
+                             import psutil
+                             paused_any = False
+                             for proc in psutil.process_iter(['name']):
+                                 if proc.info['name'] and 'ollama' in proc.info['name'].lower():
+                                     try:
+                                         proc.suspend()
+                                         paused_any = True
+                                     except Exception:
+                                         pass
+                             if not paused_any:
+                                 subprocess.run(["docker", "pause", OLLAMA_CONTAINER], capture_output=True)
                     
                     if elapsed > 60:
                         break
@@ -148,7 +178,18 @@ async def run_chaos_cycle(cycle_id: int, dry_run: bool = False) -> ChaosResult:
         # 3. Restore
         if not dry_run:
             logger.info("♻️  Restoring Ollama...")
-            subprocess.run(["docker", "unpause", OLLAMA_CONTAINER], capture_output=True)
+            import psutil
+            resumed_any = False
+            for proc in psutil.process_iter(['name', 'status']):
+                if proc.info['name'] and 'ollama' in proc.info['name'].lower():
+                    try:
+                        proc.resume()
+                        resumed_any = True
+                    except Exception:
+                        pass
+            
+            if not resumed_any:
+                subprocess.run(["docker", "unpause", OLLAMA_CONTAINER], capture_output=True)
         
     # Verdict Logic
     if result.events_after_chaos > 0 and result.errors == 0:
@@ -163,31 +204,31 @@ def print_report(results: List[ChaosResult]):
     total = len(results)
     passed = sum(1 for r in results if r.pass_score)
     
-    print("\n" + "═"*44)
-    print("║     CHAOS ENGINEERING REPORT         ║")
-    print("╠" + "═"*42 + "╣")
+    print("\n" + "="*44)
+    print("|     CHAOS ENGINEERING REPORT         |")
+    print("+" + "="*42 + "+")
     
     for i, r in enumerate(results):
-        print(f"║ CYCLE {i+1}: {'PASS' if r.pass_score else 'FAIL'} {'(Dry Run)' if r.chaos_time == 0 else ''}")
-        print(f"║  Chaos at:     T+{r.chaos_time:.2f}s")
-        print(f"║  Events after: {r.events_after_chaos}")
-        print(f"║  Completed:    {'YES' if r.task_completed else 'NO'}")
-        print(f"║  Failover:     {'YES' if r.failover_detected else 'NO'}")
-        print(f"║  Errors:       {r.errors}")
-        print("╠" + "─"*42 + "╣")
+        print(f"| CYCLE {i+1}: {'PASS' if r.pass_score else 'FAIL'} {'(Dry Run)' if r.chaos_time == 0 else ''}")
+        print(f"|  Chaos at:     T+{r.chaos_time:.2f}s")
+        print(f"|  Events after: {r.events_after_chaos}")
+        print(f"|  Completed:    {'YES' if r.task_completed else 'NO'}")
+        print(f"|  Failover:     {'YES' if r.failover_detected else 'NO'}")
+        print(f"|  Errors:       {r.errors}")
+        print("+" + "-"*42 + "+")
         
-    print(f"║ FINAL SCORE:   {passed}/{total} ({ (passed/total)*100:.1f}%)")
-    print(f"║ VERDICT:       {'🟢 PASS' if passed == total else '🔴 FAIL'}")
-    print("╚" + "═"*42 + "╝\n")
+    print(f"| FINAL SCORE:   {passed}/{total} ({ (passed/total)*100:.1f}%)")
+    print(f"| VERDICT:       {'PASS' if passed == total else 'FAIL'}")
+    print("+" + "="*42 + "+\n")
 
 async def main():
+    global OLLAMA_CONTAINER
     parser = argparse.ArgumentParser(description="Archimedes Failover Chaos Test")
     parser.add_argument("--dry-run", action="store_true", help="Skip actual docker pause")
     parser.add_argument("--repeat", type=int, default=1, help="Number of chaos cycles")
     parser.add_argument("--container", type=str, default=OLLAMA_CONTAINER, help="Ollama container name")
     args = parser.parse_args()
 
-    global OLLAMA_CONTAINER
     OLLAMA_CONTAINER = args.container
 
     results = []
