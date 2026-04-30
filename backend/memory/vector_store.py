@@ -33,22 +33,27 @@ class VectorStore:
     def __init__(self, user_id: str = "default_user"):
         self.user_id = user_id
         self._collection = None
+        self._init_lock = None
         self.genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY) if settings.GOOGLE_API_KEY else None
         self.embedding_model = "gemini-embedding-exp-03-07"
 
     async def _get_collection(self):
         """Lazy async initialization of the collection."""
         if self._collection is None:
-            client = await asyncio.to_thread(get_chroma_client)
-            if client:
-                try:
-                    self._collection = await asyncio.to_thread(
-                        client.get_or_create_collection,
-                        name=f"archimedes_{self.user_id}",
-                        metadata={"hnsw:space": "cosine"}
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to get/create ChromaDB collection: {e}")
+            if self._init_lock is None:
+                self._init_lock = asyncio.Lock()
+            async with self._init_lock:
+                if self._collection is None:
+                    client = await asyncio.to_thread(get_chroma_client)
+                    if client:
+                        try:
+                            self._collection = await asyncio.to_thread(
+                                client.get_or_create_collection,
+                                name=f"archimedes_{self.user_id}",
+                                metadata={"hnsw:space": "cosine"}
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to get/create ChromaDB collection: {e}")
         return self._collection
 
     async def get_collection_stats(self) -> Dict[str, Any]:

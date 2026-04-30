@@ -192,7 +192,7 @@ async def run_chaos_cycle(cycle_id: int, dry_run: bool = False) -> ChaosResult:
                 subprocess.run(["docker", "unpause", OLLAMA_CONTAINER], capture_output=True)
         
     # Verdict Logic
-    if result.events_after_chaos > 0 and result.errors == 0:
+    if result.events_after_chaos > 0 and result.errors == 0 and result.task_completed:
         result.pass_score = True
 
     return result

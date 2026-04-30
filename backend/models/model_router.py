@@ -31,7 +31,7 @@ class ModelRouter:
         self._ollama_healthy = True
         self._last_health_check = 0
         self._health_cache_ttl = 30 # seconds
-        self._health_check_lock = asyncio.Lock()
+        self._health_check_lock = None
         
         try:
             self.groq = GroqClient() if settings.GROQ_API_KEY else None
@@ -53,6 +53,9 @@ class ModelRouter:
         # Quick exit if cache is fresh
         if time.time() - self._last_health_check < self._health_cache_ttl:
             return self._ollama_healthy
+
+        if self._health_check_lock is None:
+            self._health_check_lock = asyncio.Lock()
 
         async with self._health_check_lock:
             # Double-check inside the lock

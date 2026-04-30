@@ -163,16 +163,16 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      POSTGRES_USER: archimedes
+      POSTGRES_USER: ${POSTGRES_USER:-archimedes}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-archimedes}
-      POSTGRES_DB: archimedes
+      POSTGRES_DB: ${POSTGRES_DB:-archimedes}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - archimedes-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U archimedes"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-archimedes}"]
       interval: 10s
       timeout: 5s
       retries: 5
