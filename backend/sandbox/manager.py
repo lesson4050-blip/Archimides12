@@ -344,6 +344,18 @@ class SandboxManager:
                 session_workspace = os.path.abspath(f"./workspace/{session_id}")
                 os.makedirs(session_workspace, exist_ok=True)
 
+                # Create isolated network for this session
+                network_name = f"archimedes-net-{session_id}"
+                try:
+                    network = client.networks.create(
+                        network_name,
+                        driver="bridge",
+                        internal=True,  # No external internet access
+                        labels={"session_id": session_id},
+                    )
+                except docker.errors.APIError:
+                    network = client.networks.get(network_name)
+
                 return client.containers.run(
                     settings.SANDBOX_IMAGE,
                     name=container_name,
@@ -353,6 +365,7 @@ class SandboxManager:
                     security_opt=["no-new-privileges:true"],
                     cap_drop=["ALL"],
                     cap_add=["CHOWN", "SETUID", "SETGID"],
+                    network=network_name,  # isolated network
                     environment={"SESSION_ID": session_id},
                     volumes={
                         session_workspace: {"bind": "/home/ubuntu/workspace", "mode": "rw"},
@@ -431,6 +444,19 @@ class SandboxManager:
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+            
+        # Clean up isolated network
+        network_name = f"archimedes-net-{session_id}"
+        try:
+            def _remove_network():
+                try:
+                    net = self.client.networks.get(network_name)
+                    net.remove()
+                except Exception:
+                    pass
+            await loop.run_in_executor(None, _remove_network)
+        except Exception as e:
+            logger.debug(f"Network cleanup: {e}")
             
         logger.info(
             f"Destroyed container {container_name}. "

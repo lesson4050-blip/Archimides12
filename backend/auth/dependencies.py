@@ -45,11 +45,16 @@ async def get_current_user(
     if jwt_token:
         payload = verify_token(jwt_token)
         if payload:
-            return {
-                "user_id": payload["user_id"],
-                "role": payload["role"],
-                "auth_method": "jwt",
-            }
+            # Check revocation list
+            from backend.auth.token_blacklist import blacklist
+            if await blacklist.is_revoked(jwt_token):
+                pass  # Fall through to API key check or 401
+            else:
+                return {
+                    "user_id": payload["user_id"],
+                    "role": payload["role"],
+                    "auth_method": "jwt",
+                }
     
     # Try API key
     if x_api_key:
@@ -102,8 +107,11 @@ async def _lookup_user_by_api_key(api_key: str) -> Optional[dict]:
     """Look up a user by their API key in the database (with 5-minute TTL cache)."""
     now = time.time()
     
+    from backend.auth.jwt_handler import hash_api_key
+    hashed_key = hash_api_key(api_key)
+    
     # Check cache
-    cached = _API_KEY_CACHE.get(api_key)
+    cached = _API_KEY_CACHE.get(hashed_key)
     if cached and now < cached["exp"]:
         return cached["user"]
         
@@ -119,12 +127,12 @@ async def _lookup_user_by_api_key(api_key: str) -> Optional[dict]:
         
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(User).where(User.api_key == api_key, User.is_active.is_(True))
+                select(User).where(User.api_key == hashed_key, User.is_active.is_(True))
             )
             user = result.scalar_one_or_none()
             if user:
                 user_data = {"id": user.id, "role": user.role, "email": user.email}
-                _API_KEY_CACHE[api_key] = {"user": user_data, "exp": now + 300}  # 5 min TTL
+                _API_KEY_CACHE[hashed_key] = {"user": user_data, "exp": now + 300}  # 5 min TTL
                 return user_data
     except Exception as e:
         logger.error(f"API key lookup failed: {e}")

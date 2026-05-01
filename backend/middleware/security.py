@@ -134,6 +134,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # HSTS only if served over HTTPS
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+            "https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob: https:; "
+            "connect-src 'self' ws: wss: https:; "
+            "frame-ancestors 'none';"
+        )
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        
         return response
 
 

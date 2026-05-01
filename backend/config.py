@@ -1,5 +1,6 @@
 from typing import Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from pathlib import Path
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -70,5 +71,16 @@ class Settings(BaseSettings):
     NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
 
     model_config = SettingsConfigDict(env_file=str(_env_path), env_file_encoding="utf-8", extra="ignore")
+
+    @field_validator("JWT_SECRET_KEY")
+    @classmethod
+    def jwt_secret_must_be_set(cls, v: str) -> str:
+        if not v or len(v) < 32:
+            raise ValueError(
+                "JWT_SECRET_KEY must be at least 32 characters. "
+                "Generate one with: python -c "
+                "\"import secrets; print(secrets.token_hex(32))\""
+            )
+        return v
 
 settings = Settings()

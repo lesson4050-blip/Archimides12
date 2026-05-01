@@ -70,6 +70,19 @@ def create_api_key() -> str:
     """Generate a secure 64-character hex API key."""
     return secrets.token_hex(32)
 
+import hashlib
+
+def hash_api_key(api_key: str) -> str:
+    """Hash API key for secure storage. Never store raw keys."""
+    return hashlib.sha256(api_key.encode()).hexdigest()
+
+def verify_api_key(raw_key: str, hashed_key: str) -> bool:
+    """Constant-time comparison of API key hash."""
+    import hmac
+    return hmac.compare_digest(
+        hash_api_key(raw_key),
+        hashed_key
+    )
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt via passlib."""

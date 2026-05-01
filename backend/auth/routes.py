@@ -75,11 +75,26 @@ async def register(request: RegisterRequest):
         user_id = str(uuid.uuid4())
         hashed = hash_password(request.password)
         
+        # Atomic first-user check using advisory locks to prevent race
+        from sqlalchemy import func, text
+        
+        # Serialize concurrent registrations at DB level (PostgreSQL)
+        try:
+            await db.execute(text("SELECT pg_advisory_xact_lock(12345)"))
+        except Exception:
+            pass # SQLite doesn't support this, but it serializes writes anyway
+        
+        user_count_result = await db.execute(
+            select(func.count()).select_from(User)
+        )
+        user_count = user_count_result.scalar()
+        is_first = (user_count == 0)
+
         new_user = User(
             id=user_id,
             email=request.email,
             hashed_password=hashed,
-            role="admin" if await _is_first_user(db) else "user",
+            role="admin" if is_first else "user",
         )
         db.add(new_user)
         await db.commit()
@@ -202,19 +217,30 @@ async def refresh_access_token(request_data: RefreshRequest, request: Request, r
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    """Logout user by clearing auth cookies."""
+async def logout(request: Request, response: Response):
+    """Logout user — clears cookies AND revokes JWT token."""
+    from backend.auth.token_blacklist import blacklist
+    from backend.auth.jwt_handler import verify_token
+
+    # Revoke the access token if present
+    token = request.cookies.get("access_token")
+    if token:
+        payload = verify_token(token)
+        if payload and payload.get("exp"):
+            await blacklist.revoke(token, payload["exp"])
+
+    # Revoke the refresh token if present
+    refresh = request.cookies.get("refresh_token")
+    if refresh:
+        payload = verify_token(refresh)
+        if payload and payload.get("exp"):
+            await blacklist.revoke(refresh, payload["exp"])
+
     response.delete_cookie(
-        key="access_token",
-        httponly=True,
-        secure=True,
-        samesite="lax"
+        key="access_token", httponly=True, secure=True, samesite="lax"
     )
     response.delete_cookie(
-        key="refresh_token",
-        httponly=True,
-        secure=True,
-        samesite="lax"
+        key="refresh_token", httponly=True, secure=True, samesite="lax"
     )
     return {"message": "Successfully logged out"}
 
@@ -262,7 +288,8 @@ async def generate_api_key(current_user: dict = Depends(get_current_user)):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        user.api_key = new_key
+        from backend.auth.jwt_handler import hash_api_key
+        user.api_key = hash_api_key(new_key)
         await db.commit()
     
     logger.info(f"API key generated for user {current_user['user_id']}")
