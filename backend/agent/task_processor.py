@@ -182,7 +182,7 @@ class TaskProcessor:
 
                             TOOLS_NEEDING_SESSION = [
                                 "file", "shell", "browser", "voice",
-                                "document", "slides", "expose", "plan", "monitor"
+                                "document", "canvas_engine", "expose", "plan", "monitor"
                             ]
                             t_args = {**t_params}
                             if t_name in TOOLS_NEEDING_SESSION:

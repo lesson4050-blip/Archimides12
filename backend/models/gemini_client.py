@@ -287,7 +287,8 @@ class GeminiClient:
             image_bytes = base64.b64decode(image_base64)
             image = Image.open(io.BytesIO(image_bytes))
 
-            response = model.generate_content(
+            response = await asyncio.to_thread(
+                model.generate_content,
                 [prompt, image],
                 generation_config=genai.GenerationConfig(
                     temperature=0.1,

@@ -101,10 +101,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.time()
         
         # Periodic cleanup of stale memory buckets (Memory Leak Prevention)
-        cutoff = now - 120
-        stale = [ip for ip, b in list(self._buckets.items()) if b["last"] < cutoff]
-        for ip in stale:
-            del self._buckets[ip]
+        if len(self._buckets) > 10000:
+            cutoff = now - 120
+            stale = [ip for ip, b in list(self._buckets.items()) if b["last"] < cutoff]
+            for ip in stale:
+                del self._buckets[ip]
 
         bucket = self._buckets[client_ip]
         elapsed = now - bucket["last"]

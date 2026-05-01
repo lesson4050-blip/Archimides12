@@ -45,16 +45,30 @@ async def get_current_user(
     if jwt_token:
         payload = verify_token(jwt_token)
         if payload:
-            # Check revocation list
+            # Check raw-token blacklist
             from backend.auth.token_blacklist import blacklist
             if await blacklist.is_revoked(jwt_token):
                 pass  # Fall through to API key check or 401
             else:
-                return {
-                    "user_id": payload["user_id"],
-                    "role": payload["role"],
-                    "auth_method": "jwt",
-                }
+                # Check JTI-based revocation (database)
+                jti = payload.get("jti")
+                if jti:
+                    from backend.db.crud import is_token_revoked
+                    if await is_token_revoked(jti):
+                        pass  # Fall through — token was revoked
+                    else:
+                        return {
+                            "user_id": payload["user_id"],
+                            "role": payload["role"],
+                            "auth_method": "jwt",
+                        }
+                else:
+                    # Legacy tokens without JTI — allow through
+                    return {
+                        "user_id": payload["user_id"],
+                        "role": payload["role"],
+                        "auth_method": "jwt",
+                    }
     
     # Try API key
     if x_api_key:

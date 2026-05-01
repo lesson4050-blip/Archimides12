@@ -11,6 +11,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from backend.sandbox.executor import SandboxExecutor
+from backend.agent.predictive_guard import PredictiveGuard
 from backend.tools.bash_security import validate_command as security_validate_command, SecurityResult
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,18 @@ class ShellTool:
                       **kwargs) -> Dict[str, Any]:
         from backend.agent.self_improvement import check_tool_safety
         
+        # Layer 0: PredictiveGuard (Self-Healing)
+        if command:
+            guard_result = await PredictiveGuard.analyze_command(command)
+            if not guard_result["safe"]:
+                logger.warning(f"PredictiveGuard intercepted command: {command[:50]} — {guard_result['reason']}")
+                return {
+                    "success": False,
+                    "output": f"Command blocked by PredictiveGuard: {guard_result['reason']}\nSuggestion: {guard_result['suggestion']}",
+                    "blocked": True,
+                    "suggestion": guard_result["suggestion"]
+                }
+                
         # Layer 1: Bash security engine (fast, regex-based)
         if command:
             sec_result = security_validate_command(command)

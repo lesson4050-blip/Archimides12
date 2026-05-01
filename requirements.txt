@@ -41,4 +41,4 @@ Pillow>=10.0.0
 aiofiles>=23.0.0
 jedi>=0.19.2
 prometheus-client
- 
+playwright

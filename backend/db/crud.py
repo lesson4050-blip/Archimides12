@@ -5,8 +5,8 @@ Automatically detects available database and configures connection pooling.
 
 import logging
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy import select, update
-from backend.db.models import Base, Session, Task, Message, User
+from sqlalchemy import select, update, delete
+from backend.db.models import Base, Session, Task, Message, User, RevokedToken
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -131,3 +131,39 @@ async def get_session_messages(session_id: str, limit: int = 100):
             .limit(limit)
         )
         return list(reversed(result.scalars().all()))
+
+
+# ─── Token Revocation ─────────────────────────────────────────────
+
+async def revoke_token(jti: str, user_id: str, expires_at):
+    """Revoke a token by storing its JTI in the revoked_tokens table."""
+    async with AsyncSessionLocal() as db:
+        revoked = RevokedToken(
+            jti=jti, user_id=user_id, expires_at=expires_at
+        )
+        db.add(revoked)
+        await db.commit()
+        logger.info(f"Token revoked: jti={jti[:8]}... user={user_id}")
+
+
+async def is_token_revoked(jti: str) -> bool:
+    """Check if a token has been revoked."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RevokedToken).where(RevokedToken.jti == jti)
+        )
+        return result.scalar_one_or_none() is not None
+
+
+async def cleanup_expired_revoked_tokens():
+    """Remove expired revoked tokens to prevent table bloat. Run periodically."""
+    from datetime import datetime, timezone
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            delete(RevokedToken).where(
+                RevokedToken.expires_at < datetime.now(timezone.utc)
+            )
+        )
+        await db.commit()
+        if result.rowcount > 0:
+            logger.info(f"Cleaned up {result.rowcount} expired revoked tokens")

@@ -131,9 +131,9 @@ TOOL SELECTION:
 - document: index PDF/TXT and query with semantic search
 - mirofish: simulate public reaction to idea (NO external API — built-in)
 - trigger: create multi-condition real-world triggers (AND/OR logic)
-- presentation: create professional, Gamma-level quality PowerPoint presentations autonomously.
-  Unlike older tools, you do NOT need to design individual slides or manage layouts/images.
-  Just provide a high-quality, rich prompt describing the topic, the target audience, the sections to cover, and the desired tone. The COSMO engine will autonomously generate the structure, content, and visual design.
+- canvas_engine: create modern React-based presentations using the Canvas Engine.
+  Generates a strict JSON array of slide objects. Use this tool when the user asks for a presentation.
+  Provide the topic and the slides_json containing the content structure.
 - code_edit: surgically edit existing files (find_replace, insert_after,
   insert_before, delete_block, view_lines, view_function). ALWAYS prefer
   this over file(action="write") for modifying existing code files.

@@ -5,6 +5,7 @@ Uses python-jose for JWT and secrets for API keys.
 
 import logging
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 
@@ -20,6 +21,7 @@ def create_access_token(user_id: str, role: str = "user", extra: dict = None) ->
         "sub": user_id,
         "role": role,
         "type": "access",
+        "jti": str(uuid.uuid4()),
         "iat": datetime.now(tz=timezone.utc),
         "exp": datetime.now(tz=timezone.utc) + timedelta(hours=settings.JWT_EXPIRATION_HOURS),
     }
@@ -37,6 +39,7 @@ def create_refresh_token(user_id: str, role: str = "user") -> str:
         "sub": user_id,
         "role": role,
         "type": "refresh",
+        "jti": str(uuid.uuid4()),
         "iat": datetime.now(tz=timezone.utc),
         "exp": datetime.now(tz=timezone.utc) + timedelta(days=7),
     }
@@ -60,6 +63,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
             "role": payload.get("role", "user"),
             "exp": payload.get("exp"),
             "type": payload.get("type"),
+            "jti": payload.get("jti"),
         }
     except JWTError as e:
         logger.warning(f"JWT verification failed: {e}")

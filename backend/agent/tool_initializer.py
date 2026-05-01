@@ -91,6 +91,20 @@ class ToolInitializer:
             logger.error(f"Failed to register EmailTool: {e}")
 
         try:
+            from backend.agent.tools.vision_browser import VisionBrowserTool
+            self.agent.vision_browser_tool = VisionBrowserTool()
+            self.agent.register_tool("vision_browser", self.agent.vision_browser_tool.execute)
+        except Exception as e:
+            logger.error(f"Failed to register VisionBrowserTool: {e}")
+
+        try:
+            from backend.agent.tools.canvas_tool import CanvasEngineTool
+            self.agent.canvas_engine_tool = CanvasEngineTool()
+            self.agent.register_tool("canvas_engine", self.agent.canvas_engine_tool.execute)
+        except Exception as e:
+            logger.error(f"Failed to register CanvasEngineTool: {e}")
+
+        try:
             from backend.agent.tools.utility_tools import VideoTool, AudioTool, SheetsTool
             self.agent.video_tool = VideoTool()
             self.agent.register_tool("video", self.agent.video_tool.execute)

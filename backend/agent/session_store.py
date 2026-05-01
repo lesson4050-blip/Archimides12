@@ -74,6 +74,33 @@ class SessionStore:
             logger.error(f"SessionStore delete failed: {e}")
             return False
 
+    def save_checkpoint(self, session_id: str, step_name: str, state: dict) -> bool:
+        """Save a specific step checkpoint for stateful recovery."""
+        try:
+            path = SESSION_DIR / f"{session_id}_checkpoint.json"
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "step": step_name, 
+                    "state": state, 
+                    "time": datetime.now().isoformat()
+                }, f, indent=2, default=str)
+            return True
+        except Exception as e:
+            logger.error(f"Checkpoint save failed: {e}")
+            return False
+
+    def load_checkpoint(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Load the latest checkpoint for a session."""
+        try:
+            path = SESSION_DIR / f"{session_id}_checkpoint.json"
+            if not path.exists():
+                return None
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Checkpoint load failed: {e}")
+            return None
+
     def list_active_sessions(self) -> list:
         """List all active (saved) session IDs."""
         try:

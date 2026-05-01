@@ -5,8 +5,7 @@ Supports PostgreSQL (production) and SQLite (dev fallback).
 
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, JSON, Boolean
 from sqlalchemy.orm import relationship, DeclarativeBase
-from datetime import datetime
-
+from datetime import datetime, timezone
 
 class Base(DeclarativeBase):
     pass
@@ -117,3 +116,16 @@ class UsageRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="usage_records")
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    jti = Column(String(64), unique=True, nullable=False, index=True)
+    user_id = Column(String(255), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
