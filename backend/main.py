@@ -105,21 +105,60 @@ async def lifespan(app: FastAPI):
 
     # ChromaDB Monitoring Task
     async def _monitor_chroma():
-        try:
-            from backend.memory.vector_store import VectorStore
-            store = VectorStore()
-            while True:
-                stats = await store.get_collection_stats()
-                count = stats.get("count", 0)
-                if count > 500000:
-                    logger.error(f"ChromaDB Growth Bomb: Collection has {count} documents! Performance will severely degrade.")
-                elif count > 100000:
-                    logger.warning(f"ChromaDB Warning: Collection has {count} documents. Consider cleanup.")
-                await asyncio.sleep(3600) # Check every hour
-        except Exception as e:
-            logger.error(f"ChromaDB monitor error: {e}")
+        """Background task: monitor ALL ChromaDB collections every 5 minutes."""
+        from backend.memory.vector_store import get_all_collections_stats, COLLECTION_MAX_DOCS
+        from backend.metrics import chroma_user_collection_size, chroma_total_docs
+        
+        while True:
+            try:
+                await asyncio.sleep(300)  # every 5 minutes
+                stats = await get_all_collections_stats()
+                
+                total = stats.get("total_docs", 0)
+                chroma_total_docs.set(total)
+                
+                for col_stat in stats.get("collections", []):
+                    user_id = col_stat["user_id"]
+                    count = col_stat["count"]
+                    chroma_user_collection_size.labels(user_id=user_id).set(count)
+                    
+                    # Warning at 80% of limit
+                    if col_stat["utilization_pct"] > 80:
+                        logger.warning(
+                            f"ChromaDB: user '{user_id}' at {col_stat['utilization_pct']}% "
+                            f"of limit ({count}/{COLLECTION_MAX_DOCS} docs)"
+                        )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"ChromaDB monitor error: {e}")
 
     safe_create_task(_monitor_chroma())
+
+    async def _archive_old_facts():
+        """Background task: archive old facts for all users once per day."""
+        from backend.memory.vector_store import get_all_collections_stats, VectorStore
+        
+        while True:
+            try:
+                await asyncio.sleep(86400)  # every 24 hours
+                stats = await get_all_collections_stats()
+                total_archived = 0
+                
+                for col_stat in stats.get("collections", []):
+                    user_id = col_stat["user_id"]
+                    vs = VectorStore(user_id=user_id)
+                    archived = await vs.archive_old_facts()
+                    total_archived += archived
+                
+                if total_archived > 0:
+                    logger.info(f"Daily TTL archive: removed {total_archived} old facts")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"TTL archiving task error: {e}")
+
+    safe_create_task(_archive_old_facts())
 
     # Start COSMO Artist (Next.js template server)
     from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn

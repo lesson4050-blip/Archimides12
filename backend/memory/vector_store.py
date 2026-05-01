@@ -3,9 +3,14 @@ import logging
 import hashlib
 import chromadb
 import asyncio
+import time
+import os
 from typing import List, Dict, Any, Optional
 from google import genai
 from backend.config import settings
+
+COLLECTION_MAX_DOCS = settings.CHROMA_MAX_DOCS_PER_USER
+COLLECTION_TTL_DAYS = settings.CHROMA_TTL_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +67,19 @@ class VectorStore:
             col = await self._get_collection()
             if col:
                 count = await asyncio.to_thread(col.count)
+                utilization = round(count / COLLECTION_MAX_DOCS * 100, 1) if COLLECTION_MAX_DOCS else 0
                 return {
                     "count": count,
-                    "status": "healthy",
-                    "size_est_mb": round(count * 0.002, 2) # rough estimate: 2KB per doc
+                    "limit": COLLECTION_MAX_DOCS,
+                    "utilization_pct": utilization,
+                    "ttl_days": COLLECTION_TTL_DAYS,
+                    "status": "healthy" if utilization < 80 else "near_limit",
+                    "size_est_mb": round(count * 0.002, 2)
                 }
         except Exception as e:
             logger.error(f"Failed to get collection stats: {e}")
-        return {"count": 0, "status": "unavailable", "size_est_mb": 0}
+        return {"count": 0, "limit": COLLECTION_MAX_DOCS, "utilization_pct": 0,
+                "status": "unavailable", "size_est_mb": 0}
 
     async def _get_embedding(self, text: str) -> List[float]:
         if not self.genai_client:
@@ -86,6 +96,78 @@ class VectorStore:
             logger.error(f"Failed to get embedding: {e}")
             return []
 
+    async def _enforce_size_limit(self, col) -> None:
+        """
+        If collection exceeds COLLECTION_MAX_DOCS, delete the oldest 10%.
+        Called before every add_fact to prevent unbounded growth.
+        """
+        try:
+            count = await asyncio.to_thread(col.count)
+            if count < COLLECTION_MAX_DOCS:
+                return  # Fast path — no action needed
+            
+            evict_count = max(1, count // 10)
+            logger.warning(
+                f"VectorStore: Collection {self.user_id} has {count} docs "
+                f"(limit: {COLLECTION_MAX_DOCS}). Evicting {evict_count} oldest."
+            )
+            
+            all_docs = await asyncio.to_thread(
+                col.get,
+                include=["metadatas"]
+            )
+            
+            if not all_docs or not all_docs.get("ids"):
+                return
+            
+            id_timestamp_pairs = [
+                (doc_id, meta.get("created_at", 0))
+                for doc_id, meta in zip(all_docs["ids"], all_docs["metadatas"])
+            ]
+            id_timestamp_pairs.sort(key=lambda x: x[1])
+            
+            ids_to_delete = [pair[0] for pair in id_timestamp_pairs[:evict_count]]
+            
+            await asyncio.to_thread(col.delete, ids=ids_to_delete)
+            logger.info(f"VectorStore: Evicted {len(ids_to_delete)} oldest docs from {self.user_id}")
+            
+        except Exception as e:
+            logger.error(f"VectorStore: Size limit enforcement failed: {e}")
+
+    async def archive_old_facts(self) -> int:
+        """
+        Delete documents older than COLLECTION_TTL_DAYS.
+        Returns number of archived (deleted) documents.
+        """
+        col = await self._get_collection()
+        if not col:
+            return 0
+        
+        cutoff_ts = int(time.time()) - (COLLECTION_TTL_DAYS * 86400)
+        
+        try:
+            old_docs = await asyncio.to_thread(
+                col.get,
+                where={"created_at": {"$lt": cutoff_ts}},
+                include=[]  # Only need IDs
+            )
+            
+            if not old_docs or not old_docs.get("ids"):
+                return 0
+            
+            ids_to_archive = old_docs["ids"]
+            if ids_to_archive:
+                await asyncio.to_thread(col.delete, ids=ids_to_archive)
+                logger.info(
+                    f"VectorStore: Archived {len(ids_to_archive)} docs "
+                    f"older than {COLLECTION_TTL_DAYS} days for user {self.user_id}"
+                )
+            return len(ids_to_archive)
+            
+        except Exception as e:
+            logger.error(f"VectorStore: TTL archiving failed: {e}")
+            return 0
+
     async def add_fact(self, text: str, metadata: Optional[Dict[str, Any]] = None):
         if not self.genai_client:
             return
@@ -94,6 +176,12 @@ class VectorStore:
         if not col:
             logger.warning("VectorStore: Skipping add_fact (ChromaDB unavailable)")
             return
+            
+        enriched_metadata = metadata or {}
+        enriched_metadata["created_at"] = int(time.time())
+        enriched_metadata["user_id"] = self.user_id
+        
+        await self._enforce_size_limit(col)
 
         embedding = await self._get_embedding(text)
         if embedding:
@@ -102,7 +190,7 @@ class VectorStore:
                     col.add,
                     documents=[text],
                     embeddings=[embedding],
-                    metadatas=[metadata or {}],
+                    metadatas=[enriched_metadata],
                     ids=[f"fact_{hashlib.sha256(text.encode()).hexdigest()[:16]}"]
                 )
                 logger.info("Fact added to vector store.")
@@ -141,3 +229,40 @@ class VectorStore:
             logger.error(f"Failed to query ChromaDB: {e}")
             return []
 
+async def get_all_collections_stats() -> Dict[str, Any]:
+    """
+    Returns stats for ALL user collections.
+    Used by monitoring background task.
+    """
+    client = await asyncio.to_thread(get_chroma_client)
+    if not client:
+        return {"error": "ChromaDB unavailable", "collections": []}
+    
+    try:
+        all_collections = await asyncio.to_thread(client.list_collections)
+        stats = []
+        total_docs = 0
+        
+        for col_info in all_collections:
+            col = await asyncio.to_thread(client.get_collection, col_info.name)
+            count = await asyncio.to_thread(col.count)
+            total_docs += count
+            
+            user_id = col_info.name.replace("archimedes_", "", 1)
+            
+            stats.append({
+                "collection": col_info.name,
+                "user_id": user_id,
+                "count": count,
+                "utilization_pct": round(count / COLLECTION_MAX_DOCS * 100, 1) if COLLECTION_MAX_DOCS else 0,
+                "status": "healthy" if count < COLLECTION_MAX_DOCS * 0.8 else "near_limit"
+            })
+        
+        return {
+            "collections": stats,
+            "total_collections": len(stats),
+            "total_docs": total_docs,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get all collections stats: {e}")
+        return {"error": str(e), "collections": []}

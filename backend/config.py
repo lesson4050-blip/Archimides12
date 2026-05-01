@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     
     # Vector DB
     CHROMA_DB_PATH: str = "./data/chroma_db"  # Default; override in .env for Docker (/app/data/chroma_db)
+    CHROMA_MAX_DOCS_PER_USER: int = 10000
+    CHROMA_TTL_DAYS: int = 90
     
     # Auth / JWT — IMPORTANT: override JWT_SECRET_KEY in .env for production!
     JWT_SECRET_KEY: str = ""

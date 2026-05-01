@@ -21,9 +21,14 @@ llm_requests_total = Counter(
 )
 
 # Vector DB Metrics
-chroma_collection_size = Gauge(
-    "chroma_collection_size", 
-    "Number of documents in the ChromaDB collection"
+chroma_user_collection_size = Gauge(
+    "chroma_user_collection_size",
+    "Document count per user ChromaDB collection",
+    ["user_id"]
+)
+chroma_total_docs = Gauge(
+    "chroma_total_docs_all_users",
+    "Total documents across all ChromaDB collections"
 )
 
 # WebSocket Metrics
