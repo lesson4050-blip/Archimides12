@@ -31,6 +31,12 @@ Through recent production hardening, Archimedes features:
   - **Session Memory**: Per-session markdown notes with automated LLM extraction.
   - **Evaluation Pipeline**: Model comparison (A/B testing) across task categories.
   - **45+ Tools**: Notebook, Grep, Glob, and expanded domain tooling.
+- **Archimedes Prime (v3.1)**:
+  - **PredictiveGuard**: Proactive shell command validation (Self-healing AI Safety layer).
+  - **VisionBrowserTool**: Playwright & Gemini Vision 2.0 Flash integration for visual UI analysis.
+  - **Canvas Engine**: Next-gen React-based presentation generation replacing legacy tools.
+  - **Stateful Recovery**: Mid-task session checkpointing for resilience against restarts.
+  - **JWT Revocation**: JTI-based database tracking for instant session invalidation.
 
 ---
 
