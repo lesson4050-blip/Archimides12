@@ -23,11 +23,9 @@ class SearchToolModel(BaseModel):
     query: str = Field(..., description="Search query")
     max_results: Optional[int] = Field(5, description="Maximum number of results to return")
 
-class PresentationToolModel(BaseModel):
-    prompt: str = Field(..., description="Detailed prompt for the presentation content")
-    slide_count: Optional[int] = Field(8, ge=1, le=20, description="Number of slides to generate")
-    theme: Optional[str] = Field("dark", description="Visual theme (dark, light, corporate, bold, gradient)")
-    language: Optional[str] = Field("ru", description="Output language")
+class CanvasEngineToolModel(BaseModel):
+    topic: str = Field(..., description="Presentation topic")
+    slides_json: str = Field(..., description="JSON array of slide objects [{title, body, notes}]")
 
 class BrowserToolModel(BaseModel):
     action: str = Field(..., description="Action: 'navigate', 'click', 'type', 'screenshot', 'extract'")
@@ -40,7 +38,7 @@ TOOL_MODELS = {
     "file": FileToolModel,
     "shell": ShellToolModel,
     "search": SearchToolModel,
-    "presentation": PresentationToolModel,
+    "canvas_engine": CanvasEngineToolModel,
     "browser": BrowserToolModel
 }
 

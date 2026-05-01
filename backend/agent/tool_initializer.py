@@ -178,13 +178,6 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register LogAnalyzerTool: {e}")
 
-        try:
-            from backend.tools.cosmo_tool import CosmoPresentationTool
-            self.agent.cosmo_tool = CosmoPresentationTool()
-            self.tool_registry.register("presentation", self.agent.cosmo_tool.execute)
-            logger.info("COSMO Presentation tool registered")
-        except Exception as e:
-            logger.error(f"Failed to register CosmoPresentationTool: {e}")
 
         # --- Intelligence tools (Phase 2 + 5) ---
         try:

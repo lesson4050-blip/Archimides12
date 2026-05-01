@@ -44,15 +44,12 @@ class ExecutorAgent(BaseAgent):
     
     PRESENTATION GENERATION (MANDATORY RULES):
     - For ANY request about "презентация", "слайды", "pitch deck",
-      "deck", "presentation" → ALWAYS use the presentation tool.
+      "deck", "presentation" → ALWAYS use the canvas_engine tool.
     - NEVER try to generate slides with file tool or shell tool.
-    - presentation tool produces Gamma/Kimi quality PPTX automatically.
-    - Default: slide_count=8, theme="dark", language="ru"
-    - For business pitch: theme="corporate", slide_count=10
-    - For education: theme="light", slide_count=12
-    - For creative topics: theme="bold" or "gradient"
-    - After generation: share the file with user and open preview
-    - The tool handles everything — just call it with a good prompt.
+    - canvas_engine produces premium React-rendered presentations.
+    - You MUST provide a 'topic' string and a 'slides_json' array.
+    - Each slide object: {{"title": "...", "body": "...", "notes": "..."}}
+    - The tool validates JSON and saves the artifact automatically.
     
     When you have completed the subtask, provide a polite and clear summary of your work in the SAME LANGUAGE as the user's original task.{memory_context}
     """
@@ -456,41 +453,17 @@ class ExecutorAgent(BaseAgent):
                             "language": "markdown" if path.endswith(".md") else "plaintext"
                         })
                 
-                # COSMO Presentation file artifact
-                if t_name == "presentation" and success:
-                    file_path = tool_res.get("file_path", "")
-                    filename = tool_res.get("filename", "presentation.pptx")
-                    preview_url = tool_res.get("preview_url", "")
-            
-                    if file_path and os.path.exists(file_path):
-                        # Read file and send as base64 artifact
-                        import base64
-                        with open(file_path, "rb") as f:
-                            pptx_bytes = f.read()
-                        b64 = base64.b64encode(pptx_bytes).decode()
-            
-                        if websocket_send:
-                            # Send downloadable file artifact
-                            await websocket_send({
-                                "type": "file_artifact",
-                                "filename": filename,
-                                "mime_type": (
-                                    "application/vnd.openxmlformats-"
-                                    "officedocument.presentationml.presentation"
-                                ),
-                                "data": b64,
-                                "size_kb": tool_res.get("file_size_kb", 0),
-                                "preview_url": preview_url,
-                                "label": "⚡ COSMO Presentation"
-                            })
-            
-                            # Also send preview in browser tab if preview_url exists
-                            if preview_url:
-                                await websocket_send({
-                                    "type": "browser_navigate",
-                                    "url": preview_url,
-                                    "title": "COSMO Presentation Preview"
-                                })
+                # Canvas Engine presentation artifact
+                if t_name == "canvas_engine" and success:
+                    artifact_path = tool_res.get("artifact_path", "")
+                    if websocket_send and artifact_path:
+                        await websocket_send({
+                            "type": "canvas_presentation",
+                            "artifact_path": artifact_path,
+                            "topic": t_params.get("topic", "Presentation"),
+                            "slide_count": tool_res.get("slide_count", 0),
+                            "label": "⚡ Canvas Presentation"
+                        })
                 
                 await self.context_manager.summarize_if_needed(self.router)
                 # CONTINUE the loop to process tool output

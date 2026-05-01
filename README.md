@@ -50,7 +50,7 @@ Archimedes follows a decoupled Backend-Frontend architecture with a heavy focus 
 - `backend/tools/` — **Toolbox**: 45+ atomic tools (File, Git, Shell, Vision, Notebook, Grep, Glob, etc.).
 - `backend/agent/orchestration/` — **Planning**: MCTS, Swarm logic, Verification Agent, and Routing.
 - `backend/memory/` — **Context**: Auto-Compact, Session Memory, Context Manager.
-- `backend/cosmo/` — **Artist Engine**: Handles real-time presentation generation.
+- `backend/agent/tools/canvas_tool.py` — **Canvas Engine**: JSON-based React presentation generation.
 
 ### Frontend Structure
 - `frontend/components/` — **UI Components**: Modularized components (Settings, Chat, Canvas).
