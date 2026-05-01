@@ -323,6 +323,19 @@ class SandboxManager:
 
     async def _create_container(self, session_id: str) -> bool:
         """Create the Docker container and register the session. Caller must hold _lock."""
+        # Validate session_id format defensively at creation time
+        import re
+        if not re.match(r'^[a-zA-Z0-9_\-]{1,128}$', session_id):
+            logger.error(f"Rejected unsafe session_id: {session_id!r}")
+            return False
+        
+        base_workspace = os.path.abspath("./workspace")
+        session_workspace = os.path.abspath(os.path.join(base_workspace, session_id))
+        
+        # Verify the resolved path is actually inside base_workspace
+        if not session_workspace.startswith(base_workspace + os.sep):
+            logger.error(f"Path traversal attempt blocked: {session_workspace}")
+            return False
         client = self.client
         if not client:
             logger.error("Docker client not available.")
@@ -341,7 +354,6 @@ class SandboxManager:
         logger.info(f"Creating container {container_name} for session {session_id}")
         try:
             def _create_container_sync():
-                session_workspace = os.path.abspath(f"./workspace/{session_id}")
                 os.makedirs(session_workspace, exist_ok=True)
 
                 # Create isolated network for this session

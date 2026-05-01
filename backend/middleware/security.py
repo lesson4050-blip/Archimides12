@@ -135,10 +135,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.scheme == "https":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
             
+        import os
+        is_dev = os.environ.get("ENVIRONMENT", "production").lower() == "development"
+        
+        # unsafe-eval only permitted in dev mode (Next.js HMR)
+        script_src = (
+            "'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net"
+            if is_dev else
+            "'self' 'unsafe-inline' https://cdn.jsdelivr.net"
+        )
+        
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
-            "https://cdn.jsdelivr.net; "
+            f"default-src 'self'; "
+            f"script-src {script_src}; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: blob: https:; "

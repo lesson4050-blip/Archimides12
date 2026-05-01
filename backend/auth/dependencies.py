@@ -101,39 +101,58 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
 
 import time
 
-_API_KEY_CACHE = {}
+import asyncio
+
+_API_KEY_CACHE: dict = {}
+_API_KEY_LOCKS: dict = {}
+_API_KEY_LOCKS_LOCK = asyncio.Lock()  # protects _API_KEY_LOCKS itself
 
 async def _lookup_user_by_api_key(api_key: str) -> Optional[dict]:
     """Look up a user by their API key in the database (with 5-minute TTL cache)."""
     now = time.time()
-    
     from backend.auth.jwt_handler import hash_api_key
     hashed_key = hash_api_key(api_key)
     
-    # Check cache
+    # Fast path — cache hit (no lock needed for reads)
     cached = _API_KEY_CACHE.get(hashed_key)
     if cached and now < cached["exp"]:
         return cached["user"]
+    
+    # Slow path — need DB lookup, use per-key lock to prevent stampede
+    async with _API_KEY_LOCKS_LOCK:
+        if hashed_key not in _API_KEY_LOCKS:
+            _API_KEY_LOCKS[hashed_key] = asyncio.Lock()
+        key_lock = _API_KEY_LOCKS[hashed_key]
+    
+    async with key_lock:
+        # Double-check after acquiring lock
+        cached = _API_KEY_CACHE.get(hashed_key)
+        if cached and now < cached["exp"]:
+            return cached["user"]
         
-    # Clean up stale cache entries periodically
-    stale = [k for k, v in list(_API_KEY_CACHE.items()) if v["exp"] < now]
-    for k in stale:
-        del _API_KEY_CACHE[k]
-
-    try:
-        from sqlalchemy import select
-        from backend.db.crud import AsyncSessionLocal
-        from backend.db.models import User
+        # Cleanup stale entries
+        stale = [k for k, v in list(_API_KEY_CACHE.items()) if v["exp"] < now]
+        for k in stale:
+            del _API_KEY_CACHE[k]
+            _API_KEY_LOCKS.pop(k, None)
         
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(User).where(User.api_key == hashed_key, User.is_active.is_(True))
-            )
-            user = result.scalar_one_or_none()
-            if user:
-                user_data = {"id": user.id, "role": user.role, "email": user.email}
-                _API_KEY_CACHE[hashed_key] = {"user": user_data, "exp": now + 300}  # 5 min TTL
-                return user_data
-    except Exception as e:
-        logger.error(f"API key lookup failed: {e}")
-    return None
+        # DB lookup
+        try:
+            from sqlalchemy import select
+            from backend.db.crud import AsyncSessionLocal
+            from backend.db.models import User
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(User).where(
+                        User.api_key == hashed_key,
+                        User.is_active.is_(True)
+                    )
+                )
+                user = result.scalar_one_or_none()
+                if user:
+                    user_data = {"id": user.id, "role": user.role, "email": user.email}
+                    _API_KEY_CACHE[hashed_key] = {"user": user_data, "exp": now + 300}
+                    return user_data
+        except Exception as e:
+            logger.error(f"API key lookup failed: {e}")
+        return None

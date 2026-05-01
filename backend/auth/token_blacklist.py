@@ -50,14 +50,16 @@ class TokenBlacklist:
         key = self._token_hash(token)
         redis = await self._get_redis()
 
+        redis_ok = False
         if redis:
             try:
                 await redis.setex(f"blacklist:{key}", ttl, "1")
-                return
+                redis_ok = True
             except Exception as e:
                 logger.warning(f"Redis revoke failed: {e}")
 
-        # Memory fallback
+        # ALWAYS write to memory as backup (dual-write)
+        # This ensures revocation survives Redis restarts
         _MEMORY_BLACKLIST[key] = int(time.time()) + ttl
         # Cleanup expired entries
         now = int(time.time())
@@ -68,21 +70,23 @@ class TokenBlacklist:
     async def is_revoked(self, token: str) -> bool:
         """Check if token has been revoked."""
         key = self._token_hash(token)
-        redis = await self._get_redis()
-
-        if redis:
-            try:
-                result = await redis.exists(f"blacklist:{key}")
-                return bool(result)
-            except Exception as e:
-                logger.warning(f"Redis check failed: {e}")
-
-        # Memory fallback
+        # Check memory first (fastest, always up-to-date as backup)
         exp = _MEMORY_BLACKLIST.get(key)
         if exp:
             if int(time.time()) < exp:
                 return True
             del _MEMORY_BLACKLIST[key]
+            
+        # Also check Redis (authoritative source for distributed deployments)
+        redis = await self._get_redis()
+        if redis:
+            try:
+                result = await redis.exists(f"blacklist:{key}")
+                if result:
+                    return True
+            except Exception as e:
+                logger.warning(f"Redis check failed: {e}")
+
         return False
 
 

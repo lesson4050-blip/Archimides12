@@ -38,6 +38,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - COSMO_ARTIST_URL=http://cosmo-artist:3005
       - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - ENVIRONMENT=production
     volumes:
       - ../data:/app/data
       - ../workspace:/app/workspace
