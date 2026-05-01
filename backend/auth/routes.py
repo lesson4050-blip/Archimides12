@@ -170,6 +170,8 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
 async def refresh_access_token(request_data: RefreshRequest, request: Request, response: Response):
     """Refresh access token using refresh token from cookie or body."""
     from backend.auth.jwt_handler import verify_token, create_access_token, create_refresh_token
+    from backend.db.crud import revoke_token, is_token_revoked
+
     token_to_verify = request.cookies.get("refresh_token") or request_data.refresh_token
     payload = verify_token(token_to_verify)
     if not payload or payload.get("type") != "refresh":
@@ -178,7 +180,15 @@ async def refresh_access_token(request_data: RefreshRequest, request: Request, r
             detail="Invalid or expired refresh token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
+    # Check JTI-based revocation (prevents replay of old refresh tokens)
+    old_jti = payload.get("jti")
+    if old_jti and await is_token_revoked(old_jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked",
+        )
+
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.id == payload["user_id"]))
         user = result.scalar_one_or_none()
@@ -188,7 +198,12 @@ async def refresh_access_token(request_data: RefreshRequest, request: Request, r
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found or inactive",
             )
-            
+
+        # Revoke the OLD refresh token so it cannot be replayed
+        if old_jti and payload.get("exp"):
+            expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+            await revoke_token(jti=old_jti, user_id=user.id, expires_at=expires_at)
+
         new_access = create_access_token(user.id, user.role)
         new_refresh = create_refresh_token(user.id, user.role)
         
@@ -218,9 +233,10 @@ async def refresh_access_token(request_data: RefreshRequest, request: Request, r
 
 @router.post("/logout")
 async def logout(request: Request, response: Response):
-    """Logout user — clears cookies AND revokes JWT token."""
+    """Logout user — clears cookies AND revokes JWT tokens (both in-memory and DB)."""
     from backend.auth.token_blacklist import blacklist
     from backend.auth.jwt_handler import verify_token
+    from backend.db.crud import revoke_token
 
     # Revoke the access token if present
     token = request.cookies.get("access_token")
@@ -228,6 +244,14 @@ async def logout(request: Request, response: Response):
         payload = verify_token(token)
         if payload and payload.get("exp"):
             await blacklist.revoke(token, payload["exp"])
+            # Persist JTI revocation to DB (survives server restarts)
+            if payload.get("jti"):
+                expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+                await revoke_token(
+                    jti=payload["jti"],
+                    user_id=payload["user_id"],
+                    expires_at=expires_at,
+                )
 
     # Revoke the refresh token if present
     refresh = request.cookies.get("refresh_token")
@@ -235,6 +259,14 @@ async def logout(request: Request, response: Response):
         payload = verify_token(refresh)
         if payload and payload.get("exp"):
             await blacklist.revoke(refresh, payload["exp"])
+            # Persist JTI revocation to DB
+            if payload.get("jti"):
+                expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+                await revoke_token(
+                    jti=payload["jti"],
+                    user_id=payload["user_id"],
+                    expires_at=expires_at,
+                )
 
     response.delete_cookie(
         key="access_token", httponly=True, secure=True, samesite="lax"

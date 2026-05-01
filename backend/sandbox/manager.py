@@ -554,6 +554,11 @@ class SandboxManager:
                     hostname=f"sandbox-{session_id}",
                     mem_limit="2g",
                     cpu_quota=100000,  # 1 CPU
+                    pids_limit=512,  # Fork bomb protection
+                    ulimits=[
+                        docker.types.Ulimit(name="nofile", soft=1024, hard=2048),
+                        docker.types.Ulimit(name="nproc", soft=512, hard=1024),
+                    ],
                     security_opt=["no-new-privileges:true"],
                     cap_drop=["ALL"],
                     cap_add=["CHOWN", "SETUID", "SETGID"],

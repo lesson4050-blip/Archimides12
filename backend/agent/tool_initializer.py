@@ -91,18 +91,20 @@ class ToolInitializer:
             logger.error(f"Failed to register EmailTool: {e}")
 
         try:
-            from backend.agent.tools.vision_browser import VisionBrowserTool
-            self.agent.vision_browser_tool = VisionBrowserTool()
+            from backend.tools.vision_browser_tool import VisionBrowserTool
+            self.agent.vision_browser_tool = VisionBrowserTool(router=getattr(self.agent, 'router', None))
             self.agent.register_tool("vision_browser", self.agent.vision_browser_tool.execute)
+            logger.info("VisionBrowserTool registered — browser with AI vision active")
         except Exception as e:
             logger.error(f"Failed to register VisionBrowserTool: {e}")
 
         try:
-            from backend.agent.tools.canvas_tool import CanvasEngineTool
-            self.agent.canvas_engine_tool = CanvasEngineTool()
-            self.agent.register_tool("canvas_engine", self.agent.canvas_engine_tool.execute)
+            from backend.agent.tools.canvas_engine import CanvasEngine
+            self.agent.canvas_engine_tool = CanvasEngine(router=getattr(self.agent, 'router', None))
+            self.agent.register_tool("canvas", self.agent.canvas_engine_tool.execute)
+            logger.info("CanvasEngine registered — Kimi-level presentations active")
         except Exception as e:
-            logger.error(f"Failed to register CanvasEngineTool: {e}")
+            logger.error(f"Failed to register CanvasEngine: {e}")
 
         try:
             from backend.agent.tools.utility_tools import VideoTool, AudioTool, SheetsTool

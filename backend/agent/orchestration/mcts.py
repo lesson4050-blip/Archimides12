@@ -151,19 +151,25 @@ class MCTSManager:
     async def _simulate(self, node: MCTSNode, task: str,
                         model_router) -> Tuple[float, str]:
         """Score a hypothesis via LLM evaluation."""
+        return await self._simulate_with_critic(node, task, model_router)
+
+    async def _simulate_with_critic(self, node: MCTSNode, task: str,
+                                    model_router) -> Tuple[float, str]:
+        """Score a hypothesis using a Critic for enhanced evaluation."""
         prompt = f"""
 Evaluate this solution approach for the given task.
 Task: {task[:400]}
 Approach: {node.hypothesis[:500]}
 
-Score each dimension from 0.0 to 1.0:
+First, provide a brief CRITIQUE (max 3 sentences) of the approach, identifying any flaws, missing edge cases, or inefficiencies.
+Then, based on your critique, score each dimension from 0.0 to 1.0:
 - Correctness: Will this actually solve the problem? (weight: 0.4)
 - Completeness: Does it handle edge cases? (weight: 0.3)
 - Efficiency: Is the approach reasonably fast/clean? (weight: 0.2)
 - Feasibility: Can this be implemented with available tools? (weight: 0.1)
 
-Reply ONLY with a JSON object:
-{{"correctness": 0.0, "completeness": 0.0, "efficiency": 0.0, "feasibility": 0.0}}
+Reply ONLY with a JSON object in this exact format:
+{{"critique": "your critique here", "correctness": 0.0, "completeness": 0.0, "efficiency": 0.0, "feasibility": 0.0}}
 """
 
         try:
@@ -180,7 +186,8 @@ Reply ONLY with a JSON object:
                     dims.get("efficiency", 0.0) * 0.2 +
                     dims.get("feasibility", 0.0) * 0.1
                 )
-                return min(max(score, 0.0), 1.0), "Evaluated via dimensions"
+                critique = dims.get("critique", "Evaluated via dimensions")
+                return min(max(score, 0.0), 1.0), critique
         except Exception as e:
             logger.warning(f"MCTS simulation failed: {e}")
 

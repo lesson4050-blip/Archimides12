@@ -141,9 +141,9 @@ TOOL SELECTION:
 - patch: generate a unified diff between two file versions, apply a 
   patch file to a codebase, or preview changes before applying.
   Use after fixing a bug to generate the submission patch.
-- vision: take a screenshot of the sandbox desktop and analyze it with
-  Gemini Vision. Use when you need to see the current UI state, verify
-  that a web page rendered correctly, or find UI elements to click.
+- vision_browser: open a URL, take a full-page screenshot, and analyze it
+  with Gemini Vision. Use to visually test web UI, verify layouts, or find
+  interactive elements by description instead of raw HTML.
 - parallel_search: run 2-8 search queries simultaneously, returns
   filtered relevant results. Use instead of multiple sequential search
   calls for research tasks. Up to 3x faster for multi-aspect research.

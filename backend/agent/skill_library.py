@@ -368,3 +368,52 @@ class SkillLibrary:
                     )[:250],
                 })
         return compressed
+
+    async def synthesize_skill_from_web(self, task_description: str, model_router: Any, search_context: str = "") -> bool:
+        """
+        Synthesizes a new skill from web knowledge if it's missing in the local library.
+        
+        Args:
+            task_description: The goal to synthesize a skill for.
+            model_router: The LLM model to use for synthesis.
+            search_context: Optional pre-fetched documentation or search results.
+            
+        Returns:
+            bool: True if a skill was successfully synthesized and saved, False otherwise.
+        """
+        sig = self._task_signature(task_description)
+        if sig in self._index:
+            return True # Already exists
+            
+        prompt = f"""
+You need to synthesize a reusable technical skill (execution trajectory) for the following task:
+Task: {task_description}
+
+Context/Docs: {search_context[:4000]}
+
+Generate a simulated, optimal execution trace that an agent should follow to solve this task.
+Return it as a JSON array of steps. Each step must have:
+- "tool": the tool name (e.g., "run_command", "replace_file_content")
+- "params_summary": a brief summary of parameters used
+- "result_summary": expected successful result
+
+Ensure the JSON array is the ONLY output.
+"""
+        try:
+            response = await model_router.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_hint="think"
+            )
+            from backend.utils.json_repair import repair_and_parse
+            steps, _ = repair_and_parse(response.get("text", "[]"))
+            
+            if steps and isinstance(steps, list):
+                # Fake a score since it's theoretically derived
+                quality = 0.85
+                self.save_skill(task_description, steps, quality)
+                logger.info(f"Synthesized new skill from web for: {task_description[:50]}")
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to synthesize skill from web: {e}")
+            
+        return False
