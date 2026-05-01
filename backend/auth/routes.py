@@ -201,6 +201,24 @@ async def refresh_access_token(request_data: RefreshRequest, request: Request, r
         )
 
 
+@router.post("/logout")
+async def logout(response: Response):
+    """Logout user by clearing auth cookies."""
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,
+        samesite="lax"
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=True,
+        samesite="lax"
+    )
+    return {"message": "Successfully logged out"}
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Get current authenticated user info."""

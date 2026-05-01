@@ -341,15 +341,21 @@ class SandboxManager:
         logger.info(f"Creating container {container_name} for session {session_id}")
         try:
             def _create_container_sync():
+                session_workspace = os.path.abspath(f"./workspace/{session_id}")
+                os.makedirs(session_workspace, exist_ok=True)
+
                 return client.containers.run(
                     settings.SANDBOX_IMAGE,
                     name=container_name,
                     hostname=f"sandbox-{session_id}",
                     mem_limit="2g",
                     cpu_quota=100000,  # 1 CPU
+                    security_opt=["no-new-privileges:true"],
+                    cap_drop=["ALL"],
+                    cap_add=["CHOWN", "SETUID", "SETGID"],
                     environment={"SESSION_ID": session_id},
                     volumes={
-                        os.path.abspath("./workspace"): {"bind": "/home/ubuntu/workspace", "mode": "rw"},
+                        session_workspace: {"bind": "/home/ubuntu/workspace", "mode": "rw"},
                         **({"vnc-data": {"bind": "/home/ubuntu/vnc", "mode": "rw"}} if sys.platform != "win32" else {})
                     },
                     ports={"6080/tcp": None},
@@ -367,7 +373,10 @@ class SandboxManager:
             safe_create_task(self.novnc.start_streaming(session_id))
 
             # Create workspace dir
-            container.exec_run("chown -R ubuntu:ubuntu /home/ubuntu/workspace")
+            await loop.run_in_executor(
+                None,
+                lambda: container.exec_run("chown -R ubuntu:ubuntu /home/ubuntu/workspace")
+            )
             
             # Start persistent shell
             shell = PersistentShell(container)

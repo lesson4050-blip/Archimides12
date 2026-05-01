@@ -59,6 +59,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
             "user_id": user_id,
             "role": payload.get("role", "user"),
             "exp": payload.get("exp"),
+            "type": payload.get("type"),
         }
     except JWTError as e:
         logger.warning(f"JWT verification failed: {e}")

@@ -94,8 +94,24 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+import time
+
+_API_KEY_CACHE = {}
+
 async def _lookup_user_by_api_key(api_key: str) -> Optional[dict]:
-    """Look up a user by their API key in the database."""
+    """Look up a user by their API key in the database (with 5-minute TTL cache)."""
+    now = time.time()
+    
+    # Check cache
+    cached = _API_KEY_CACHE.get(api_key)
+    if cached and now < cached["exp"]:
+        return cached["user"]
+        
+    # Clean up stale cache entries periodically
+    stale = [k for k, v in list(_API_KEY_CACHE.items()) if v["exp"] < now]
+    for k in stale:
+        del _API_KEY_CACHE[k]
+
     try:
         from sqlalchemy import select
         from backend.db.crud import AsyncSessionLocal
@@ -107,7 +123,9 @@ async def _lookup_user_by_api_key(api_key: str) -> Optional[dict]:
             )
             user = result.scalar_one_or_none()
             if user:
-                return {"id": user.id, "role": user.role, "email": user.email}
+                user_data = {"id": user.id, "role": user.role, "email": user.email}
+                _API_KEY_CACHE[api_key] = {"user": user_data, "exp": now + 300}  # 5 min TTL
+                return user_data
     except Exception as e:
         logger.error(f"API key lookup failed: {e}")
     return None
