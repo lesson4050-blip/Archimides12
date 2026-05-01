@@ -2,8 +2,12 @@ import logging
 import os
 from typing import Dict, Any, List, Optional
 
-logger = logging.getLogger(__name__)
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
 
+logger = logging.getLogger(__name__)
 class AnthropicClient:
     """Simple wrapper for Anthropic Claude models."""
     
@@ -13,10 +17,9 @@ class AnthropicClient:
         self._client = None
         
         if self.api_key:
-            try:
-                import anthropic
+            if anthropic is not None:
                 self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
-            except ImportError:
+            else:
                 logger.warning("anthropic library not installed. Claude support disabled.")
     
     @property
@@ -44,7 +47,7 @@ class AnthropicClient:
             
             response = await self._client.messages.create(
                 model=kwargs.get("model", self.default_model),
-                system=system_prompt.strip() if system_prompt else anthropic.NOT_GIVEN,
+                system=system_prompt.strip() if system_prompt else (anthropic.NOT_GIVEN if anthropic else None),
                 messages=anthropic_messages,
                 max_tokens=kwargs.get("max_tokens", 4096),
                 temperature=kwargs.get("temperature", 0.7)

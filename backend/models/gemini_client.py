@@ -279,6 +279,7 @@ class GeminiClient:
             from PIL import Image
             import io
             import base64
+            import os
 
             genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
             model = genai.GenerativeModel("gemini-1.5-flash")

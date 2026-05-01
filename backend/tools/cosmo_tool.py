@@ -286,6 +286,7 @@ class CosmoPresentationTool:
             from backend.agent.vision_feedback import VisionFeedbackLoop
             from backend.models.model_router import ModelRouter
             vfl = VisionFeedbackLoop(router=ModelRouter())
+            pres_id = result.get("id", pptx_filename.replace(".pptx", ""))
             qa = await vfl.analyze_pptx_slides(
                 presentation_id=pres_id,
                 slide_count=n_slides,
