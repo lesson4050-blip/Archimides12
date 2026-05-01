@@ -156,6 +156,153 @@ class SnapshotManager:
         self._snapshots.pop(session_id, None)
 
 
+WARM_POOL_MIN = 2   # всегда держать 2 разогретых контейнера
+WARM_POOL_MAX = 5   # максимум в пуле
+
+class WarmContainerPool:
+    """
+    Pre-warmed Docker containers ready for instant assignment.
+    Replenisher runs in background and keeps pool filled.
+    """
+    def __init__(self, sandbox_manager: "SandboxManager"):
+        self._mgr = sandbox_manager
+        self._pool: asyncio.Queue = asyncio.Queue(maxsize=WARM_POOL_MAX)
+        self._replenisher_task: Optional[asyncio.Task] = None
+        self._creating = 0  # счётчик создаваемых сейчас контейнеров
+
+    def start(self):
+        self._replenisher_task = asyncio.create_task(self._replenish_loop())
+        logger.info("WarmContainerPool: replenisher started")
+
+    def stop(self):
+        if self._replenisher_task:
+            self._replenisher_task.cancel()
+
+    async def acquire(self, session_id: str) -> Optional[Any]:
+        """
+        Get a warm container instantly. Falls back to cold start if pool empty.
+        """
+        try:
+            container = self._pool.get_nowait()
+            logger.info(f"WarmPool: HIT for session {session_id} "
+                        f"(pool size now: {self._pool.qsize()})")
+            # Сбрасываем environment под новую сессию
+            await self._reset_container(container, session_id)
+            return container
+        except asyncio.QueueEmpty:
+            logger.warning(f"WarmPool: MISS for session {session_id} — cold start")
+            return None  # caller falls back to cold create_session()
+
+    async def release(self, container: Any):
+        """
+        Return a used container to pool after cleanup.
+        Called on session destroy instead of docker rm.
+        """
+        if self._pool.qsize() >= WARM_POOL_MAX:
+            # Pool full — remove container instead of keeping it
+            await asyncio.to_thread(container.remove, force=True)
+            return
+        try:
+            await self._cleanup_container(container)
+            self._pool.put_nowait(container)
+            logger.info(f"WarmPool: container returned, pool size: {self._pool.qsize()}")
+        except Exception as e:
+            logger.warning(f"WarmPool: release failed ({e}), removing container")
+            await asyncio.to_thread(container.remove, force=True)
+
+    async def _replenish_loop(self):
+        """Background task: keep pool at WARM_POOL_MIN."""
+        while True:
+            try:
+                current = self._pool.qsize() + self._creating
+                if current < WARM_POOL_MIN:
+                    self._creating += 1
+                    try:
+                        container = await self._create_bare_container()
+                        if container:
+                            await self._pool.put(container)
+                            logger.info(f"WarmPool: replenished, size={self._pool.qsize()}")
+                    finally:
+                        self._creating -= 1
+            except Exception as e:
+                logger.error(f"WarmPool replenisher error: {e}")
+            await asyncio.sleep(5)
+
+    async def _create_bare_container(self) -> Optional[Any]:
+        """Create an unassigned warm container (no session_id yet)."""
+        loop = asyncio.get_running_loop()
+        client = self._mgr.client
+        if not client:
+            return None
+        
+        def _run():
+            import secrets
+            temp_name = f"archimedes-warm-{secrets.token_hex(4)}"
+            return client.containers.run(
+                settings.SANDBOX_IMAGE,
+                name=temp_name,
+                mem_limit="2g",
+                cpu_quota=100000,
+                security_opt=["no-new-privileges:true"],
+                cap_drop=["ALL"],
+                cap_add=["CHOWN", "SETUID", "SETGID"],
+                network_mode="none",
+                detach=True,
+                tty=True,
+            )
+        try:
+            return await loop.run_in_executor(None, _run)
+        except Exception as e:
+            logger.error(f"WarmPool: failed to create bare container: {e}")
+            return None
+
+    async def _reset_container(self, container: Any, session_id: str):
+        """Assign session: создать workspace, подключить network."""
+        loop = asyncio.get_running_loop()
+        client = self._mgr.client
+        
+        def _assign():
+            network_name = f"archimedes-net-{session_id}"
+            try:
+                network = client.networks.create(
+                    network_name, driver="bridge",
+                    internal=True, labels={"session_id": session_id}
+                )
+            except Exception:
+                network = client.networks.get(network_name)
+            network.connect(container)
+        
+        session_workspace = os.path.abspath(f"./workspace/{session_id}")
+        os.makedirs(session_workspace, exist_ok=True)
+        
+        await loop.run_in_executor(None, _assign)
+        await loop.run_in_executor(
+            None,
+            lambda: container.exec_run("chown -R ubuntu:ubuntu /home/ubuntu/workspace")
+        )
+
+    async def _cleanup_container(self, container: Any):
+        """Clean container state before returning to pool."""
+        loop = asyncio.get_running_loop()
+        
+        def _clean():
+            container.exec_run("rm -rf /home/ubuntu/workspace/* /tmp/*")
+            container.exec_run("bash -c 'history -c'")
+            container.reload()
+            for net_name, _ in container.attrs.get("NetworkSettings", {}).get("Networks", {}).items():
+                if net_name != "none":
+                    try:
+                        net = container.client.networks.get(net_name)
+                        net.disconnect(container)
+                    except Exception:
+                        pass
+        
+        try:
+            await loop.run_in_executor(None, _clean)
+        except Exception as e:
+            raise RuntimeError(f"Container cleanup failed: {e}")
+
+
 class SandboxManager:
     """
     Manages the lifecycle of Docker containers used as sandboxes.
@@ -181,6 +328,7 @@ class SandboxManager:
         self.filesystem = SandboxFilesystem(self)
         self.novnc = NoVNCManager(self.executor)
         self.snapshots = SnapshotManager()
+        self.warm_pool = WarmContainerPool(self)
 
     @property
     def client(self):
@@ -207,12 +355,14 @@ class SandboxManager:
         if self._reaper_task is None or self._reaper_task.done():
             self._reaper_task = safe_create_task(self._reaper_loop())
             logger.info("Inactivity reaper started.")
+        self.warm_pool.start()
 
     def stop_reaper(self):
         """Stop the background inactivity reaper. Call from app shutdown."""
         if self._reaper_task and not self._reaper_task.done():
             self._reaper_task.cancel()
             logger.info("Inactivity reaper stopped.")
+        self.warm_pool.stop()
 
     def cleanup_stale_containers(self):
         """Remove any lingering archimedes-session-* containers from previous runs."""
@@ -253,6 +403,18 @@ class SandboxManager:
                 logger.info(f"Session {session_id} already exists, reusing.")
                 return True
 
+            # Try warm pool first
+            container = await self.warm_pool.acquire(session_id)
+            if container:
+                self._sessions[session_id] = SessionInfo(
+                    container=container, session_id=session_id
+                )
+                # Ensure PersistentShell is started immediately for this container
+                shell = PersistentShell(container)
+                await shell.start()
+                self._shells[session_id] = shell
+                return True
+
             active_count = len(self._sessions)
             if active_count >= settings.SANDBOX_MAX_CONTAINERS:
                 # Evict oldest session instead of queueing infinitely
@@ -272,7 +434,16 @@ class SandboxManager:
         async with self._lock:
             session = self._sessions.pop(session_id, None)
             if session:
-                await self._stop_and_remove(session.container, session_id)
+                shell = self._shells.pop(session_id, None)
+                if shell:
+                    shell.stop()
+
+                # Return to warm pool instead of destroying, if possible
+                try:
+                    await self.warm_pool.release(session.container)
+                except Exception as e:
+                    logger.warning(f"Failed to release to warm pool: {e}. Destroying.")
+                    await self._stop_and_remove(session.container, session_id)
 
             # Wake next queued session
             self._wake_next_queued()

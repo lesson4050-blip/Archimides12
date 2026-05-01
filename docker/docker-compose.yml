@@ -23,6 +23,7 @@ services:
       - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
       - AUTH_ENABLED=false
       - ENVIRONMENT=production
+      - AGENT_TASK_TIMEOUT=300
     
     volumes:
       - ../workspace:/app/workspace

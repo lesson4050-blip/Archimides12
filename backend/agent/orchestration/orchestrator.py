@@ -1,5 +1,6 @@
 import logging
 import re
+import os
 import asyncio
 from typing import Optional, Callable, Dict, Any, List, Tuple
 from backend.agent.orchestration.state import OrchestrationState, AgentMode
@@ -8,12 +9,39 @@ from backend.agent.orchestration.agents.executor_agent import ExecutorAgent
 from backend.agent.orchestration.agents.critic_agent import CriticAgent
 from backend.agent.orchestration.agents.verification_agent import VerificationAgent
 from backend.agent.orchestration.mcts import MCTSManager
-from backend.models.model_router import ModelRouter
+from backend.models.model_router import ModelRouter, get_model_router
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
 from backend.agent.skill_library import SkillLibrary
 
 logger = logging.getLogger(__name__)
+
+_PARALLEL_SEMAPHORE: Optional[asyncio.Semaphore] = None
+
+def get_parallel_semaphore() -> asyncio.Semaphore:
+    global _PARALLEL_SEMAPHORE
+    if _PARALLEL_SEMAPHORE is None:
+        _PARALLEL_SEMAPHORE = asyncio.Semaphore(4)
+    return _PARALLEL_SEMAPHORE
+
+def _run_mcts_subprocess(task: str, context: str) -> str:
+    """Runs MCTS in a separate process to avoid blocking the event loop."""
+    import asyncio
+    from backend.agent.orchestration.mcts import MCTSManager
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        mgr = MCTSManager(workspace_dir=".")
+        # MCTSManager needs a simplified interface here — just task+context
+        if hasattr(mgr, 'run_simple'):
+            result = loop.run_until_complete(mgr.run_simple(task, context))
+        else:
+            router = get_model_router()
+            result = loop.run_until_complete(mgr.run_mcts(task, context, router, None, None))
+        return result or ""
+    finally:
+        loop.close()
+
 
 # Simple patterns that don't need planning or critic review
 CONVERSATIONAL_PATTERNS = [
@@ -207,7 +235,36 @@ class AgentOrchestrator:
         self._parallel_result_bus: Dict[str, Any] = {}
         self._mcp_client_ref = None  # Set by core.py after init
         
+        import concurrent.futures
+        self._process_executor = concurrent.futures.ProcessPoolExecutor(max_workers=2)
+
     async def run_task(self, 
+                       task_description: str, 
+                       mode: AgentMode = AgentMode.PLANNING,
+                       session_id: str = "default",
+                       websocket_send: Optional[Callable] = None,
+                       task_hint: str = "default",
+                       stream: bool = False) -> Dict[str, Any]:
+        TIMEOUT = int(os.environ.get("AGENT_TASK_TIMEOUT", "300"))
+        try:
+            return await asyncio.wait_for(
+                self._run_task_internal(
+                    task_description, mode, session_id,
+                    websocket_send, task_hint, stream
+                ),
+                timeout=TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"[{session_id}] Task timed out after {TIMEOUT}s")
+            if websocket_send:
+                await websocket_send({
+                    "type": "error",
+                    "content": f"⏱️ Agent timed out after {TIMEOUT//60} minutes."
+                })
+            return {"success": False, "error": "timeout",
+                    "output": "Task timed out. Please try a simpler request."}
+        
+    async def _run_task_internal(self, 
                        task_description: str, 
                        mode: AgentMode = AgentMode.PLANNING,
                        session_id: str = "default",
@@ -315,6 +372,11 @@ class AgentOrchestrator:
         
         if strategy_type == "parallel" and len(all_subtasks) > 1:
             # Run all subtasks in parallel
+            
+            async def _guarded(coro):
+                async with get_parallel_semaphore():
+                    return await coro
+
             tasks = []
             for i, subtask in enumerate(all_subtasks):
                 state_copy = OrchestrationState(
@@ -328,9 +390,9 @@ class AgentOrchestrator:
                 # Inject mcp_client so parallel agents can use auto-tooling
                 state_copy.metadata["mcp_client"] = state.metadata.get("mcp_client")
                 state_copy.metadata["strategy"] = state.metadata.get("strategy", "swarm_code")
-                tasks.append(
+                tasks.append(_guarded(
                     self.executor.process(state_copy, websocket_send)
-                )
+                ))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
@@ -390,12 +452,12 @@ class AgentOrchestrator:
                             logger.debug(f"Failed to build MCTS context: {e}")
                             pass
                             
-                        mcts_result = await self.mcts_manager.run_mcts(
-                            task=current_target,
-                            context=context_str,
-                            model_router=self.router,
-                            executor_agent=self.executor,
-                            state=state
+                        loop = asyncio.get_running_loop()
+                        mcts_result = await loop.run_in_executor(
+                            self._process_executor,
+                            _run_mcts_subprocess,
+                            current_target,
+                            context_str
                         )
                         state.results.append({
                             "step": i,
