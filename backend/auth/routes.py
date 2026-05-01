@@ -4,7 +4,7 @@ Auth API routes: registration, login, API key management.
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -35,9 +35,7 @@ class RegisterRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+    message: str = "Authenticated successfully. Tokens set in HttpOnly cookies."
     user_id: str
     role: str
     expires_in_hours: int
@@ -147,8 +145,6 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
         )
         
         return LoginResponse(
-            access_token="",
-            refresh_token="",
             user_id=user.id,
             role=user.role,
             expires_in_hours=settings.JWT_EXPIRATION_HOURS,
@@ -199,8 +195,6 @@ async def refresh_access_token(request_data: RefreshRequest, request: Request, r
         )
         
         return LoginResponse(
-            access_token="",
-            refresh_token="",
             user_id=user.id,
             role=user.role,
             expires_in_hours=settings.JWT_EXPIRATION_HOURS,
@@ -216,7 +210,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             email="dev@archimedes.local",
             role="admin",
             is_active=True,
-            created_at=datetime.now(datetime.timezone.utc).isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
             has_api_key=False,
         )
     

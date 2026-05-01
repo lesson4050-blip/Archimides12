@@ -63,8 +63,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if "websocket" in request.scope.get("type", ""):
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "unknown"
-
         if self.redis_client:
             # Redis-based distributed Rate Limiter (Token Bucket using Lua script or simple counters)
             # For performance, we use a simple rolling window via increment and expire
