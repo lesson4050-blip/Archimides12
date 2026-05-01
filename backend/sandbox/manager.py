@@ -407,7 +407,6 @@ class SandboxManager:
             if hasattr(self, 'warm_pool'):
                 container = await self.warm_pool.acquire(session_id)
                 if container:
-                    warm_pool_hits.inc()
                     self._sessions[session_id] = SessionInfo(
                         container=container, session_id=session_id
                     )
@@ -417,8 +416,6 @@ class SandboxManager:
                     self._shells[session_id] = shell
                     active_sandboxes.inc()
                     return True
-                else:
-                    warm_pool_misses.inc()
             
             # Fallback: cold start
             if len(self._sessions) >= settings.SANDBOX_MAX_CONTAINERS:
