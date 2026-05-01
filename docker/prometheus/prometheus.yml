@@ -3,7 +3,8 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'archimedes'
-    bearer_token: '${METRICS_BEARER_TOKEN}'
+  - job_name: archimedes-backend
+    bearer_token: "${METRICS_BEARER_TOKEN}"
     static_configs:
       - targets: ['archimedes-backend:8000']
+    metrics_path: /metrics

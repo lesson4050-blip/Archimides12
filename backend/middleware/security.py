@@ -39,6 +39,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         # Redis client initialization
         from backend.config import settings
+        import os
+        self.strict_mode = os.environ.get("STRICT_RATE_LIMIT", "false").lower() == "true"
         self.redis_client = None
         redis_url = getattr(settings, "REDIS_URL", None)
         if redis_url:
@@ -86,7 +88,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     )
                 return await call_next(request)
             except Exception as e:
-                logger.error(f"Redis rate limiter failed: {e}. Falling back to memory for this request.")
+                logger.error(f"Redis rate limiter failed: {e}. {'STRICT: returning 503' if self.strict_mode else 'Falling back to memory.'}")
+                if self.strict_mode:
+                    return JSONResponse(
+                        status_code=503,
+                        content={"detail": "Rate limiter temporarily unavailable. Please retry."},
+                        headers={"Retry-After": "5"}
+                    )
                 # Fallthrough to memory bucket
                 
         # Memory-based Rate Limiter (Graceful Degradation)

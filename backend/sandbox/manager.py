@@ -182,14 +182,18 @@ class WarmContainerPool:
         """
         Get a warm container instantly. Falls back to cold start if pool empty.
         """
+        from backend.metrics import warm_pool_hits, warm_pool_misses, warm_pool_size
         try:
             container = self._pool.get_nowait()
+            warm_pool_hits.inc()
+            warm_pool_size.set(self._pool.qsize())
             logger.info(f"WarmPool: HIT for session {session_id} "
                         f"(pool size now: {self._pool.qsize()})")
             # Сбрасываем environment под новую сессию
             await self._reset_container(container, session_id)
             return container
         except asyncio.QueueEmpty:
+            warm_pool_misses.inc()
             logger.warning(f"WarmPool: MISS for session {session_id} — cold start")
             return None  # caller falls back to cold create_session()
 
@@ -198,6 +202,7 @@ class WarmContainerPool:
         Return a used container to pool after cleanup.
         Called on session destroy instead of docker rm.
         """
+        from backend.metrics import warm_pool_size
         if self._pool.qsize() >= WARM_POOL_MAX:
             # Pool full — remove container instead of keeping it
             await asyncio.to_thread(container.remove, force=True)
@@ -205,6 +210,7 @@ class WarmContainerPool:
         try:
             await self._cleanup_container(container)
             self._pool.put_nowait(container)
+            warm_pool_size.set(self._pool.qsize())
             logger.info(f"WarmPool: container returned, pool size: {self._pool.qsize()}")
         except Exception as e:
             logger.warning(f"WarmPool: release failed ({e}), removing container")
@@ -391,59 +397,65 @@ class SandboxManager:
     # ------------------------------------------------------------------
 
     async def create_session(self, session_id: str) -> bool:
-        """
-        Create a sandbox container for a new session.
-        If max containers reached, the caller is queued and this method blocks
-        until a slot opens. Returns True on success, False on failure.
-        """
+        from backend.metrics import active_sandboxes, warm_pool_hits, warm_pool_misses
         async with self._lock:
-            # Already exists? Just touch and return.
             if session_id in self._sessions:
                 self._sessions[session_id].last_activity = time.time()
-                logger.info(f"Session {session_id} already exists, reusing.")
                 return True
-
-            # Try warm pool first
-            container = await self.warm_pool.acquire(session_id)
-            if container:
-                self._sessions[session_id] = SessionInfo(
-                    container=container, session_id=session_id
-                )
-                # Ensure PersistentShell is started immediately for this container
-                shell = PersistentShell(container)
-                await shell.start()
-                self._shells[session_id] = shell
-                return True
-
-            active_count = len(self._sessions)
-            if active_count >= settings.SANDBOX_MAX_CONTAINERS:
-                # Evict oldest session instead of queueing infinitely
-                oldest_sid = min(self._sessions.keys(), key=lambda k: self._sessions[k].last_activity)
-                logger.info(f"Max containers reached. Evicting oldest session {oldest_sid} to make room for {session_id}.")
+            
+            # Пробуем warm pool сначала
+            if hasattr(self, 'warm_pool'):
+                container = await self.warm_pool.acquire(session_id)
+                if container:
+                    warm_pool_hits.inc()
+                    self._sessions[session_id] = SessionInfo(
+                        container=container, session_id=session_id
+                    )
+                    # Запустить persistent shell на уже работающем контейнере
+                    shell = PersistentShell(container)
+                    await shell.start()
+                    self._shells[session_id] = shell
+                    active_sandboxes.inc()
+                    return True
+                else:
+                    warm_pool_misses.inc()
+            
+            # Fallback: cold start
+            if len(self._sessions) >= settings.SANDBOX_MAX_CONTAINERS:
+                oldest_sid = min(self._sessions.keys(), key=lambda sid: self._sessions[sid].last_activity)
+                logger.info(f"Max containers reached, destroying oldest session: {oldest_sid}")
+                # Вызываем напрямую _stop_and_remove, чтобы не возвращать эвикнутый контейнер в пул
                 session_to_evict = self._sessions.pop(oldest_sid)
+                active_sandboxes.dec()
+                shell_to_evict = self._shells.pop(oldest_sid, None)
+                if shell_to_evict:
+                    shell_to_evict.stop()
                 await self._stop_and_remove(session_to_evict.container, oldest_sid)
-
-            # Create container immediately
-            return await self._create_container(session_id)
+            
+            result = await self._create_container(session_id)
+            if result:
+                active_sandboxes.inc()
+            return result
 
     async def destroy_session(self, session_id: str):
-        """
-        Destroy a session's container. Called on WS disconnect or inactivity timeout.
-        Frees a slot and wakes the next queued session if any.
-        """
+        from backend.metrics import active_sandboxes
         async with self._lock:
             session = self._sessions.pop(session_id, None)
             if session:
+                active_sandboxes.dec()
                 shell = self._shells.pop(session_id, None)
                 if shell:
                     shell.stop()
-
-                # Return to warm pool instead of destroying, if possible
-                try:
-                    await self.warm_pool.release(session.container)
-                except Exception as e:
-                    logger.warning(f"Failed to release to warm pool: {e}. Destroying.")
-                    await self._stop_and_remove(session.container, session_id)
+                
+                # Вернуть в пул вместо docker rm
+                if hasattr(self, 'warm_pool'):
+                    try:
+                        await self.warm_pool.release(session.container)
+                        return  # не удаляем!
+                    except Exception:
+                        pass  # fallback to removal
+                
+                await self._stop_and_remove(session.container, session_id)
 
             # Wake next queued session
             self._wake_next_queued()

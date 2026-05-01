@@ -6,7 +6,10 @@ services:
     build:
       context: ..
       dockerfile: docker/sandbox.Dockerfile
-    container_name: archimedes-cosmo
+    # For horizontal scaling, change to: --workers 4
+    # Requires REDIS_URL and STRICT_RATE_LIMIT=true
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    container_name: archimedes-backend
     hostname: archimedes-cosmo
     
     ports:
@@ -24,6 +27,7 @@ services:
       - AUTH_ENABLED=false
       - ENVIRONMENT=production
       - AGENT_TASK_TIMEOUT=300
+      - STRICT_RATE_LIMIT=true
     
     volumes:
       - ../workspace:/app/workspace
@@ -102,10 +106,44 @@ services:
       timeout: 5s
       retries: 5
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: archimedes-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - archimedes-network
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: archimedes-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - archimedes-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   ollama-data:
     driver: local
   postgres-data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:

@@ -246,15 +246,23 @@ class AgentOrchestrator:
                        task_hint: str = "default",
                        stream: bool = False) -> Dict[str, Any]:
         TIMEOUT = int(os.environ.get("AGENT_TASK_TIMEOUT", "300"))
+        import time
+        from backend.metrics import agent_task_duration, agent_timeouts_total
+        start = time.time()
+        strategy = "unknown"
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 self._run_task_internal(
                     task_description, mode, session_id,
                     websocket_send, task_hint, stream
                 ),
                 timeout=TIMEOUT
             )
+            if "strategy" in result:
+                strategy = result["strategy"]
+            return result
         except asyncio.TimeoutError:
+            agent_timeouts_total.inc()
             logger.error(f"[{session_id}] Task timed out after {TIMEOUT}s")
             if websocket_send:
                 await websocket_send({
@@ -263,6 +271,9 @@ class AgentOrchestrator:
                 })
             return {"success": False, "error": "timeout",
                     "output": "Task timed out. Please try a simpler request."}
+        finally:
+            duration = time.time() - start
+            agent_task_duration.labels(strategy=strategy).observe(duration)
         
     async def _run_task_internal(self, 
                        task_description: str, 
@@ -350,12 +361,15 @@ class AgentOrchestrator:
         state = await self.executor.process(state, websocket_send)
         return await self._get_final_response(state, websocket_send)
 
-    async def _run_planning_mode(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
-        logger.info(f"[{state.session_id}] Orchestrator entering PLANNING mode")
+    async def _run_planning_mode(self, state: OrchestrationState, websocket_send: Optional[Callable]) -> Dict[str, Any]:
+        """Runs the planner agent to decompose the task and executes the plan."""
+        from backend.metrics import agent_tasks_total
+        strategy = state.metadata.get("strategy", "unknown")
+        agent_tasks_total.labels(strategy=strategy, mode=state.mode.value).inc()
         
-        strategy = state.metadata.get("strategy", "swarm_code")
-        
-        # 1. PLAN
+        # Determine strategy from metadata if present, otherwise default to "linear"
+        strategy_type = state.metadata.get("strategy", "linear")
+        logger.info(f"[{state.session_id}] Orchestrator running with strategy: {strategy_type}")
         state = await self.planner.process(state, websocket_send)
         if not state.current_plan:
              return {"success": False, "error": "Planning failed and fallback failed."}
@@ -426,14 +440,13 @@ class AgentOrchestrator:
                 while True:
                     _circuit_breaker_count += 1
                     if _circuit_breaker_count > _circuit_breaker_limit:
-                        logger.warning(
-                            f"[{state.session_id}] Circuit breaker tripped on subtask {i} "
-                            f"after {_circuit_breaker_limit} iterations"
-                        )
+                        from backend.metrics import agent_circuit_breaker_total
+                        agent_circuit_breaker_total.inc()
+                        logger.warning(f"[{state.session_id}] Circuit breaker tripped! >15 iterations.")
                         if websocket_send:
                             await websocket_send({
-                                "type": "info",
-                                "content": f"⚡ Circuit breaker: subtask {i} exceeded {_circuit_breaker_limit} iterations, moving on"
+                                "type": "error",
+                                "content": "⚠️ Maximum execution steps reached. The task might be too complex or the agent is stuck."
                             })
                         break
                     current_target = subtask.get("description", state.task_description)
