@@ -217,7 +217,13 @@ STRATEGY_AGENTS = {
 class AgentOrchestrator:
     """
     Coordinates the multi-agent flow: Planner -> Executor -> Critic.
-    Also handles the 'Fast' mode vs 'Planning' mode logic.
+    
+    Production modules integrated:
+      - EventBus:         Real-time streaming of all agent thoughts/actions
+      - CascadingRouter:  Adaptive model selection (cost/latency optimization)
+      - SecurityGate:     5-layer defense-in-depth for command execution
+      - StateCheckpoint:  Crash-resilient state persistence (WAL pattern)
+      - HandoffProtocol:  Zero-loss context transfer between agents
     """
     def __init__(self, 
                  router: ModelRouter, 
@@ -239,6 +245,20 @@ class AgentOrchestrator:
         
         import concurrent.futures
         self._process_executor = concurrent.futures.ProcessPoolExecutor(max_workers=2)
+
+        # ── Production Module Integration ──
+        from backend.agent.orchestration.event_bus import EventBus
+        from backend.agent.orchestration.context_protocol import HandoffProtocol
+        from backend.agent.orchestration.state_checkpoint import StateCheckpoint
+        from backend.models.cascading_router import CascadingRouter
+        from backend.security.sandbox_hardening import SecurityGate
+
+        self.event_bus = EventBus()
+        self.handoff = HandoffProtocol()
+        self.security_gate = SecurityGate()
+        self.cascade = CascadingRouter(router)
+        # StateCheckpoint is created per-session in run_task
+
 
     async def run_task(self, 
                        task_description: str, 
