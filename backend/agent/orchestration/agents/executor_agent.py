@@ -54,11 +54,13 @@ class ExecutorAgent(BaseAgent):
     When you have completed the subtask, provide a polite and clear summary of your work in the SAME LANGUAGE as the user's original task.{memory_context}
     """
 
-    def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager, blackboard: Any = None):
+    def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager, blackboard: Any = None, event_bus: Any = None, security_gate: Any = None):
         super().__init__("Executor", router)
         self.tool_registry = tool_registry
         self.context_manager = context_manager
         self.blackboard = blackboard
+        self.event_bus = event_bus
+        self.security_gate = security_gate
         self.max_steps = getattr(settings, "AGENT_MAX_ITERATIONS", 25)
         self.error_recovery = ErrorRecovery()
         
@@ -255,6 +257,9 @@ class ExecutorAgent(BaseAgent):
             thought = response.get("thinking", response.get("thought", ""))
             if thought:
                 await self.log_thought(thought, websocket_send)
+                # EventBus: stream thought to all consumers
+                if self.event_bus:
+                    await self.event_bus.emit_thought(thought, agent="executor")
             
             tool_call = response.get("tool_call")
             if tool_call:
@@ -265,7 +270,10 @@ class ExecutorAgent(BaseAgent):
                 call_sig = f"{t_name}:{str(t_params)}"
                 state._recent_tool_calls.append(call_sig)
 
-                
+                # EventBus: emit tool call event
+                if self.event_bus:
+                    await self.event_bus.emit_tool_call(t_name, t_params, agent="executor")
+
                 call_id = f"call_{str(uuid.uuid4())[:8]}"
                 std_tool_call = {
                     "id": call_id,
@@ -283,17 +291,39 @@ class ExecutorAgent(BaseAgent):
                         "error": f"SCHEMA VALIDATION ERROR: {validation_error}. Please provide correct parameters according to the tool definition."
                     }
                 else:
-                    # Phase 1.2: Pre-flight Command Safety Check
-                    from backend.agent.self_improvement import check_tool_safety
-                    is_safe, safety_warning = await check_tool_safety(t_name, t_params)
+                    # Phase 1.2: SecurityGate — deep command analysis (AST + regex + path)
+                    security_blocked = False
+                    if self.security_gate and t_name in ("shell", "repl", "execute"):
+                        cmd_content = t_params.get("command", t_params.get("code", ""))
+                        if cmd_content:
+                            if t_name == "repl":
+                                verdict = self.security_gate.analyze_python(cmd_content)
+                            else:
+                                verdict = self.security_gate.analyze_command(cmd_content)
+                            
+                            if self.event_bus:
+                                await self.event_bus.emit_security(verdict.to_dict())
+                            
+                            if not verdict.allowed:
+                                security_blocked = True
+                                tool_res = {
+                                    "success": False,
+                                    "error": f"SECURITY GATE BLOCKED [{verdict.risk_level.value.upper()}]: {'; '.join(verdict.reasons)}. Revise your approach."
+                                }
+                                logger.warning(f"SecurityGate blocked {t_name}: {verdict.reasons}")
                     
-                    if not is_safe:
-                        tool_res = {
-                            "success": False,
-                            "error": f"PRE-FLIGHT REJECTION: {safety_warning}. Please revise your approach."
-                        }
-                    else:
-                        tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
+                    if not security_blocked:
+                        # Phase 1.3: Pre-flight Command Safety Check (legacy)
+                        from backend.agent.self_improvement import check_tool_safety
+                        is_safe, safety_warning = await check_tool_safety(t_name, t_params)
+                        
+                        if not is_safe:
+                            tool_res = {
+                                "success": False,
+                                "error": f"PRE-FLIGHT REJECTION: {safety_warning}. Please revise your approach."
+                            }
+                        else:
+                            tool_res = await self.tool_registry.execute_tool(t_name, t_params, session_id=state.session_id)
                 
                 from backend.utils.structured_logger import log_model_response
                 log_model_response(
@@ -305,6 +335,10 @@ class ExecutorAgent(BaseAgent):
 
                 success = tool_res.get("success", True)
                 output = str(tool_res.get("output", tool_res.get("content", "OK")))
+
+                # EventBus: emit tool result
+                if self.event_bus:
+                    await self.event_bus.emit_tool_result(t_name, output[:500], success=success)
 
                 # Sprint 4.1: Track tool calls for skill compression
                 _tool_call_log.append({

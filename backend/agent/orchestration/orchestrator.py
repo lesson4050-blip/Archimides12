@@ -234,7 +234,7 @@ class AgentOrchestrator:
         self.router = router
         self.tool_registry = tool_registry
         self.planner = PlannerAgent(router)
-        self.executor = ExecutorAgent(router, tool_registry, context_manager, self.blackboard)
+        self.executor = ExecutorAgent(router, tool_registry, context_manager, self.blackboard, event_bus=None, security_gate=None)  # Updated below
         self.critic = CriticAgent(router)
         from backend.agent.orchestration.swarm import MicroAgentSwarm
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)
@@ -257,7 +257,10 @@ class AgentOrchestrator:
         self.handoff = HandoffProtocol()
         self.security_gate = SecurityGate()
         self.cascade = CascadingRouter(router)
-        # StateCheckpoint is created per-session in run_task
+
+        # Wire production modules into executor (created above)
+        self.executor.event_bus = self.event_bus
+        self.executor.security_gate = self.security_gate
 
 
     async def run_task(self, 
@@ -305,6 +308,21 @@ class AgentOrchestrator:
                        task_hint: str = "default",
                        stream: bool = False) -> Dict[str, Any]:
         
+        # ── Wire EventBus to WebSocket consumer ──
+        self.event_bus.session_id = session_id
+        if websocket_send:
+            self.event_bus.add_consumer(websocket_send)
+
+        # ── Create per-session checkpoint ──
+        from backend.agent.orchestration.state_checkpoint import StateCheckpoint
+        checkpoint = StateCheckpoint(session_id)
+
+        # ── Create context envelope for zero-loss handoff ──
+        envelope = self.handoff.create_envelope(
+            user_request=task_description,
+            session_id=session_id,
+        )
+
         # Initialize state
         state = OrchestrationState(
             session_id=session_id,
@@ -319,6 +337,9 @@ class AgentOrchestrator:
         
         # Add initial greeting/task to history
         state.add_message("user", task_description)
+
+        # EventBus: emit task start
+        await self.event_bus.emit_thought(f"Task received: {task_description[:200]}", agent="orchestrator")
         
         # Inject Skill Library context if matching playbook exists
         skill_ctx = self.skill_library.get_context_prompt(task_description)
@@ -329,7 +350,11 @@ class AgentOrchestrator:
         # Shortcut: conversational messages get answered directly without planning/critic
         if is_conversational(task_description):
             logger.info(f"[{session_id}] Detected conversational message, using direct response")
-            return await self._run_conversational(state, websocket_send)
+            result = await self._run_conversational(state, websocket_send)
+            # Cleanup EventBus consumer
+            if websocket_send:
+                self.event_bus.remove_consumer(websocket_send)
+            return result
         
         # Semantic task routing
         complexity, strategy = classify_task(task_description)
@@ -346,12 +371,37 @@ class AgentOrchestrator:
                 logger.warning(f"LLM routing failed: {e}")
                 pass  # Keep regex result
         
+        # EventBus: emit routing decision
+        await self.event_bus.emit_thought(
+            f"Route: complexity={complexity}, strategy={strategy}", agent="orchestrator"
+        )
+
+        # HandoffProtocol: record orchestrator's routing decision
+        self.handoff.agent_handoff(envelope, "Orchestrator", notes={
+            "complexity": complexity, "strategy": strategy, "mode": mode.value,
+        })
+
+        # StateCheckpoint: save initial state
+        try:
+            await checkpoint.save({
+                "task": task_description, "complexity": complexity,
+                "strategy": strategy, "phase": "routed",
+            })
+        except Exception as e:
+            logger.warning(f"Checkpoint save failed (non-critical): {e}")
+
         if complexity == "simple":
             logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
-            return await self._run_fast_mode(state, websocket_send)
+            result = await self._run_fast_mode(state, websocket_send)
+            if websocket_send:
+                self.event_bus.remove_consumer(websocket_send)
+            return result
         
         if mode == AgentMode.FAST:
-            return await self._run_fast_mode(state, websocket_send)
+            result = await self._run_fast_mode(state, websocket_send)
+            if websocket_send:
+                self.event_bus.remove_consumer(websocket_send)
+            return result
         
         # Pass strategy to planning mode
         state.metadata["strategy"] = strategy
@@ -367,7 +417,7 @@ class AgentOrchestrator:
         ]
         
         try:
-            response = await self.router.generate(messages=messages, task_hint="think")
+            response = await self.cascade.generate(messages=messages, task_hint="quick")
             result_text = response.get("text", "Привет! Чем могу помочь?")
             
             state.results.append({"step": 0, "output": result_text})
