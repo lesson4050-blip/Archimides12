@@ -35,6 +35,18 @@ class VideoTool:
         }
 
     async def execute(self, action: str, input_path: str, **kwargs) -> Dict[str, Any]:
+        # Gen 4: Route through OmnimodalIngester for semantic understanding
+        try:
+            from backend.agent.omnimodal_ingester import OmnimodalIngester
+            _ingester = OmnimodalIngester()
+            file_path = input_path
+            if file_path and os.path.exists(file_path):
+                unit = await _ingester.ingest(file_path)
+                # Enrich result with semantic concepts
+                kwargs["_omnimodal_context"] = unit.to_context_string()
+        except Exception:
+            pass  # Graceful degradation — continue with original tool
+
         try:
             if not os.path.exists(input_path):
                 return {"success": False, "error": f"Файл не найден: {input_path}"}
@@ -106,6 +118,18 @@ class AudioTool:
         }
 
     async def execute(self, action: str, **kwargs) -> Dict[str, Any]:
+        # Gen 4: Route through OmnimodalIngester for semantic understanding
+        try:
+            from backend.agent.omnimodal_ingester import OmnimodalIngester
+            _ingester = OmnimodalIngester()
+            file_path = kwargs.get("path") or kwargs.get("file_path") or ""
+            if file_path and os.path.exists(file_path):
+                unit = await _ingester.ingest(file_path)
+                # Enrich result with semantic concepts
+                kwargs["_omnimodal_context"] = unit.to_context_string()
+        except Exception:
+            pass  # Graceful degradation — continue with original tool
+
         try:
             if action == "tts":
                 from gtts import gTTS

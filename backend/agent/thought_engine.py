@@ -144,6 +144,16 @@ TOOL SELECTION:
 - vision_browser: open a URL, take a full-page screenshot, and analyze it
   with Gemini Vision. Use to visually test web UI, verify layouts, or find
   interactive elements by description instead of raw HTML.
+- omnimodal: Universal perception tool for ALL non-text inputs.
+  PREFER this over VideoTool/AudioTool/ImageTool.
+  Actions:
+  ingest(source="path/to/file") — process any file into vector memory
+  ingest_batch(sources=[...]) — process multiple files in parallel
+  query(query="revenue charts from Q3") — find perceptions by concept
+  When user sends an image → use omnimodal(action="ingest", source=path)
+  When user uploads audio/video → use omnimodal(action="ingest", source=path)
+  When you need to find previously seen content → omnimodal(action="query")
+  NEVER say "I cannot process video/audio" — always try omnimodal first.
 - parallel_search: run 2-8 search queries simultaneously, returns
   filtered relevant results. Use instead of multiple sequential search
   calls for research tasks. Up to 3x faster for multi-aspect research.

@@ -373,6 +373,17 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register SemanticSearchEngine: {e}")
 
+        # ── Gen 4: Omnimodal Ingester ──
+        try:
+            from backend.agent.omnimodal_ingester import OmnimodalIngester
+            _omnimodal = OmnimodalIngester(
+                router=getattr(self.agent, 'router', None)
+            )
+            self.agent.register_tool("omnimodal", _omnimodal.execute)
+            logger.info("OmnimodalIngester registered — Gen 4 perception active")
+        except Exception as e:
+            logger.error(f"Failed to register OmnimodalIngester: {e}")
+
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools
