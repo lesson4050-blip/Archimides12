@@ -84,27 +84,39 @@ class ModelRouter:
             "anthropic": "available" if self.anthropic else "no_key"
         }
 
+    def classify_complexity(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]]) -> str:
+        """Classify task complexity based on context length and tools to optimize routing."""
+        text_length = sum(len(m.get("content", "")) for m in messages if isinstance(m.get("content"), str))
+        if tools and len(tools) > 2:
+            return "complex"
+        if text_length > 2500:
+            return "complex"
+        return "trivial"
+
     async def _get_order(
         self,
         task_hint: str,
-        tools: list
+        tools: list,
+        complexity: str = "trivial"
     ) -> list:
         """
-        Single source of truth for model routing order.
-        If Ollama is down, it is moved to the end of the list.
+        Routing order: 
+        - Trivial/Speed: Groq -> Gemini -> Ollama -> Anthropic
+        - Complex/Quality: Anthropic -> Gemini -> Ollama -> Groq
+        - Local/Private: Ollama -> Groq
         """
         ollama_ok = await self._check_ollama_health()
         
-        if task_hint in ("local", "private", "execute"):
-            order = [self.ollama, self.groq, self.gemini, self.anthropic]
-        elif task_hint in self.QUALITY_TASKS:
-            order = [self.ollama, self.anthropic, self.gemini, self.groq]
-        elif task_hint in self.SPEED_TASKS:
-            order = [self.ollama, self.groq, self.gemini, self.anthropic]
+        if task_hint in ("local", "private"):
+            order = [self.ollama, self.groq]
+        elif task_hint in self.QUALITY_TASKS or complexity == "complex":
+            order = [self.gemini, self.anthropic, self.ollama, self.groq]
+        elif task_hint in self.SPEED_TASKS or complexity == "trivial":
+            order = [self.groq, self.gemini, self.ollama, self.anthropic]
         elif tools:
-            order = [self.ollama, self.anthropic, self.groq, self.gemini]
+            order = [self.gemini, self.anthropic, self.groq, self.ollama]
         else:
-            order = [self.ollama, self.groq, self.gemini, self.anthropic]
+            order = [self.groq, self.gemini, self.ollama, self.anthropic]
         
         available = [c for c in order if c is not None]
         if not ollama_ok and self.ollama in available:
@@ -115,7 +127,8 @@ class ModelRouter:
         return available
 
     async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
-        order = await self._get_order(task_hint, tools or [])
+        complexity = self.classify_complexity(messages, tools)
+        order = await self._get_order(task_hint, tools or [], complexity)
 
         errors = []
         for client in order:
@@ -141,7 +154,8 @@ class ModelRouter:
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
 
     async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
-        order = await self._get_order(task_hint, tools or [])
+        complexity = self.classify_complexity(messages, tools)
+        order = await self._get_order(task_hint, tools or [], complexity)
 
         errors = []
         for client in order:

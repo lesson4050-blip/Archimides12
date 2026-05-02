@@ -77,6 +77,10 @@ async def stream_task(
     context_manager = ContextManager(model_router)
     orchestrator = AgentOrchestrator(model_router, tool_registry, context_manager)
 
+    async def queue_send(event: Dict[str, Any]):
+        """Callback to bridge orchestrator events to SSE queue."""
+        await queue.put(event)
+
     async def run_task():
         try:
             await queue.put({
@@ -88,6 +92,7 @@ async def stream_task(
             result = await orchestrator.run_task(
                 task_description=request.description,
                 session_id=request.session_id or task_id,
+                websocket_send=queue_send,  # Pass bridge callback
                 stream=True,
             )
 

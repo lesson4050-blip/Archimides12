@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import MessageItem from "./MessageItem";
+import LiveReasoning from "./LiveReasoning";
 import { useAppStore } from "@/lib/store";
 
 export default function MessageList({
@@ -9,7 +10,7 @@ export default function MessageList({
 }: {
   messagesEndRef: React.RefObject<HTMLDivElement>;
 }) {
-  const { messages, isWorking, taskElapsed, confidence, suggestions, setInput, setSuggestions } = useAppStore();
+  const { messages, isWorking, taskElapsed, confidence, suggestions, setInput, setSuggestions, liveReasoning } = useAppStore();
 
   return (
     <div className="w-full max-w-3xl flex flex-col gap-6">
@@ -46,6 +47,7 @@ export default function MessageList({
                      </span>
                    )}
                  </div>
+                 {liveReasoning && <LiveReasoning content={liveReasoning} />}
               </div>
             </div>
           </motion.div>

@@ -203,6 +203,27 @@ export function useArchimedesChat(
             }
             break;
           }
+          case "token": {
+            store.setLiveReasoning(prev => prev + (event.content || ""));
+            break;
+          }
+          case "canvas_presentation": {
+            const artifactData = {
+                 name: `${event.topic || "Presentation"}.json`,
+                 path: event.artifact_path,
+                 content: "",
+                 language: "json",
+                 isPresentation: true
+            } as any;
+            store.setArtifacts(prev => [...prev, artifactData]);
+            bufferRef.current.push({
+              role: "assistant",
+              type: "artifact",
+              content: `Создана презентация: ${event.topic || "Canvas"}`,
+              artifactData
+            });
+            break;
+          }
         }
         
         if (event.type === "tool_call" || event.type === "tool" || event.type === "artifact") {
@@ -246,6 +267,7 @@ export function useArchimedesChat(
     store.setTaskStartTime(Date.now());
     store.setSuggestions([]);
     store.setConfidence(null);
+    store.setLiveReasoning("");
     if (onStart) onStart();
     
     const currentMode = AGENT_MODES.find(m => m.id === store.activeMode) || AGENT_MODES[0];

@@ -54,7 +54,7 @@ def test_rate_limiter_cleanup_stale():
 # A5: Token revocation
 @pytest.mark.asyncio
 async def test_revoke_token_marks_as_revoked(tmp_path):
-    with patch("backend.db.crud.SESSION_DIR", str(tmp_path)):
+    with patch("backend.agent.session_store.SESSION_DIR", str(tmp_path)):
         from backend.auth.jwt_handler import create_access_token, verify_token
         token = create_access_token("user-test")
         payload = verify_token(token)

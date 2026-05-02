@@ -223,10 +223,12 @@ class AgentOrchestrator:
                  router: ModelRouter, 
                  tool_registry: ToolRegistry, 
                  context_manager: ContextManager):
+        from backend.agent.shared_blackboard import SharedBlackboard
+        self.blackboard = SharedBlackboard()
         self.router = router
         self.tool_registry = tool_registry
         self.planner = PlannerAgent(router)
-        self.executor = ExecutorAgent(router, tool_registry, context_manager)
+        self.executor = ExecutorAgent(router, tool_registry, context_manager, self.blackboard)
         self.critic = CriticAgent(router)
         from backend.agent.orchestration.swarm import MicroAgentSwarm
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)

@@ -2,7 +2,7 @@ from backend.utils.task import safe_create_task
 import logging
 import uuid
 import os
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 from backend.agent.orchestration.agents.base import BaseAgent
 from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.models.model_router import ModelRouter
@@ -54,10 +54,11 @@ class ExecutorAgent(BaseAgent):
     When you have completed the subtask, provide a polite and clear summary of your work in the SAME LANGUAGE as the user's original task.{memory_context}
     """
 
-    def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager):
+    def __init__(self, router: ModelRouter, tool_registry: ToolRegistry, context_manager: ContextManager, blackboard: Any = None):
         super().__init__("Executor", router)
         self.tool_registry = tool_registry
         self.context_manager = context_manager
+        self.blackboard = blackboard
         self.max_steps = getattr(settings, "AGENT_MAX_ITERATIONS", 25)
         self.error_recovery = ErrorRecovery()
         
@@ -180,6 +181,14 @@ class ExecutorAgent(BaseAgent):
                     )
                 if graph_ctx:
                     memory_context += f"\n\n{graph_ctx}"
+                    
+                if getattr(self, "blackboard", None):
+                    bb_state = await self.blackboard.get_all()
+                    if bb_state:
+                        memory_context += (
+                            "\n\nSHARED BLACKBOARD (Cross-Agent State):\n"
+                            + "\n".join(f"[{k}]: {v}" for k, v in bb_state.items())
+                        )
 
                 formatted_prompt = self.SYSTEM_PROMPT.format(
                     subtask=current_target,
@@ -207,7 +216,11 @@ class ExecutorAgent(BaseAgent):
             on_token = None
             if use_stream and websocket_send:
                 async def _stream_token(t):
-                    await websocket_send(t)
+                    # Ensure tokens are wrapped in a structured event for SSE/WS
+                    await websocket_send({
+                        "type": "token",
+                        "content": t
+                    })
                 on_token = _stream_token
 
             # Get tools and apply exclusion list (Sprint 2.2)

@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { X, Copy, Check, FileJson, FileText, FileCode, Download, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import SlideRenderer from "./SlideRenderer";
 
 export interface ArtifactData {
   name: string;
   content: string;
   language?: string;
   path?: string;
+  isPresentation?: boolean;
 }
 
 interface ArtifactViewerProps {
@@ -96,6 +98,15 @@ export default function ArtifactViewer({ artifact, onClose }: ArtifactViewerProp
       displayContent = JSON.stringify(JSON.parse(content), null, 2);
     } catch {
       // keep as is
+    }
+  }
+
+  if (artifact.isPresentation && content && !loading && !error) {
+    try {
+      const presentationObj = JSON.parse(content);
+      return <SlideRenderer presentation={presentationObj} onClose={onClose} />;
+    } catch (e) {
+      // Fallback to normal view if JSON parse fails
     }
   }
 

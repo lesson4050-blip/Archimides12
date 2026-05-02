@@ -4,6 +4,7 @@ Automatically detects available database and configures connection pooling.
 """
 
 import logging
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import select, update, delete
 from backend.db.models import Base, Session, Task, Message, User, RevokedToken
@@ -38,26 +39,31 @@ def _create_engine():
     return engine
 
 
-engine = _create_engine()
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+# Internal globals to support dynamic re-initialization (fallback)
+_engine = _create_engine()
+_session_factory = async_sessionmaker(_engine, expire_on_commit=False)
+
+def AsyncSessionLocal():
+    """Return a new async session from the cached factory."""
+    return _session_factory()
 
 
 async def init_db():
     """Initialize database tables with robust fallback."""
-    global engine, AsyncSessionLocal
+    global _engine, _session_factory
     
     try:
-        async with engine.begin() as conn:
+        async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables initialized.")
     except Exception as e:
         if settings.DATABASE_URL.startswith("postgresql"):
             logger.warning(f"PostgreSQL connection failed ({e}), falling back to SQLite")
-            # Re-initialize engine and sessionmaker with SQLite
-            engine = create_async_engine(settings.DATABASE_URL_SQLITE, echo=False)
-            AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+            # Re-initialize engine AND session factory with SQLite
+            _engine = create_async_engine(settings.DATABASE_URL_SQLITE, echo=False)
+            _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
             
-            async with engine.begin() as conn:
+            async with _engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info(f"Database tables initialized using SQLite fallback ({settings.DATABASE_URL_SQLITE}).")
         else:

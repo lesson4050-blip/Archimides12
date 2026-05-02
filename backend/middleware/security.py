@@ -43,7 +43,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.strict_mode = os.environ.get("STRICT_RATE_LIMIT", "false").lower() == "true"
         self.redis_client = None
         redis_url = getattr(settings, "REDIS_URL", None)
-        if redis_url:
+        is_testing = "pytest" in os.environ.get("PYTEST_CURRENT_TEST", "") or os.environ.get("TESTING") == "1"
+        if redis_url and not is_testing:
             try:
                 self.redis_client = redis.from_url(redis_url, decode_responses=True)
                 logger.info(f"Rate Limiter connected to Redis at {redis_url}")

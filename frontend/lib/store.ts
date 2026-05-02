@@ -39,6 +39,7 @@ interface AppState {
   taskElapsed: number;
   suggestions: string[];
   confidence: {score: number; label: string} | null;
+  liveReasoning: string;
 
   // Actions
   setMessages: (updater: Message[] | ((prev: Message[]) => Message[])) => void;
@@ -60,6 +61,7 @@ interface AppState {
   setTaskElapsed: (val: number) => void;
   setSuggestions: (val: string[]) => void;
   setConfidence: (val: {score: number; label: string} | null) => void;
+  setLiveReasoning: (updater: string | ((prev: string) => string)) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -80,6 +82,7 @@ export const useAppStore = create<AppState>((set) => ({
   taskElapsed: 0,
   suggestions: [],
   confidence: null,
+  liveReasoning: "",
 
   setMessages: (updater) => set((state) => ({ 
       messages: typeof updater === 'function' ? updater(state.messages) : updater 
@@ -104,4 +107,7 @@ export const useAppStore = create<AppState>((set) => ({
   setTaskElapsed: (val) => set({ taskElapsed: val }),
   setSuggestions: (val) => set({ suggestions: val }),
   setConfidence: (val) => set({ confidence: val }),
+  setLiveReasoning: (updater) => set((state) => ({ 
+      liveReasoning: typeof updater === 'function' ? updater(state.liveReasoning) : updater 
+  })),
 }));

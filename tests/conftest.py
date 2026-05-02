@@ -1,12 +1,35 @@
-"""
-Shared pytest fixtures for Archimedes test suite.
-All fixtures use mocking — no real API calls in unit tests.
-"""
+import os
+import sys
 import asyncio
 import pytest
 import sqlite3
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+
+def pytest_sessionstart(session):
+    """Force environment variables for test isolation before any imports."""
+    os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_archemidas.db"
+    os.environ["REDIS_URL"] = ""
+    os.environ["TESTING"] = "1"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _init_test_database():
+    """Create all database tables in the test SQLite DB before any tests run."""
+    from backend.db.crud import init_db
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(init_db())
+    loop.close()
+
+
+@pytest.fixture(autouse=True)
+def mock_redis_globally(monkeypatch):
+    """Prevent tests from trying to connect to a real Redis server."""
+    monkeypatch.setattr("backend.config.settings.REDIS_URL", "")
+    
+    # Also patch aioredis to ensure no connection attempt goes through
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr("redis.asyncio.from_url", AsyncMock())
 
 
 @pytest.fixture
