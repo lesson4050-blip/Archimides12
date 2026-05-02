@@ -115,7 +115,7 @@ class OmnimodalIngester:
         return Modality.TEXT
     
     def _generate_unit_id(self, source: str) -> str:
-        return hashlib.md5(source.encode()).hexdigest()[:16]
+        return hashlib.sha256(source.encode()).hexdigest()[:16]
     
     # ── Modality-specific processors ──
     
@@ -202,17 +202,19 @@ class OmnimodalIngester:
             except ImportError:
                 # Fallback: try shell-based whisper
                 import subprocess
-                result = subprocess.run(
-                    ["whisper", file_path, "--output_format", "txt",
-                     "--output_dir", "/tmp", "--model", "base"],
-                    capture_output=True, text=True, timeout=120
-                )
-                txt_path = f"/tmp/{Path(file_path).stem}.txt"
-                if os.path.exists(txt_path):
-                    with open(txt_path) as f:
-                        transcript = f.read().strip()
-                else:
-                    transcript = f"Audio file: {Path(file_path).name}"
+                import tempfile
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    result = subprocess.run(
+                        ["whisper", file_path, "--output_format", "txt",
+                         "--output_dir", temp_dir, "--model", "base"],
+                        capture_output=True, text=True, timeout=120
+                    )
+                    txt_path = os.path.join(temp_dir, f"{Path(file_path).stem}.txt")
+                    if os.path.exists(txt_path):
+                        with open(txt_path) as f:
+                            transcript = f.read().strip()
+                    else:
+                        transcript = f"Audio file: {Path(file_path).name}"
             
             # Semantic summary of transcript
             summary = transcript[:500]
@@ -257,59 +259,55 @@ class OmnimodalIngester:
         try:
             import subprocess, tempfile
             
-            temp_dir = tempfile.mkdtemp()
-            keyframe_path = os.path.join(temp_dir, "frame_%04d.jpg")
-            audio_path = os.path.join(temp_dir, "audio.wav")
-            
-            # Extract keyframes every 5 seconds
-            subprocess.run([
-                "ffmpeg", "-i", file_path,
-                "-vf", "fps=1/5",  # 1 frame per 5 seconds
-                "-q:v", "5",
-                keyframe_path, "-y"
-            ], capture_output=True, timeout=60)
-            
-            # Extract audio
-            subprocess.run([
-                "ffmpeg", "-i", file_path,
-                "-vn", "-acodec", "pcm_s16le",
-                "-ar", "16000", "-ac", "1",
-                audio_path, "-y"
-            ], capture_output=True, timeout=60)
-            
-            # Process first keyframe
-            keyframes = sorted([
-                f for f in os.listdir(temp_dir) if f.startswith("frame_")
-            ])
-            
-            frame_units = []
-            for kf in keyframes[:5]:  # Max 5 keyframes
-                kf_unit = await self._process_image(
-                    os.path.join(temp_dir, kf)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                keyframe_path = os.path.join(temp_dir, "frame_%04d.jpg")
+                audio_path = os.path.join(temp_dir, "audio.wav")
+                
+                # Extract keyframes every 5 seconds
+                subprocess.run([
+                    "ffmpeg", "-i", file_path,
+                    "-vf", "fps=1/5",  # 1 frame per 5 seconds
+                    "-q:v", "5",
+                    keyframe_path, "-y"
+                ], capture_output=True, timeout=60)
+                
+                # Extract audio
+                subprocess.run([
+                    "ffmpeg", "-i", file_path,
+                    "-vn", "-acodec", "pcm_s16le",
+                    "-ar", "16000", "-ac", "1",
+                    audio_path, "-y"
+                ], capture_output=True, timeout=60)
+                
+                # Process first keyframe
+                keyframes = sorted([
+                    f for f in os.listdir(temp_dir) if f.startswith("frame_")
+                ])
+                
+                frame_units = []
+                for kf in keyframes[:5]:  # Max 5 keyframes
+                    kf_unit = await self._process_image(
+                        os.path.join(temp_dir, kf)
+                    )
+                    frame_units.append(kf_unit)
+                
+                # Process audio if exists
+                audio_summary = ""
+                if os.path.exists(audio_path):
+                    audio_unit = await self._process_audio(audio_path)
+                    audio_summary = audio_unit.text_summary
+                
+                # Merge all concepts
+                all_concepts = []
+                for fu in frame_units:
+                    all_concepts.extend(fu.concepts)
+                all_concepts = list(set(all_concepts))[:12]
+                
+                visual_summary = " | ".join([fu.text_summary for fu in frame_units[:3]])
+                full_summary = (
+                    f"Video analysis: {visual_summary}\n"
+                    f"Audio: {audio_summary}"
                 )
-                frame_units.append(kf_unit)
-            
-            # Process audio if exists
-            audio_summary = ""
-            if os.path.exists(audio_path):
-                audio_unit = await self._process_audio(audio_path)
-                audio_summary = audio_unit.text_summary
-            
-            # Merge all concepts
-            all_concepts = []
-            for fu in frame_units:
-                all_concepts.extend(fu.concepts)
-            all_concepts = list(set(all_concepts))[:12]
-            
-            visual_summary = " | ".join([fu.text_summary for fu in frame_units[:3]])
-            full_summary = (
-                f"Video analysis: {visual_summary}\n"
-                f"Audio: {audio_summary}"
-            )
-            
-            # Cleanup
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
             
             return PerceptionUnit(
                 unit_id=unit_id,
