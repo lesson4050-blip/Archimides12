@@ -90,81 +90,115 @@ async def add_relation(
         await conn.commit()
 
 
-async def query_related(
+async def query_causal_chains(
     entity: str,
-    depth: int = 2,
-    max_nodes: int = 20
-) -> List[Dict[str, Any]]:
+    depth: int = 3,
+    max_paths: int = 15
+) -> List[List[Dict[str, Any]]]:
     """
-    BFS traversal: find all entities related to 'entity' up to 'depth' hops.
-    Returns context-rich description of the knowledge subgraph.
+    DFS traversal: find all causal chains originating from 'entity' up to 'depth' hops.
+    Returns lists of paths, representing factual multi-hop causal reasoning.
     """
     await _init_db()
     async with aiosqlite.connect(DB_PATH) as conn:
-        visited = set()
-        results = []
-        queue = [(entity, 0)]
-
-        while queue and len(results) < max_nodes:
-            current, current_depth = queue.pop(0)
-            if current in visited or current_depth > depth:
-                continue
-            visited.add(current)
-
-            # Get outgoing relations
+        all_paths = []
+        
+        async def dfs(current_entity, current_path, current_depth):
+            if current_depth > depth or len(all_paths) >= max_paths:
+                return
+            
+            if current_path:
+                all_paths.append(list(current_path))
+                
             cursor = await conn.execute(
-                "SELECT relation_type, to_entity, context, weight "
+                "SELECT relation_type, to_entity, context "
                 "FROM relations WHERE from_entity = ? "
                 "ORDER BY weight DESC LIMIT 10",
-                (current,)
+                (current_entity,)
             )
             rows = await cursor.fetchall()
-
-            for rel_type, to_ent, ctx, weight in rows:
-                results.append({
-                    "from": current,
+            
+            for rel_type, to_ent, ctx in rows:
+                if any(edge['from'] == to_ent for edge in current_path):
+                    continue
+                
+                edge = {
+                    "from": current_entity,
                     "relation": rel_type,
                     "to": to_ent,
                     "context": ctx,
-                    "depth": current_depth + 1
-                })
-                if to_ent not in visited:
-                    queue.append((to_ent, current_depth + 1))
+                    "depth": current_depth
+                }
+                current_path.append(edge)
+                await dfs(to_ent, current_path, current_depth + 1)
+                current_path.pop()
+                
+        await dfs(entity, [], 1)
+        all_paths.sort(key=len)
+        return all_paths
 
-            # Get incoming relations
+async def find_causal_link(from_entity: str, to_entity: str, max_depth: int = 4) -> List[List[Dict[str, Any]]]:
+    """Finds directed causal paths between two specific entities."""
+    await _init_db()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        paths = []
+        queue = [([(from_entity, None, None)], 1)] 
+        
+        while queue:
+            current_path, current_depth = queue.pop(0)
+            current_node = current_path[-1][0]
+            
+            if current_node == to_entity and len(current_path) > 1:
+                chain = []
+                for i in range(1, len(current_path)):
+                    prev_node = current_path[i-1][0]
+                    curr_node, rel, ctx = current_path[i]
+                    chain.append({
+                        "from": prev_node,
+                        "relation": rel,
+                        "to": curr_node,
+                        "context": ctx
+                    })
+                paths.append(chain)
+                if len(paths) >= 5: 
+                    break
+                continue
+                
+            if current_depth >= max_depth:
+                continue
+                
             cursor = await conn.execute(
-                "SELECT from_entity, relation_type, context "
-                "FROM relations WHERE to_entity = ? LIMIT 5",
-                (current,)
+                "SELECT relation_type, to_entity, context "
+                "FROM relations WHERE from_entity = ? LIMIT 10",
+                (current_node,)
             )
             rows = await cursor.fetchall()
-            for from_ent, rel_type, ctx in rows:
-                if from_ent not in visited:
-                    results.append({
-                        "from": from_ent,
-                        "relation": rel_type,
-                        "to": current,
-                        "context": ctx,
-                        "depth": current_depth + 1
-                    })
+            
+            for rel_type, next_ent, ctx in rows:
+                if any(node[0] == next_ent for node in current_path):
+                    continue
+                queue.append((current_path + [(next_ent, rel_type, ctx)], current_depth + 1))
+                
+        return paths
 
-    return results
-
-
-async def format_graph_context(entity: str, depth: int = 2) -> str:
+async def format_graph_context(entity: str, depth: int = 3) -> str:
     """
-    Format knowledge graph query as readable context for LLM.
+    Format knowledge graph query as readable causal chains for LLM.
     """
-    relations = await query_related(entity, depth=depth, max_nodes=15)
-    if not relations:
+    paths = await query_causal_chains(entity, depth=depth)
+    if not paths:
         return ""
 
-    lines = [f"Knowledge graph for '{entity}':"]
-    for r in relations:
-        lines.append(
-            f"  [{r['from']}] —{r['relation']}→ [{r['to']}]"
-            + (f" ({r['context'][:100]})" if r['context'] else "")
-        )
+    summary_lines = set()
+    for path in paths:
+        chain = []
+        for edge in path:
+            ctx_str = f" ({edge['context'][:50]})" if edge.get('context') else ""
+            chain.append(f"[{edge['from']}] -{edge['relation']}-> [{edge['to']}]{ctx_str}")
+        summary_lines.add(" => ".join(chain))
+        
+    lines = [f"Knowledge causal chains for '{entity}':"]
+    lines.extend(sorted(list(summary_lines)))
     return "\n".join(lines)
 
 

@@ -291,11 +291,11 @@ class ExecutorAgent(BaseAgent):
                 clean_std_calls = [{k: v for k, v in stc.items() if k != "_raw"} for stc in std_tool_calls]
                 self.context_manager.add_message("assistant", thought or "", tool_calls=clean_std_calls)
 
-                async def execute_single(stc):
-                    nonlocal prev_error, task_success
+                async def execute_single(stc, local_prev_error):
                     t_name = stc["_raw"]["name"]
                     t_params = stc["_raw"]["params"]
                     call_id = stc["id"]
+                    this_error = None
 
                     # Phase 1.1: Pydantic Schema Validation
                     from backend.agent.orchestration.agents.tool_models import validate_tool_call
@@ -375,9 +375,9 @@ class ExecutorAgent(BaseAgent):
                         "name": t_name,
                         "params": t_params,
                         "success": success,
-                        "error_recovered": prev_error is not None and success,
-                        "error_pattern": prev_error[:100] if prev_error else "",
-                        "fix_applied": f"{t_name}({list(t_params.keys())})" if prev_error and success else "",
+                        "error_recovered": local_prev_error is not None and success,
+                        "error_pattern": local_prev_error[:100] if local_prev_error else "",
+                        "fix_applied": f"{t_name}({list(t_params.keys())})" if local_prev_error and success else "",
                     })
 
                     should_stop = False
@@ -385,8 +385,7 @@ class ExecutorAgent(BaseAgent):
 
                     if not success:
                         output = f"ERROR: {tool_res.get('error', 'Unknown error')}"
-                        prev_error = output
-                        task_success = False
+                        this_error = output
     
                         file_path = t_params.get("path", t_params.get("file", None))
                         self.error_recovery.record_failure(
@@ -398,7 +397,7 @@ class ExecutorAgent(BaseAgent):
     
                         should_stop, reason = self.error_recovery.should_escalate()
                         if should_stop:
-                            return call_id, t_name, t_params, success, output, should_stop, reason
+                            return call_id, t_name, t_params, success, output, should_stop, reason, tool_res, this_error
 
                         from backend.agent.self_improvement import log_error
                         log_error(output, t_name, state.session_id)
@@ -432,16 +431,14 @@ class ExecutorAgent(BaseAgent):
                                 logger.warning(f"Auto-tooling attempt failed: {e}")
                     else:
                         self.error_recovery.record_success()
-                        task_success = True
     
-                        if prev_error and success:
+                        if local_prev_error and success:
                             from backend.agent.self_improvement import learn_from_error
                             learn_from_error(
-                                error=prev_error,
+                                error=local_prev_error,
                                 fix=f"Used {t_name} with {t_params}",
                                 tool_name=t_name
                             )
-                            prev_error = None
     
                         if not hasattr(state, 'confidence_score'):
                             state.confidence_score = 100
@@ -481,12 +478,16 @@ class ExecutorAgent(BaseAgent):
                             except Exception as tdd_err:
                                 logger.warning(f"TDD failed (non-critical): {tdd_err}")
 
-                    return call_id, t_name, t_params, success, output, should_stop, reason, tool_res
+                    return call_id, t_name, t_params, success, output, should_stop, reason, tool_res, this_error
 
                 import asyncio
-                results = await asyncio.gather(*[execute_single(stc) for stc in std_tool_calls])
+                knowledge_tasks = []
+                results = await asyncio.gather(*[execute_single(stc, prev_error) for stc in std_tool_calls])
+                
+                prev_error = next((r[8] for r in results if r[8]), None)
+                task_success = all(r[3] for r in results)
 
-                for call_id, t_name, t_params, success, output, should_stop, reason, tool_res in results:
+                for call_id, t_name, t_params, success, output, should_stop, reason, tool_res, this_error in results:
                     if should_stop:
                         await self.log_info(f"🛑 Kill switch triggered: {reason}", websocket_send)
                         state.results.append({"step": state.current_step_index, "output": f"Task aborted: {reason}"})
@@ -497,7 +498,7 @@ class ExecutorAgent(BaseAgent):
                     
                     if success and len(output) > 100:
                         from backend.memory.knowledge_graph import extract_and_store_knowledge
-                        safe_create_task(
+                        knowledge_tasks.append(
                             extract_and_store_knowledge(
                                 output[:500],
                                 state.session_id,
@@ -526,6 +527,9 @@ class ExecutorAgent(BaseAgent):
                                     "slide_count": tool_res.get("slide_count", 0),
                                     "label": "⚡ Canvas Presentation"
                                 })
+
+                if knowledge_tasks:
+                    await asyncio.gather(*knowledge_tasks)
 
                 state.history = self.context_manager.get_messages()
                 
