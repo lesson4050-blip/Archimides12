@@ -293,24 +293,41 @@ class ExecutorAgent(BaseAgent):
                 else:
                     # Phase 1.2: SecurityGate — deep command analysis (AST + regex + path)
                     security_blocked = False
-                    if self.security_gate and t_name in ("shell", "repl", "execute"):
-                        cmd_content = t_params.get("command", t_params.get("code", ""))
-                        if cmd_content:
-                            if t_name == "repl":
-                                verdict = self.security_gate.analyze_python(cmd_content)
-                            else:
-                                verdict = self.security_gate.analyze_command(cmd_content)
-                            
-                            if self.event_bus:
-                                await self.event_bus.emit_security(verdict.to_dict())
-                            
-                            if not verdict.allowed:
-                                security_blocked = True
-                                tool_res = {
-                                    "success": False,
-                                    "error": f"SECURITY GATE BLOCKED [{verdict.risk_level.value.upper()}]: {'; '.join(verdict.reasons)}. Revise your approach."
-                                }
-                                logger.warning(f"SecurityGate blocked {t_name}: {verdict.reasons}")
+                    if self.security_gate:
+                        if t_name in ("shell", "repl", "execute"):
+                            cmd_content = t_params.get("command", t_params.get("code", ""))
+                            if cmd_content:
+                                if t_name == "repl":
+                                    verdict = self.security_gate.analyze_python(cmd_content)
+                                else:
+                                    verdict = self.security_gate.analyze_command(cmd_content)
+                                
+                                if self.event_bus:
+                                    await self.event_bus.emit_security(verdict.to_dict())
+                                
+                                if not verdict.allowed:
+                                    security_blocked = True
+                                    tool_res = {
+                                        "success": False,
+                                        "error": f"SECURITY GATE BLOCKED [{verdict.risk_level.value.upper()}]: {'; '.join(verdict.reasons)}. Revise your approach."
+                                    }
+                                    logger.warning(f"SecurityGate blocked {t_name}: {verdict.reasons}")
+
+                        elif t_name == "file" and t_params.get("action") in ("delete", "remove"):
+                            file_path = t_params.get("path", "")
+                            if file_path:
+                                verdict = self.security_gate.analyze_file_access(file_path, operation="delete")
+
+                                if self.event_bus:
+                                    await self.event_bus.emit_security(verdict.to_dict())
+
+                                if not verdict.allowed:
+                                    security_blocked = True
+                                    tool_res = {
+                                        "success": False,
+                                        "error": f"SECURITY GATE BLOCKED: File delete denied for path '{file_path}'. {'; '.join(verdict.reasons)}"
+                                    }
+                                    logger.warning(f"SecurityGate blocked file delete: {file_path}")
                     
                     if not security_blocked:
                         # Phase 1.3: Pre-flight Command Safety Check (legacy)

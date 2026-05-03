@@ -313,9 +313,19 @@ class AgentOrchestrator:
         if websocket_send:
             self.event_bus.add_consumer(websocket_send)
 
-        # ── Create per-session checkpoint ──
+        # ── Create per-session checkpoint (crash-resilient) ──
         from backend.agent.orchestration.state_checkpoint import StateCheckpoint
-        checkpoint = StateCheckpoint(session_id)
+        try:
+            checkpoint = StateCheckpoint(session_id)
+        except Exception as e:
+            logger.warning(f"StateCheckpoint init failed: {e}. Using no-op checkpoint.")
+
+            class _NoOpCheckpoint:
+                async def save(self, *a, **kw): pass
+                async def append_wal(self, *a, **kw): pass
+                async def recover(self): return None
+
+            checkpoint = _NoOpCheckpoint()
 
         # ── Create context envelope for zero-loss handoff ──
         envelope = self.handoff.create_envelope(
@@ -338,74 +348,69 @@ class AgentOrchestrator:
         # Add initial greeting/task to history
         state.add_message("user", task_description)
 
-        # EventBus: emit task start
-        await self.event_bus.emit_thought(f"Task received: {task_description[:200]}", agent="orchestrator")
-        
-        # Inject Skill Library context if matching playbook exists
-        skill_ctx = self.skill_library.get_context_prompt(task_description)
-        if skill_ctx:
-            state.add_message("system", skill_ctx)
-            logger.info("SkillLibrary: injected matching playbook")
-        
-        # Shortcut: conversational messages get answered directly without planning/critic
-        if is_conversational(task_description):
-            logger.info(f"[{session_id}] Detected conversational message, using direct response")
-            result = await self._run_conversational(state, websocket_send)
-            # Cleanup EventBus consumer
-            if websocket_send:
-                self.event_bus.remove_consumer(websocket_send)
-            return result
-        
-        # Semantic task routing
-        complexity, strategy = classify_task(task_description)
-        
-        # For medium-complexity ambiguous tasks, use LLM to refine routing
-        if complexity == "medium" and len(task_description) > 80:
-            try:
-                complexity, strategy = await classify_task_with_llm(
-                    task_description, self.router,
-                    fallback_result=(complexity, strategy)
-                )
-                logger.info(f"LLM routing: {complexity}/{strategy}")
-            except Exception as e:
-                logger.warning(f"LLM routing failed: {e}")
-                pass  # Keep regex result
-        
-        # EventBus: emit routing decision
-        await self.event_bus.emit_thought(
-            f"Route: complexity={complexity}, strategy={strategy}", agent="orchestrator"
-        )
-
-        # HandoffProtocol: record orchestrator's routing decision
-        self.handoff.agent_handoff(envelope, "Orchestrator", notes={
-            "complexity": complexity, "strategy": strategy, "mode": mode.value,
-        })
-
-        # StateCheckpoint: save initial state
+        # ── ALL return paths wrapped in try/finally for guaranteed consumer cleanup ──
         try:
-            await checkpoint.save({
-                "task": task_description, "complexity": complexity,
-                "strategy": strategy, "phase": "routed",
-            })
-        except Exception as e:
-            logger.warning(f"Checkpoint save failed (non-critical): {e}")
+            # EventBus: emit task start
+            await self.event_bus.emit_thought(f"Task received: {task_description[:200]}", agent="orchestrator")
+            
+            # Inject Skill Library context if matching playbook exists
+            skill_ctx = self.skill_library.get_context_prompt(task_description)
+            if skill_ctx:
+                state.add_message("system", skill_ctx)
+                logger.info("SkillLibrary: injected matching playbook")
+            
+            # Shortcut: conversational messages get answered directly without planning/critic
+            if is_conversational(task_description):
+                logger.info(f"[{session_id}] Detected conversational message, using direct response")
+                return await self._run_conversational(state, websocket_send)
+            
+            # Semantic task routing
+            complexity, strategy = classify_task(task_description)
+            
+            # For medium-complexity ambiguous tasks, use LLM to refine routing
+            if complexity == "medium" and len(task_description) > 80:
+                try:
+                    complexity, strategy = await classify_task_with_llm(
+                        task_description, self.router,
+                        fallback_result=(complexity, strategy)
+                    )
+                    logger.info(f"LLM routing: {complexity}/{strategy}")
+                except Exception as e:
+                    logger.warning(f"LLM routing failed: {e}")
+            
+            # EventBus: emit routing decision
+            await self.event_bus.emit_thought(
+                f"Route: complexity={complexity}, strategy={strategy}", agent="orchestrator"
+            )
 
-        if complexity == "simple":
-            logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
-            result = await self._run_fast_mode(state, websocket_send)
+            # HandoffProtocol: record orchestrator's routing decision
+            self.handoff.agent_handoff(envelope, "Orchestrator", notes={
+                "complexity": complexity, "strategy": strategy, "mode": mode.value,
+            })
+
+            # StateCheckpoint: save initial state
+            try:
+                await checkpoint.save({
+                    "task": task_description, "complexity": complexity,
+                    "strategy": strategy, "phase": "routed",
+                })
+            except Exception as e:
+                logger.warning(f"Checkpoint save failed (non-critical): {e}")
+
+            if complexity == "simple":
+                logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
+                return await self._run_fast_mode(state, websocket_send)
+            
+            if mode == AgentMode.FAST:
+                return await self._run_fast_mode(state, websocket_send)
+            
+            # Pass strategy to planning mode
+            state.metadata["strategy"] = strategy
+            return await self._run_planning_mode(state, websocket_send)
+        finally:
+            # Guaranteed cleanup: remove consumer from EventBus on ALL exit paths
             if websocket_send:
                 self.event_bus.remove_consumer(websocket_send)
-            return result
-        
-        if mode == AgentMode.FAST:
-            result = await self._run_fast_mode(state, websocket_send)
-            if websocket_send:
-                self.event_bus.remove_consumer(websocket_send)
-            return result
-        
-        # Pass strategy to planning mode
-        state.metadata["strategy"] = strategy
-        return await self._run_planning_mode(state, websocket_send)
 
     async def _run_conversational(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         """Direct LLM response for simple conversational messages — no tools, no critic."""
