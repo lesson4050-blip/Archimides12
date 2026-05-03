@@ -18,6 +18,7 @@ from backend.api.connectors_router import router as connectors_router
 from backend.api.quick_task_router import router as quick_task_router
 from backend.api.benchmark import router as benchmark_router
 from backend.api.streaming import router as streaming_router
+from backend.telemetry import init_telemetry
 
 self_play_loop_instance = None
 
@@ -217,6 +218,8 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
+
+init_telemetry(app)
 
 # Prometheus Middleware
 @app.middleware("http")

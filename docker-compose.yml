@@ -52,6 +52,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://archimedes:archimedes@postgres:5432/archimedes
       - AUTH_ENABLED=True
       - METRICS_BEARER_TOKEN=${METRICS_BEARER_TOKEN}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4317
     networks:
       - internal
       - frontend
@@ -133,6 +134,21 @@ services:
       - frontend
     depends_on:
       - prometheus
+      - tempo
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: archimedes-tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./docker/tempo/tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    networks:
+      - internal
     restart: unless-stopped
 
 networks:
@@ -147,3 +163,4 @@ volumes:
   prometheus_data:
   grafana_data:
   ollama_data:
+  tempo_data:

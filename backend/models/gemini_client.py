@@ -104,7 +104,7 @@ class GeminiClient:
                 )
 
                 # Extract content
-                tool_call = None
+                tool_calls = []
                 text_content = ""
 
                 if response.candidates:
@@ -127,13 +127,13 @@ class GeminiClient:
                             }
                             validated = validate_tool_call(raw_tc)
                             if validated:
-                                tool_call = validated.model_dump()
+                                tool_calls.append(validated.model_dump())
 
                         elif hasattr(part, "text") and part.text:
                             text_content += part.text
 
                 # Also try to parse tool call from text (Gemini sometimes does this)
-                if tool_call is None and text_content.strip():
+                if not tool_calls and text_content.strip():
                     from backend.utils.json_repair import repair_and_parse
                     from backend.utils.tool_schemas import validate_tool_call
                     parsed, _ = repair_and_parse(text_content)
@@ -141,13 +141,19 @@ class GeminiClient:
                         if "tool_call" in parsed:
                             validated = validate_tool_call(parsed["tool_call"])
                             if validated:
-                                tool_call = validated.model_dump()
+                                tool_calls.append(validated.model_dump())
                                 text_content = ""
+                        elif "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
+                            for tc in parsed["tool_calls"]:
+                                validated = validate_tool_call(tc)
+                                if validated:
+                                    tool_calls.append(validated.model_dump())
+                            text_content = ""
 
                 return {
                     "model_used": "gemini",
                     "thought": "", # Extract thought if tags are used
-                    "tool_call": tool_call,
+                    "tool_calls": tool_calls,
                     "text": text_content,
                     "tokens_used": response.usage_metadata.total_token_count if response.usage_metadata else 0
                 }

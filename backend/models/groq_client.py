@@ -60,28 +60,29 @@ class GroqClient:
                 # Some models support reasoning_content or similar, Groq Llama 3.3 might not directly, 
                 # but we'll try to extract from text if it's there or just leave empty for now as per unified format.
                 
-                tool_call = None
+                tool_calls = []
                 if message.tool_calls:
-                    tc = message.tool_calls[0]
                     from backend.utils.tool_schemas import validate_tool_call
                     from backend.utils.json_repair import repair_and_parse
-                    raw_args = tc.function.arguments
-                    # Try native parse first, then repair
-                    try:
-                        parsed_args = json.loads(raw_args)
-                    except Exception:
-                        parsed_args, _ = repair_and_parse(raw_args)
-                        parsed_args = parsed_args or {}
-                    raw_tc = {
-                        "name": tc.function.name,
-                        "params": parsed_args
-                    }
-                    validated = validate_tool_call(raw_tc)
-                    tool_call = validated.model_dump() if validated else None
+                    for tc in message.tool_calls:
+                        raw_args = tc.function.arguments
+                        # Try native parse first, then repair
+                        try:
+                            parsed_args = json.loads(raw_args)
+                        except Exception:
+                            parsed_args, _ = repair_and_parse(raw_args)
+                            parsed_args = parsed_args or {}
+                        raw_tc = {
+                            "name": tc.function.name,
+                            "params": parsed_args
+                        }
+                        validated = validate_tool_call(raw_tc)
+                        if validated:
+                            tool_calls.append(validated.model_dump())
 
                 # Also check text content for embedded tool calls
                 # (some Groq models put tool calls in text)
-                if tool_call is None and message.content:
+                if not tool_calls and message.content:
                     from backend.utils.json_repair import repair_and_parse
                     from backend.utils.tool_schemas import validate_tool_call
                     parsed, _ = repair_and_parse(message.content)
@@ -89,11 +90,16 @@ class GroqClient:
                         if "tool_call" in parsed:
                             validated = validate_tool_call(parsed["tool_call"])
                             if validated:
-                                tool_call = validated.model_dump()                
+                                tool_calls.append(validated.model_dump())
+                        elif "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
+                            for tc in parsed["tool_calls"]:
+                                validated = validate_tool_call(tc)
+                                if validated:
+                                    tool_calls.append(validated.model_dump())                
                 return {
                     "model_used": "groq",
                     "thought": thought,
-                    "tool_call": tool_call,
+                    "tool_calls": tool_calls,
                     "text": message.content or "",
                     "tokens_used": response.usage.total_tokens if response.usage else 0
                 }

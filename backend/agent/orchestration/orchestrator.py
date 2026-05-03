@@ -13,6 +13,7 @@ from backend.models.model_router import ModelRouter, get_model_router
 from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
 from backend.agent.skill_library import SkillLibrary
+from backend.telemetry import agent_span
 
 logger = logging.getLogger(__name__)
 
@@ -378,35 +379,36 @@ class AgentOrchestrator:
                 except Exception as e:
                     logger.warning(f"LLM routing failed: {e}")
             
-            # EventBus: emit routing decision
-            await self.event_bus.emit_thought(
-                f"Route: complexity={complexity}, strategy={strategy}", agent="orchestrator"
-            )
+            async with agent_span("orchestrator.task", session_id, strategy=strategy, mode=mode.value):
+                # EventBus: emit routing decision
+                await self.event_bus.emit_thought(
+                    f"Route: complexity={complexity}, strategy={strategy}", agent="orchestrator"
+                )
 
-            # HandoffProtocol: record orchestrator's routing decision
-            self.handoff.agent_handoff(envelope, "Orchestrator", notes={
-                "complexity": complexity, "strategy": strategy, "mode": mode.value,
-            })
-
-            # StateCheckpoint: save initial state
-            try:
-                await checkpoint.save({
-                    "task": task_description, "complexity": complexity,
-                    "strategy": strategy, "phase": "routed",
+                # HandoffProtocol: record orchestrator's routing decision
+                self.handoff.agent_handoff(envelope, "Orchestrator", notes={
+                    "complexity": complexity, "strategy": strategy, "mode": mode.value,
                 })
-            except Exception as e:
-                logger.warning(f"Checkpoint save failed (non-critical): {e}")
 
-            if complexity == "simple":
-                logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
-                return await self._run_fast_mode(state, websocket_send)
-            
-            if mode == AgentMode.FAST:
-                return await self._run_fast_mode(state, websocket_send)
-            
-            # Pass strategy to planning mode
-            state.metadata["strategy"] = strategy
-            return await self._run_planning_mode(state, websocket_send)
+                # StateCheckpoint: save initial state
+                try:
+                    await checkpoint.save({
+                        "task": task_description, "complexity": complexity,
+                        "strategy": strategy, "phase": "routed",
+                    })
+                except Exception as e:
+                    logger.warning(f"Checkpoint save failed (non-critical): {e}")
+
+                if complexity == "simple":
+                    logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
+                    return await self._run_fast_mode(state, websocket_send)
+                
+                if mode == AgentMode.FAST:
+                    return await self._run_fast_mode(state, websocket_send)
+                
+                # Pass strategy to planning mode
+                state.metadata["strategy"] = strategy
+                return await self._run_planning_mode(state, websocket_send)
         finally:
             # Guaranteed cleanup: remove consumer from EventBus on ALL exit paths
             if websocket_send:
@@ -514,167 +516,170 @@ class AgentOrchestrator:
                 # Circuit Breaker: hard cap to prevent infinite loops
                 _circuit_breaker_limit = 15
                 _circuit_breaker_count = 0
-                while True:
-                    _circuit_breaker_count += 1
-                    if _circuit_breaker_count > _circuit_breaker_limit:
-                        from backend.metrics import agent_circuit_breaker_total
-                        agent_circuit_breaker_total.inc()
-                        logger.warning(f"[{state.session_id}] Circuit breaker tripped! >15 iterations.")
-                        if websocket_send:
-                            await websocket_send({
-                                "type": "error",
-                                "content": "⚠️ Maximum execution steps reached. The task might be too complex or the agent is stuck."
-                            })
-                        break
-                    current_target = subtask.get("description", state.task_description)
-                    
-                    # Strategy-aware dispatch: use swarm for matching strategies
-                    agent_override = STRATEGY_AGENTS.get(strategy)
-                    if strategy == "mcts":
-                        if websocket_send:
-                            await websocket_send({"type": "info", "content": "🔍 Запуск MCTS: Поиск оптимального решения через ветвление..."})
-                            
-                        # Context from history and task
-                        context_str = state.task_description
-                        try:
-                            context_str += "\n" + "\n".join([msg["content"] for msg in state.history if msg["role"] == "user"])
-                        except (KeyError, TypeError) as e:
-                            logger.debug(f"Failed to build MCTS context: {e}")
-                            pass
-                            
-                        loop = asyncio.get_running_loop()
-                        mcts_result = await loop.run_in_executor(
-                            self._process_executor,
-                            _run_mcts_subprocess,
-                            current_target,
-                            context_str
-                        )
-                        state.results.append({
-                            "step": i,
-                            "output": f"MCTS Result:\n{mcts_result}"
-                        })
-                        state.metadata["critic_verdict"] = "PASS"
-                    elif strategy == "codeact":
-                        from backend.agent.codeact_executor import CodeActExecutor
-                        codeact = CodeActExecutor(self.router)
-                        codeact_result = await codeact.execute(
-                            task=current_target,
-                            context=state.task_description,
-                            session_id=state.session_id,
-                            websocket_send=websocket_send,
-                        )
-                        state.results.append({
-                            "step": i,
-                            "output": codeact_result.get("output", ""),
-                        })
-                        state.metadata["critic_verdict"] = (
-                            "PASS" if codeact_result.get("success") else "RETRY"
-                        )
-                    elif strategy == "omega_codeact":
-                        from backend.agent.omega_codeact import OmegaCodeAct
-                        omega = OmegaCodeAct(self.router)
-                        omega_result = await omega.execute(
-                            task=current_target,
-                            context=state.task_description,
-                            session_id=state.session_id,
-                            websocket_send=websocket_send,
-                        )
-                        state.results.append({
-                            "step": i,
-                            "output": omega_result.get("output", ""),
-                        })
-                        state.metadata["critic_verdict"] = (
-                            "PASS" if omega_result.get("success") else "RETRY"
-                        )
-                    elif strategy == "hydra_swarm":
-                        from backend.agent.orchestration.hydra_swarm import HydraSwarm
-                        hydra = HydraSwarm(self.router, self.tool_registry)
-                        hydra_result = await hydra.run(
-                            task=current_target,
-                        )
-                        state.results.append({
-                            "step": i,
-                            "output": str(hydra_result),
-                        })
-                        state.metadata["critic_verdict"] = "PASS"
-                    elif agent_override:
-                        # Use swarm with strategy-specific agents
-                        swarm_result = await self.swarm.run(
-                            task=current_target,
-                            task_hint=state.task_hint,
-                            agent_roles_override=agent_override,
-                            session_id=state.session_id,
-                            websocket_send=websocket_send
-                        )
-                        state.results.append({
-                            "step": i,
-                            "output": swarm_result
-                        })
+                
+                current_target = subtask.get("description", state.task_description)
+                
+                async with agent_span("executor.subtask", state.session_id, subtask_index=i, target=current_target[:50]):
+                    while True:
+                        _circuit_breaker_count += 1
+                        if _circuit_breaker_count > _circuit_breaker_limit:
+                            from backend.metrics import agent_circuit_breaker_total
+                            agent_circuit_breaker_total.inc()
+                            logger.warning(f"[{state.session_id}] Circuit breaker tripped! >15 iterations.")
+                            if websocket_send:
+                                await websocket_send({
+                                    "type": "error",
+                                    "content": "⚠️ Maximum execution steps reached. The task might be too complex or the agent is stuck."
+                                })
+                            break
                         
-                        # Ensure critic has something to review
-                        state = await self.critic.process(state, websocket_send)
-                        
-                        # Safety: If critic didn't set verdict, default to RETRY
-                        # (not PASS — we don't want broken outputs to slip through)
-                        if not state.metadata.get("critic_verdict"):
-                            if state.current_retry_count >= state.critic_retry_limit:
-                                state.metadata["critic_verdict"] = "LIMIT_REACHED"
-                            else:
-                                state.metadata["critic_verdict"] = "RETRY"
-                                state.current_retry_count += 1
-                    else:
-                        state = await self.executor.process(state, websocket_send)
-                        state = await self.critic.process(state, websocket_send)
-                        
-                        # Same safety guard for non-swarm path
-                        if not state.metadata.get("critic_verdict"):
-                            if state.current_retry_count >= state.critic_retry_limit:
-                                state.metadata["critic_verdict"] = "LIMIT_REACHED"
-                            else:
-                                state.metadata["critic_verdict"] = "RETRY"
-                                state.current_retry_count += 1
-                    
-                    verdict = state.metadata.get("critic_verdict")
-                    
-                    if verdict in ("PASS", "ERROR_BYPASS"):
-                        # Subtask successful or best effort reached
-                        break
-                    elif verdict == "LIMIT_REACHED":
-                        # Sprint 2.1: Recursive Self-Correction (Rescue Pass)
-                        if not state.metadata.get("rescue_attempted", False):
-                            logger.info(f"[{state.session_id}] Triggering Recursive Self-Correction Rescue Pass.")
-                            state.metadata["rescue_attempted"] = True
+                        # Strategy-aware dispatch: use swarm for matching strategies
+                        agent_override = STRATEGY_AGENTS.get(strategy)
+                        if strategy == "mcts":
+                            if websocket_send:
+                                await websocket_send({"type": "info", "content": "🔍 Запуск MCTS: Поиск оптимального решения через ветвление..."})
                             
-                            issues = state.metadata.get("critic_issues", [])
-                            issues_text = "\n".join(issues)
+                            # Context from history and task
+                            context_str = state.task_description
+                            try:
+                                context_str += "\n" + "\n".join([msg["content"] for msg in state.history if msg["role"] == "user"])
+                            except (KeyError, TypeError) as e:
+                                logger.debug(f"Failed to build MCTS context: {e}")
+                                pass
                             
-                            rescue_prompt = (
-                                "SYSTEM CRITICAL: You have reached the maximum retry limit for this task. "
-                                "The Quality Critic still rejects your output for the following reasons:\n"
-                                f"{issues_text}\n\n"
-                                "RECURSIVE SELF-CORRECTION PROTOCOL INITIATED:\n"
-                                "1. You MUST use a search tool (like Exa/Tavily) to research these specific errors/issues.\n"
-                                "2. Analyze the search results to find a definitive fix.\n"
-                                "3. Apply the fix and provide your final corrected output.\n"
-                                "Failure is not an option. Find the solution."
+                            loop = asyncio.get_running_loop()
+                            mcts_result = await loop.run_in_executor(
+                                self._process_executor,
+                                _run_mcts_subprocess,
+                                current_target,
+                                context_str
                             )
-                            state.add_message("user", rescue_prompt)
-                            # Reset retry count for one final attempt cycle
-                            state.current_retry_count = 0
+                            state.results.append({
+                                "step": i,
+                                "output": f"MCTS Result:\n{mcts_result}"
+                            })
+                            state.metadata["critic_verdict"] = "PASS"
+                        elif strategy == "codeact":
+                            from backend.agent.codeact_executor import CodeActExecutor
+                            codeact = CodeActExecutor(self.router)
+                            codeact_result = await codeact.execute(
+                                task=current_target,
+                                context=state.task_description,
+                                session_id=state.session_id,
+                                websocket_send=websocket_send,
+                            )
+                            state.results.append({
+                                "step": i,
+                                "output": codeact_result.get("output", ""),
+                            })
+                            state.metadata["critic_verdict"] = (
+                                "PASS" if codeact_result.get("success") else "RETRY"
+                            )
+                        elif strategy == "omega_codeact":
+                            from backend.agent.omega_codeact import OmegaCodeAct
+                            omega = OmegaCodeAct(self.router)
+                            omega_result = await omega.execute(
+                                task=current_target,
+                                context=state.task_description,
+                                session_id=state.session_id,
+                                websocket_send=websocket_send,
+                            )
+                            state.results.append({
+                                "step": i,
+                                "output": omega_result.get("output", ""),
+                            })
+                            state.metadata["critic_verdict"] = (
+                                "PASS" if omega_result.get("success") else "RETRY"
+                            )
+                        elif strategy == "hydra_swarm":
+                            from backend.agent.orchestration.hydra_swarm import HydraSwarm
+                            hydra = HydraSwarm(self.router, self.tool_registry)
+                            hydra_result = await hydra.run(
+                                task=current_target,
+                            )
+                            state.results.append({
+                                "step": i,
+                                "output": str(hydra_result),
+                            })
+                            state.metadata["critic_verdict"] = "PASS"
+                        elif agent_override:
+                            # Use swarm with strategy-specific agents
+                            swarm_result = await self.swarm.run(
+                                task=current_target,
+                                task_hint=state.task_hint,
+                                agent_roles_override=agent_override,
+                                session_id=state.session_id,
+                                websocket_send=websocket_send
+                            )
+                            state.results.append({
+                                "step": i,
+                                "output": swarm_result
+                            })
+                        
+                            # Ensure critic has something to review
+                            state = await self.critic.process(state, websocket_send)
+                        
+                            # Safety: If critic didn't set verdict, default to RETRY
+                            # (not PASS — we don't want broken outputs to slip through)
+                            if not state.metadata.get("critic_verdict"):
+                                if state.current_retry_count >= state.critic_retry_limit:
+                                    state.metadata["critic_verdict"] = "LIMIT_REACHED"
+                                else:
+                                    state.metadata["critic_verdict"] = "RETRY"
+                                    state.current_retry_count += 1
+                        else:
+                            state = await self.executor.process(state, websocket_send)
+                            state = await self.critic.process(state, websocket_send)
+                        
+                            # Same safety guard for non-swarm path
+                            if not state.metadata.get("critic_verdict"):
+                                if state.current_retry_count >= state.critic_retry_limit:
+                                    state.metadata["critic_verdict"] = "LIMIT_REACHED"
+                                else:
+                                    state.metadata["critic_verdict"] = "RETRY"
+                                    state.current_retry_count += 1
+                    
+                        verdict = state.metadata.get("critic_verdict")
+                    
+                        if verdict in ("PASS", "ERROR_BYPASS"):
+                            # Subtask successful or best effort reached
+                            break
+                        elif verdict == "LIMIT_REACHED":
+                            # Sprint 2.1: Recursive Self-Correction (Rescue Pass)
+                            if not state.metadata.get("rescue_attempted", False):
+                                logger.info(f"[{state.session_id}] Triggering Recursive Self-Correction Rescue Pass.")
+                                state.metadata["rescue_attempted"] = True
+                            
+                                issues = state.metadata.get("critic_issues", [])
+                                issues_text = "\n".join(issues)
+                            
+                                rescue_prompt = (
+                                    "SYSTEM CRITICAL: You have reached the maximum retry limit for this task. "
+                                    "The Quality Critic still rejects your output for the following reasons:\n"
+                                    f"{issues_text}\n\n"
+                                    "RECURSIVE SELF-CORRECTION PROTOCOL INITIATED:\n"
+                                    "1. You MUST use a search tool (like Exa/Tavily) to research these specific errors/issues.\n"
+                                    "2. Analyze the search results to find a definitive fix.\n"
+                                    "3. Apply the fix and provide your final corrected output.\n"
+                                    "Failure is not an option. Find the solution."
+                                )
+                                state.add_message("user", rescue_prompt)
+                                # Reset retry count for one final attempt cycle
+                                state.current_retry_count = 0
+                                continue
+                            else:
+                                # Rescue already attempted and failed
+                                logger.warning(f"[{state.session_id}] Rescue pass failed. Moving on.")
+                                break
+                        elif verdict == "RETRY":
+                            # Continue loop to re-execute with critic feedback
                             continue
                         else:
-                            # Rescue already attempted and failed
-                            logger.warning(f"[{state.session_id}] Rescue pass failed. Moving on.")
+                            # Unexpected state — safety break
+                            logger.warning(
+                                f"Unexpected critic verdict: {verdict}. Breaking loop."
+                            )
                             break
-                    elif verdict == "RETRY":
-                        # Continue loop to re-execute with critic feedback
-                        continue
-                    else:
-                        # Unexpected state — safety break
-                        logger.warning(
-                            f"Unexpected critic verdict: {verdict}. Breaking loop."
-                        )
-                        break
                     
         # Phase 4: Verification (read-only, runs tests)
         changed_files = getattr(state, 'changed_files', None) or state.metadata.get('changed_files', [])

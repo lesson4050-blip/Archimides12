@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     
     # Agent
     AGENT_MAX_ITERATIONS: int = 20
-    AGENT_MAX_CONTEXT_TOKENS: int = 32768
-    CONTEXT_SUMMARIZATION_THRESHOLD: int = 24000
-    CONTEXT_PRESERVE_RECENT: int = 20
+    AGENT_MAX_CONTEXT_TOKENS: int = 128000
+    CONTEXT_SUMMARIZATION_THRESHOLD: int = 120000
+    CONTEXT_PRESERVE_RECENT: int = 3
     USE_MULTI_AGENT: bool = True  # Feature flag for Phase 4
     
     # Database — PostgreSQL (production) or SQLite (dev fallback)
