@@ -74,6 +74,17 @@ class ExecutorAgent(BaseAgent):
         self.intelligence = IntelligenceRouter(router)
         self.skill_engine = SkillEngine()
 
+        # Phase 8: Bind SwarmTool to this executor for hierarchical orchestration
+        try:
+            from backend.tools.swarm_tool import SwarmTool
+            for tool_name, tool_func in self.tool_registry.tools.items():
+                if hasattr(tool_func, "__self__") and isinstance(tool_func.__self__, SwarmTool):
+                    tool_func.__self__.bind_parent(self)
+                    logger.info("Phase 8: SwarmTool bound to ExecutorAgent")
+                    break
+        except Exception as e:
+            logger.debug(f"SwarmTool binding skipped: {e}")
+
     async def process(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> OrchestrationState:
         # Clear previous critic verdict to prevent cross-subtask pollution
         state.metadata.pop("critic_verdict", None)
