@@ -45,7 +45,7 @@ class ExecutorAgent(BaseAgent):
     - Each slide object: {{"title": "...", "body": "...", "notes": "..."}}
     - The tool validates JSON and saves the artifact automatically.
     
-    When you have completed the subtask, provide a polite and clear summary of your work in the SAME LANGUAGE as the user's original task.
+    When you have completed the subtask, you MUST provide a highly detailed, professional textual summary of EXACTLY what you implemented, why you did it, and how it works. Speak like a Principal Architect. NEVER output robotic phrases like "Ready for next task".
     """
 
     USER_CONTEXT_TEMPLATE = """
@@ -73,6 +73,12 @@ class ExecutorAgent(BaseAgent):
         from backend.agent.intelligence.intelligence_router import IntelligenceRouter
         self.intelligence = IntelligenceRouter(router)
         self.skill_engine = SkillEngine()
+        
+        try:
+            from backend.agent.subconscious import SubconsciousEngine
+            self.subconscious = SubconsciousEngine(router, tool_registry, self.event_bus)
+        except ImportError:
+            self.subconscious = None
 
         # Phase 8: Bind SwarmTool to this executor for hierarchical orchestration
         try:
@@ -98,6 +104,20 @@ class ExecutorAgent(BaseAgent):
             state.excluded_tools = []
         if not hasattr(state, "confidence_score"):
             state.confidence_score = 100
+            
+        # SECURITY: Global Prompt Injection & Jailbreak Guard
+        if getattr(self, "security_gate", None):
+            injection_verdict = self.security_gate.analyze_prompt_injection(state.task_description)
+            if not injection_verdict.allowed:
+                logger.warning(f"SECURITY: Prompt injection blocked: {injection_verdict.reasons}")
+                if self.event_bus:
+                    import asyncio
+                    asyncio.create_task(self.event_bus.emit_security(injection_verdict.to_dict()))
+                state.results.append({"step": 0, "output": f"SECURITY VIOLATION: {'; '.join(injection_verdict.reasons)}"})
+                if websocket_send:
+                    import asyncio
+                    asyncio.create_task(websocket_send({"type": "message_info", "content": "System security blocked this request due to detected prompt injection."}))
+                return state
         
         # Determine target task
         if state.mode == AgentMode.FAST:
@@ -152,6 +172,10 @@ class ExecutorAgent(BaseAgent):
 
         # Loop for tool execution
         for step in range(self.max_steps):
+            # Phase 2 Context Compression (Context Overload Protection)
+            if hasattr(self.context_manager, "summarize_if_needed"):
+                await self.context_manager.summarize_if_needed(self.router)
+
             # Loop detection & Dynamic Strategy Switching (Sprint 2.2)
             excluded_tools = getattr(state, "excluded_tools", [])
             if len(state._recent_tool_calls) >= 3:
@@ -230,6 +254,26 @@ class ExecutorAgent(BaseAgent):
                     })
                 on_token = _stream_token
 
+            # Manus-level Real-time Perception Streaming
+            streaming_task = None
+            if getattr(state, 'stream_desktop', False) and websocket_send:
+                async def stream_frames():
+                    try:
+                        import pyscreenshot as ImageGrab
+                        import io
+                        import base64
+                        while True:
+                            img = ImageGrab.grab()
+                            buf = io.BytesIO()
+                            img.save(buf, format='JPEG', quality=30)
+                            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+                            await websocket_send({"type": "desktop_frame", "data": b64})
+                            await asyncio.sleep(0.5) # 2 FPS to prevent websocket flooding
+                    except Exception:
+                        pass
+                import asyncio
+                streaming_task = asyncio.create_task(stream_frames())
+
             # Get tools and apply exclusion list (Sprint 2.2)
             all_tools = self.tool_registry.get_all_tool_definitions()
             active_tools = [t for t in all_tools if t["function"]["name"] not in getattr(state, "excluded_tools", [])]
@@ -245,6 +289,10 @@ class ExecutorAgent(BaseAgent):
             )
             _auto_mode = "complex" if _is_planning_step else "simple"
 
+            # ZERO-LATENCY: Trigger subconscious pre-fetch while LLM is generating
+            if getattr(self, "subconscious", None):
+                self.subconscious.trigger_predictive_analysis(current_target, state.session_id)
+
             response = await self.intelligence.generate(
                 messages=messages,
                 task=current_target,
@@ -252,6 +300,10 @@ class ExecutorAgent(BaseAgent):
                 tools=active_tools,
                 on_token=on_token
             )
+
+            # Cleanup streaming task
+            if streaming_task:
+                streaming_task.cancel()
 
             if _auto_mode == "complex":
                 logger.info(

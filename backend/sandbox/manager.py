@@ -171,7 +171,7 @@ class WarmContainerPool:
         self._creating = 0  # счётчик создаваемых сейчас контейнеров
 
     def start(self):
-        self._replenisher_task = asyncio.create_task(self._replenish_loop())
+        self._replenisher_task = safe_create_task(self._replenish_loop())
         logger.info("WarmContainerPool: replenisher started")
 
     def stop(self):
@@ -253,6 +253,7 @@ class WarmContainerPool:
                 cap_drop=["ALL"],
                 cap_add=["CHOWN", "SETUID", "SETGID"],
                 network_mode="none",
+                ports={"6080/tcp": None, "9222/tcp": None},
                 detach=True,
                 tty=True,
             )
@@ -264,6 +265,10 @@ class WarmContainerPool:
 
     async def _reset_container(self, container: Any, session_id: str):
         """Assign session: создать workspace, подключить network."""
+        import re as _re
+        if not _re.match(r'^[a-zA-Z0-9_\-]{1,128}$', session_id):
+            raise ValueError(f"Rejected unsafe session_id: {session_id!r}")
+
         loop = asyncio.get_running_loop()
         client = self._mgr.client
         
@@ -278,7 +283,10 @@ class WarmContainerPool:
                 network = client.networks.get(network_name)
             network.connect(container)
         
-        session_workspace = os.path.abspath(f"./workspace/{session_id}")
+        base_workspace = os.path.abspath("./workspace")
+        session_workspace = os.path.abspath(os.path.join(base_workspace, session_id))
+        if not session_workspace.startswith(base_workspace + os.sep):
+            raise ValueError(f"Path traversal attempt blocked: {session_workspace}")
         os.makedirs(session_workspace, exist_ok=True)
         
         await loop.run_in_executor(None, _assign)
@@ -568,7 +576,7 @@ class SandboxManager:
                         session_workspace: {"bind": "/home/ubuntu/workspace", "mode": "rw"},
                         **({"vnc-data": {"bind": "/home/ubuntu/vnc", "mode": "rw"}} if sys.platform != "win32" else {})
                     },
-                    ports={"6080/tcp": None},
+                    ports={"6080/tcp": None, "9222/tcp": None},
                     detach=True,
                     tty=True,
                 )

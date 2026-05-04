@@ -54,7 +54,7 @@ class ExecutionResult:
     output: Optional[Any] = None
     error: Optional[str] = None
     duration: float = 0.0
-    timestamp: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -82,7 +82,7 @@ class TaskPlan:
     strategy: str = "sequential"
     priority: int = 1
     estimated_duration: float = 0.0
-    created_at: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the plan to a dictionary."""

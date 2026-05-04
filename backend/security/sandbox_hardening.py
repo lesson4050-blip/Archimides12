@@ -109,7 +109,20 @@ CRITICAL_PATTERNS = [
     (r"/etc/passwd", "Passwd file access"),
 ]
 
+PROMPT_INJECTION_PATTERNS = [
+    (r"ignore\s+(all\s+)?previous\s+instructions", "Instruction override attempt"),
+    (r"system\s+prompt", "System prompt extraction"),
+    (r"initial\s+instructions", "System prompt extraction"),
+    (r"you\s+are\s+no\s+longer", "Persona override"),
+    (r"what\s+were\s+you\s+told\s+before", "Context extraction"),
+    (r"output\s+your\s+instructions", "Instruction extraction"),
+    (r"\bDAN\b", "DAN Jailbreak pattern"),
+    (r"bypass\s+restrictions", "Bypass attempt"),
+    (r"disregard\s+rules", "Rule disregard attempt")
+]
+
 CRITICAL_RE = [(re.compile(p, re.IGNORECASE), desc) for p, desc in CRITICAL_PATTERNS]
+PROMPT_INJECTION_RE = [(re.compile(p, re.IGNORECASE), desc) for p, desc in PROMPT_INJECTION_PATTERNS]
 
 
 # ── Layer 2: Python AST Analysis ────────────────────────────────────
@@ -395,6 +408,29 @@ class SecurityGate:
         )
 
         self._audit(f"{operation}:{path}", verdict, "file")
+        return verdict
+
+    def analyze_prompt_injection(self, prompt: str) -> SecurityVerdict:
+        """Analyze user input for jailbreaks or prompt extraction."""
+        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:12]
+        reasons = []
+        risk = RiskLevel.SAFE
+
+        for pattern, desc in PROMPT_INJECTION_RE:
+            if pattern.search(prompt):
+                reasons.append(f"PROMPT INJECTION DETECTED: {desc}")
+                risk = RiskLevel.CRITICAL
+
+        blocked = risk == RiskLevel.CRITICAL
+
+        verdict = SecurityVerdict(
+            allowed=not blocked,
+            risk_level=risk,
+            reasons=reasons,
+            command_hash=prompt_hash,
+        )
+
+        self._audit(prompt[:200], verdict, "prompt")
         return verdict
 
     def _audit(self, content: str, verdict: SecurityVerdict, category: str) -> None:

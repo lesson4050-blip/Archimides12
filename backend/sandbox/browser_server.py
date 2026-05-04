@@ -517,9 +517,78 @@ async def execute_action(page, context, data: dict) -> dict:
         return {"success": False, "error": str(e)}
 
 
+SOCKET_PORT = 9222  # TCP socket for low-latency IPC from host
+
+
+async def handle_socket_client(reader, writer, page, context):
+    """Handle a single TCP client connection with length-prefixed JSON protocol."""
+    peer = writer.get_extra_info("peername")
+    logger.info(f"Socket client connected: {peer}")
+    try:
+        while True:
+            # Read 4-byte length prefix (big-endian uint32)
+            length_bytes = await asyncio.wait_for(reader.readexactly(4), timeout=300)
+            msg_len = int.from_bytes(length_bytes, "big")
+            if msg_len > 1_000_000:  # 1MB safety cap
+                logger.warning(f"Message too large: {msg_len}")
+                break
+
+            payload = await asyncio.wait_for(reader.readexactly(msg_len), timeout=30)
+            data = json.loads(payload.decode("utf-8"))
+
+            logger.info(f"Socket cmd: {data.get('action')} url={data.get('url', '')} text={data.get('text', '')}")
+            result = await execute_action(page, context, data)
+
+            response = json.dumps(result, ensure_ascii=False).encode("utf-8")
+            writer.write(len(response).to_bytes(4, "big"))
+            writer.write(response)
+            await writer.drain()
+    except asyncio.IncompleteReadError:
+        pass  # Client disconnected
+    except asyncio.TimeoutError:
+        logger.info(f"Socket client {peer} timed out")
+    except Exception as e:
+        logger.error(f"Socket client error: {e}")
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        logger.info(f"Socket client disconnected: {peer}")
+
+
+async def file_poll_loop(page, context):
+    """Legacy file-based IPC loop for backward compatibility."""
+    while True:
+        if os.path.exists(CMD_FILE):
+            result = {"success": False, "error": "Unknown"}
+            try:
+                with open(CMD_FILE, "r") as f:
+                    data = json.load(f)
+                os.remove(CMD_FILE)
+                logger.info(f"File cmd: {data.get('action')} "
+                            f"url={data.get('url','')} "
+                            f"text={data.get('text','')}")
+                result = await execute_action(page, context, data)
+            except json.JSONDecodeError as e:
+                result = {"success": False, "error": f"Bad JSON command: {e}"}
+            except Exception as e:
+                result = {"success": False, "error": str(e)}
+                logger.exception("Unexpected error")
+            finally:
+                try:
+                    with open(RES_FILE, "w") as f:
+                        json.dump(result, f, ensure_ascii=False)
+                except Exception as e:
+                    logger.error(f"Failed to write result: {e}")
+
+        await asyncio.sleep(0.15)
+
+
 async def main():
-    logger.info("Browser Server v2 starting...")
-    
+    logger.info("Browser Server v3 starting (dual-mode: TCP + file)...")
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=False,
@@ -579,38 +648,25 @@ async def main():
 
         page = await context.new_page()
         await page.goto("about:blank")
-        
+
         # Cleanup old files
         for f in [CMD_FILE, RES_FILE]:
             if os.path.exists(f):
                 os.remove(f)
-        
-        logger.info(f"Ready. Listening on {CMD_FILE}")
-        
-        while True:
-            if os.path.exists(CMD_FILE):
-                result = {"success": False, "error": "Unknown"}
-                try:
-                    with open(CMD_FILE, "r") as f:
-                        data = json.load(f)
-                    os.remove(CMD_FILE)
-                    logger.info(f"Executing: {data.get('action')} "
-                                f"url={data.get('url','')} "
-                                f"text={data.get('text','')}")
-                    result = await execute_action(page, context, data)
-                except json.JSONDecodeError as e:
-                    result = {"success": False, "error": f"Bad JSON command: {e}"}
-                except Exception as e:
-                    result = {"success": False, "error": str(e)}
-                    logger.exception("Unexpected error")
-                finally:
-                    try:
-                        with open(RES_FILE, "w") as f:
-                            json.dump(result, f, ensure_ascii=False)
-                    except Exception as e:
-                        logger.error(f"Failed to write result: {e}")
-            
-            await asyncio.sleep(0.15)  # Faster polling
+
+        # Start TCP socket server for low-latency IPC
+        server = await asyncio.start_server(
+            lambda r, w: handle_socket_client(r, w, page, context),
+            "0.0.0.0", SOCKET_PORT
+        )
+        logger.info(f"Ready. TCP socket on port {SOCKET_PORT}, file polling on {CMD_FILE}")
+
+        # Run both IPC modes concurrently
+        async with server:
+            await asyncio.gather(
+                server.serve_forever(),
+                file_poll_loop(page, context)
+            )
 
 
 if __name__ == "__main__":

@@ -261,16 +261,20 @@ class OmegaCodeAct:
         """Системный промпт адаптируется под текущую фазу."""
         base = (
             "You are OmegaCodeAct — a precise, systematic coding agent.\n"
-            "You solve software engineering tasks by writing and executing Python code.\n\n"
+            "You solve software engineering tasks by interacting with a Persistent Bash Shell.\n\n"
             "RULES:\n"
-            "1. Always wrap executable code in ```python blocks.\n"
-            "2. Use print() — you see only printed output.\n"
-            f"3. When done: print('{TASK_COMPLETE_SIGNAL}: <brief summary>')\n"
-            "4. If you need to rollback ALL changes: "
-            f"print('{ROLLBACK_SIGNAL}: <reason>')\n"
-            "5. Never delete test files. Never modify files outside the target repo.\n"
-            "6. Prefer MINIMAL patches — change as few lines as possible.\n"
-            f"7. If you develop a UI/web component, you can get visual feedback by printing: `{VISION_QA_SIGNAL} http://url`\n\n"
+            "1. Always wrap executable commands in ```bash blocks.\n"
+            "   (You can run python scripts or commands directly via bash).\n"
+            f"2. When done: echo '{TASK_COMPLETE_SIGNAL}: <brief summary>'\n"
+            "3. If you need to rollback ALL changes: "
+            f"echo '{ROLLBACK_SIGNAL}: <reason>'\n"
+            "4. Never delete test files. Never modify files outside the target repo.\n"
+            "5. Prefer MINIMAL patches — change as few lines as possible.\n"
+            f"6. If you develop a UI/web component, you can get visual feedback by echoing: `{VISION_QA_SIGNAL} http://url`\n\n"
+            "AVAILABLE ACI TOOLS (built-in bash functions):\n"
+            "- `search_dir \"pattern\"` — grep across repository\n"
+            "- `find_file \"name\"` — find files by name\n"
+            "- `str_replace_editor \"file_path\" \"old_string_exact\" \"new_string_exact\"` — surgical string replacement\n\n"
         )
         
         phase_instructions = {
@@ -289,7 +293,7 @@ class OmegaCodeAct:
                 "1. Which file, which function, which line?\n"
                 "2. What is the expected vs actual behavior?\n"
                 "3. What is the minimal change needed?\n"
-                "Then write: print('LOCALIZED: file.py:line_number — description')\n"
+                "Then write: echo 'LOCALIZED: file.py:line_number — description'\n"
             ),
             "implement": (
                 "CURRENT PHASE: IMPLEMENT\n"
@@ -304,7 +308,7 @@ class OmegaCodeAct:
                 "1. Run ALL tests: pytest (not just the specific test)\n"
                 "2. Check no regressions\n"
                 "3. Re-read the original issue — does your fix address ALL requirements?\n"
-                f"4. If yes: print('{TASK_COMPLETE_SIGNAL}: all tests pass, issue resolved')\n"
+                f"4. If yes: echo '{TASK_COMPLETE_SIGNAL}: all tests pass, issue resolved'\n"
                 "5. If no: go back to implement phase and fix remaining issues\n"
             ),
         }
@@ -591,9 +595,13 @@ class OmegaCodeAct:
             # Проверить ROLLBACK_NEEDED сигнал
             if ROLLBACK_SIGNAL in agent_text:
                 logger.warning(f"Agent requested rollback at iteration {iteration}")
-                subprocess.run(
-                    ["git", "checkout", "--", "."],
-                    cwd=cwd, capture_output=True, timeout=10
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(
+                        ["git", "checkout", "--", "."],
+                        cwd=cwd, capture_output=True, timeout=10
+                    )
                 )
                 state.strategy_switches += 1
                 state.phase = "understand"
@@ -606,10 +614,13 @@ class OmegaCodeAct:
                 continue
             
             # Извлечь и выполнить код
-            code_blocks = re.findall(
-                r'```python\n(.*?)```',
-                agent_text, re.DOTALL
-            )
+            code_blocks = re.findall(r'```bash\n(.*?)```', agent_text, re.DOTALL)
+            if not code_blocks:
+                code_blocks = re.findall(r'```(?:shell|sh)\n(.*?)```', agent_text, re.DOTALL)
+            if not code_blocks:
+                # Fallback for models still outputting python
+                py_blocks = re.findall(r'```python\n(.*?)```', agent_text, re.DOTALL)
+                code_blocks = [f"cat << 'EOF' > /tmp/agent_tmp.py\n{c}\nEOF\npython3 /tmp/agent_tmp.py" for c in py_blocks]
             
             if not code_blocks:
                 # Нет кода — ждём следующую итерацию
@@ -705,43 +716,43 @@ class OmegaCodeAct:
         session_id: str,
         cwd: str
     ) -> Dict[str, Any]:
-        """Выполнить код через sandbox."""
+        """Выполнить код через persistent bash shell."""
         try:
             from backend.sandbox.singleton import sandbox_manager
-            result = await sandbox_manager.executor.execute_code(
-                code=code,
-                session_id=session_id,
-                timeout=30
-            )
-            return {
-                "success": result.get("success", True),
-                "output": str(result.get("output", result.get("stdout", "")))[:3000],
-                "error": result.get("error", result.get("stderr", ""))
-            }
-        except Exception as e:
-            # Fallback: локальное выполнение через subprocess
-            try:
-                import tempfile
-                with tempfile.NamedTemporaryFile(
-                    suffix=".py", mode="w", delete=False, dir="/tmp"
-                ) as f:
-                    f.write(code)
-                    tmp_path = f.name
-                
-                proc = await asyncio.create_subprocess_exec(
-                    "python3", tmp_path,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    cwd=cwd
-                )
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-                output = stdout.decode("utf-8", errors="replace")
-                os.unlink(tmp_path)
-                
+            shell = sandbox_manager._shells.get(session_id)
+            
+            if shell:
+                # Persistent shell is used (ACI and variables persist)
+                result = await shell.run(command=code, timeout=30)
                 return {
-                    "success": proc.returncode == 0,
-                    "output": output[:3000],
-                    "error": "" if proc.returncode == 0 else output
+                    "success": result.get("success", False),
+                    "output": result.get("output", result.get("error", ""))[:3000],
+                    "error": result.get("error", "")
                 }
-            except Exception as e2:
-                return {"success": False, "output": str(e2), "error": str(e2)}
+            else:
+                # SECURITY: Never run LLM-generated code on the host.
+                # If no sandbox shell exists, try SandboxExecutor as fallback.
+                container = await sandbox_manager.get_container(session_id)
+                if container:
+                    exec_res = await sandbox_manager.executor.run_command(
+                        session_id, code, timeout=30
+                    )
+                    return {
+                        "success": exec_res.get("success", False),
+                        "output": exec_res.get("output", "")[:3000],
+                        "error": exec_res.get("error", "")
+                    }
+                else:
+                    logger.error(
+                        f"No sandbox available for session {session_id}. "
+                        f"Refusing to execute untrusted code on host."
+                    )
+                    return {
+                        "success": False,
+                        "output": "No sandbox container available. Cannot execute code.",
+                        "error": "SECURITY: No sandbox shell or container found for this session."
+                    }
+        except asyncio.TimeoutError:
+            return {"success": False, "error": "Execution timed out", "output": "Execution timed out"}
+        except Exception as e:
+            return {"success": False, "error": str(e), "output": str(e)}

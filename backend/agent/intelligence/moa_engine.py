@@ -32,7 +32,17 @@ class MixtureOfAgents:
         if not valid:
             return await self.router.generate(messages=messages)
         if len(valid) == 1:
-            return {"text": valid[0], "model": "moa_single"}
+            return {"text": valid[0], "model": "moa_single", "consensus_hit": True}
+
+        # FAST PATH (Speculative Execution / Consensus Check)
+        # If all proposers return exactly the same logic (or >95% similar), skip synthesis
+        import difflib
+        if len(valid) >= 2:
+            sim1 = difflib.SequenceMatcher(None, valid[0], valid[1]).ratio()
+            sim2 = difflib.SequenceMatcher(None, valid[0], valid[-1]).ratio()
+            if sim1 > 0.95 and sim2 > 0.95:
+                logger.info("MoA FAST PATH hit: High consensus (>95%). Skipping synthesis.")
+                return {"text": valid[0], "model": "moa_fast_path", "proposer_count": len(valid), "consensus_hit": True}
 
         synthesis_prompt = self._build_synthesis_prompt(task, valid, messages)
         try:

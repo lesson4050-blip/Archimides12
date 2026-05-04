@@ -80,16 +80,18 @@ class ErrorRecovery:
             return ErrorType.TIMEOUT
         if any(kw in err_lower for kw in ["permission denied", "access denied", "eacces"]):
             return ErrorType.PERMISSION
-        if any(kw in err_lower for kw in [
-            "not found", "no such file", "modulenotfounderror",
-            "command not found", "filenotfounderror"
-        ]):
-            return ErrorType.NOT_FOUND
+        # DEPENDENCY must be checked BEFORE NOT_FOUND because
+        # 'modulenotfounderror' and 'no module named' match both categories.
         if any(kw in err_lower for kw in [
             "modulenotfounderror", "importerror", "no module named",
             "package not found", "pip install"
         ]):
             return ErrorType.DEPENDENCY
+        if any(kw in err_lower for kw in [
+            "not found", "no such file",
+            "command not found", "filenotfounderror"
+        ]):
+            return ErrorType.NOT_FOUND
         if any(kw in err_lower for kw in [
             "connectionerror", "urlerror", "network", "dns",
             "refused", "unreachable"

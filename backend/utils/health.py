@@ -66,14 +66,16 @@ async def deep_health_check() -> Dict[str, Any]:
 
     # 5. Session store
     try:
-        from backend.agent.session_store import SESSION_DIR
-        session_count = len([
-            f for f in os.listdir(SESSION_DIR)
-            if f.endswith((".json", ".pkl"))
-        ]) if os.path.exists(SESSION_DIR) else 0
-        checks["sessions"] = {"status": "healthy", "active_sessions": session_count}
-    except Exception:
-        checks["sessions"] = {"status": "unknown"}
+        from backend.agent.session_store import get_session_store
+        store = get_session_store()
+        stats = store.get_stats()
+        checks["sessions"] = {
+            "status": "healthy", 
+            "active_sessions": stats.get("sessions", 0),
+            "db_size_mb": stats.get("db_size_mb", 0)
+        }
+    except Exception as e:
+        checks["sessions"] = {"status": "unknown", "error": str(e)}
 
     all_healthy = all(
         c.get("status") in ("healthy", "not_configured", "unknown")

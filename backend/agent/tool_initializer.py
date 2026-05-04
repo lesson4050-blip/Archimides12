@@ -48,11 +48,18 @@ class ToolInitializer:
             logger.error(f"Failed to register ShellTool: {e}")
 
         try:
-            from backend.tools.browser_tool import BrowserTool
-            self.agent.browser_tool = BrowserTool(sandbox_manager.executor)
+            from backend.agent.tools.native_browser import NativeBrowserTool
+            self.agent.browser_tool = NativeBrowserTool()
             self.agent.register_tool("browser", self.agent.browser_tool.execute)
+            logger.info("NativeBrowserTool registered (TCP socket, <5ms latency)")
         except Exception as e:
-            logger.error(f"Failed to register BrowserTool: {e}")
+            logger.warning(f"NativeBrowserTool unavailable ({e}), falling back to legacy BrowserTool")
+            try:
+                from backend.tools.browser_tool import BrowserTool
+                self.agent.browser_tool = BrowserTool(sandbox_manager.executor)
+                self.agent.register_tool("browser", self.agent.browser_tool.execute)
+            except Exception as e2:
+                logger.error(f"Failed to register any BrowserTool: {e2}")
 
         try:
             from backend.tools.web_tool import WebTool
@@ -60,6 +67,23 @@ class ToolInitializer:
             self.agent.register_tool("web_read", self.agent.web_tool.execute)
         except Exception as e:
             logger.error(f"Failed to register WebTool: {e}")
+
+        # --- Dominance tools (MCTS & Vision Critic) ---
+        try:
+            from backend.tools.mcts_snapshot_tool import MCTSSnapshotTool
+            self.agent.mcts_snapshot_tool = MCTSSnapshotTool(sandbox_manager.filesystem)
+            self.agent.register_tool("mcts_snapshot", self.agent.mcts_snapshot_tool.execute)
+            logger.info("MCTSSnapshotTool registered — Devin-level MCTS rollback active")
+        except Exception as e:
+            logger.error(f"Failed to register MCTSSnapshotTool: {e}")
+
+        try:
+            from backend.tools.vision_critic_tool import VisionCriticTool
+            self.agent.vision_critic_tool = VisionCriticTool(router=getattr(self.agent, 'router', None))
+            self.agent.register_tool("vision_critic", self.agent.vision_critic_tool.execute)
+            logger.info("VisionCriticTool registered — Manus-level visual grounding active")
+        except Exception as e:
+            logger.error(f"Failed to register VisionCriticTool: {e}")
 
         # --- Extended tools ---
         try:
@@ -105,6 +129,38 @@ class ToolInitializer:
             logger.info("CanvasEngine registered — Kimi-level presentations active")
         except Exception as e:
             logger.error(f"Failed to register CanvasEngine: {e}")
+
+        try:
+            from backend.agent.omnimodal_ingester import OmnimodalIngester
+            self.agent.omnimodal_ingester = OmnimodalIngester(router=getattr(self.agent, 'router', None))
+            self.agent.register_tool("omnimodal", self.agent.omnimodal_ingester.execute)
+            logger.info("OmnimodalIngester registered — Gen 4 true omnimodality active")
+        except Exception as e:
+            logger.error(f"Failed to register OmnimodalIngester: {e}")
+
+        try:
+            from backend.agent.tools.desktop_tool import DesktopTool
+            self.agent.desktop_tool = DesktopTool()
+            self.agent.register_tool("computer", self.agent.desktop_tool.execute)
+            logger.info("DesktopTool registered — Anthropic Computer Use API active")
+        except Exception as e:
+            logger.error(f"Failed to register DesktopTool: {e}")
+
+        try:
+            from backend.agent.tools.mutation_tool import MutationTool
+            self.agent.mutation_tool = MutationTool()
+            self.agent.register_tool("mutate_test", self.agent.mutation_tool.execute)
+            logger.info("MutationTool registered — Self-Healing TDD active")
+        except Exception as e:
+            logger.error(f"Failed to register MutationTool: {e}")
+
+        try:
+            from backend.agent.tools.swe_rag_tool import SWERagTool
+            self.agent.swe_rag_tool = SWERagTool()
+            self.agent.register_tool("swe_rag", self.agent.swe_rag_tool.execute)
+            logger.info("SWERagTool registered — Global RAG active")
+        except Exception as e:
+            logger.error(f"Failed to register SWERagTool: {e}")
 
         try:
             from backend.agent.tools.utility_tools import VideoTool, AudioTool, SheetsTool

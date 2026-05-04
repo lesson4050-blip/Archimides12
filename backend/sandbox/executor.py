@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 class PersistentShell:
     """Держит один bash процесс живым весь lifetime сессии."""
     
+    _sentinel_counter = 0  # Class-level monotonic counter
+    
     def __init__(self, container):
         self.container = container
         self._exec_id = None
@@ -43,22 +45,57 @@ class PersistentShell:
                 self._exec_id["Id"], detach=False, tty=True, socket=True
             )
         )
+        
+        # Inject ACI tools (SWE-agent style)
+        init_script = """
+function search_dir() {
+    grep -rnI "$1" .
+}
+function find_file() {
+    find . -type f -name "*$1*"
+}
+function str_replace_editor() {
+    python3 -c '
+import sys
+file, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(file, "r") as f: content = f.read()
+    if old in content:
+        with open(file, "w") as f: f.write(content.replace(old, new))
+        print("Replaced successfully")
+    else:
+        print("Error: old string not found in file")
+except Exception as e:
+    print("Error:", e)
+' "$1" "$2" "$3"
+}
+export -f search_dir find_file str_replace_editor
+"""
+        # We need to wait a tiny bit for the socket to be ready
+        await asyncio.sleep(0.5)
+        await self.run(init_script, timeout=5)
 
     async def run(self, command: str, timeout: int = 60) -> Dict[str, Any]:
         async with self._lock:
             if not self._socket:
                 return {"success": False, "error": "Shell not started"}
             
-            sentinel = f"__DONE_{id(command)}__"
+            PersistentShell._sentinel_counter += 1
+            sentinel = f"__DONE_{PersistentShell._sentinel_counter}__"
             full_cmd = f"{command}; echo {sentinel}\n"
             loop = asyncio.get_running_loop()
             
-            await loop.run_in_executor(None, 
-                lambda: self._socket._sock.send(full_cmd.encode()))
+            try:
+                await loop.run_in_executor(None, 
+                    lambda: self._socket._sock.send(full_cmd.encode()))
+            except (OSError, BrokenPipeError, ConnectionResetError) as e:
+                logger.error(f"Shell socket dead: {e}")
+                self._socket = None
+                return {"success": False, "error": f"Shell connection lost: {e}"}
             
             output = ""
-            deadline = asyncio.get_running_loop().time() + timeout
-            while asyncio.get_running_loop().time() < deadline:
+            deadline = loop.time() + timeout
+            while loop.time() < deadline:
                 try:
                     chunk = await asyncio.wait_for(
                         loop.run_in_executor(None, 
@@ -76,6 +113,10 @@ class PersistentShell:
                             return {"success": True, "output": output[:3000]}
                 except asyncio.TimeoutError:
                     continue
+                except (OSError, ConnectionResetError) as e:
+                    logger.error(f"Shell socket error during recv: {e}")
+                    self._socket = None
+                    return {"success": False, "error": f"Shell connection lost: {e}"}
                 except Exception as e:
                     logger.error(f"Exception during shell recv: {e}")
                     break

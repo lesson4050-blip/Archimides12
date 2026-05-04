@@ -401,7 +401,8 @@ class AgentOrchestrator:
                     logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
                     return await self._run_fast_mode(state, websocket_send)
                 
-                if mode == AgentMode.FAST:
+                if mode == AgentMode.FAST or strategy == "single":
+                    logger.info(f"[{session_id}] Strategy '{strategy}' matches fast execution.")
                     return await self._run_fast_mode(state, websocket_send)
                 
                 # Pass strategy to planning mode

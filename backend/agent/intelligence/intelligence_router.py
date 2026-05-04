@@ -205,6 +205,15 @@ class IntelligenceRouter:
             messages=cot_messages, task=task, min_proposers=3
         )
 
+        # FAST PATH: If MoA proposers hit consensus, skip Reflection entirely to save latency
+        if moa_result.get("consensus_hit"):
+            logger.info("Skipping reflection due to MoA consensus fast-path.")
+            return {
+                **moa_result,
+                "intelligence_mode": "moa_fast_path_no_reflection",
+                "proposer_count": moa_result.get("proposer_count", 1)
+            }
+
         reflected = await self.reflection.reflect_and_improve(
             original_messages=messages,
             initial_response=moa_result["text"],
