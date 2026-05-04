@@ -126,16 +126,22 @@ class DesktopTool:
                 
             elif action == "get_accessibility_tree":
                 # Manus-level OS accessibility parsing (Linux X11 fallback)
-                import subprocess
                 try:
-                    # Attempt to dump window tree using xwininfo
-                    result = subprocess.run(
-                        ["xwininfo", "-root", "-tree"], 
-                        capture_output=True, text=True, timeout=5
+                    # Attempt to dump window tree using xwininfo asynchronously
+                    process = await asyncio.create_subprocess_exec(
+                        "xwininfo", "-root", "-tree",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
                     )
-                    if result.returncode == 0:
-                        return {"success": True, "output": result.stdout[:2000] + "\n...[truncated]"}
-                    return {"success": False, "error": result.stderr}
+                    try:
+                        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        process.kill()
+                        return {"success": False, "error": "xwininfo command timed out after 5 seconds"}
+                        
+                    if process.returncode == 0:
+                        return {"success": True, "output": stdout.decode('utf-8')[:2000] + "\n...[truncated]"}
+                    return {"success": False, "error": stderr.decode('utf-8')}
                 except Exception as e:
                     return {"success": False, "error": f"Accessibility parsing failed: {e}"}
                 

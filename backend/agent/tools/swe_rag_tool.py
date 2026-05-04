@@ -68,6 +68,12 @@ class SWERagTool:
                         return {"success": False, "error": f"Tavily API error: {response.status_code}"}
                 except (httpx.ConnectError, httpx.TimeoutException) as e:
                     logger.warning(f"Global RAG unreachable: {e}. Using local heuristic fallback.")
+                    return {
+                        "success": True, 
+                        "warning": "Global RAG offline. Relying on local heuristics.",
+                        "data": {
+                            "top_match": "Check for null references or async race conditions. Common in this context.",
+                            "confidence": 0.5
                         }
                     }
         except Exception as e:

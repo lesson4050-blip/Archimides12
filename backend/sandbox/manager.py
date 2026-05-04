@@ -448,6 +448,24 @@ class SandboxManager:
             session = self._sessions.pop(session_id, None)
             if session:
                 active_sandboxes.dec()
+                shell = self._shells.pop(session_id, None)
+                if shell:
+                    shell.stop()
+                
+                # Вернуть в пул вместо docker rm
+                if hasattr(self, 'warm_pool'):
+                    try:
+                        await self.warm_pool.release(session.container)
+                        # Wake next queued session
+                        self._wake_next_queued()
+                        return  # не удаляем!
+                    except Exception:
+                        pass  # fallback to removal
+                
+                await self._stop_and_remove(session.container, session_id)
+
+            # Wake next queued session
+            self._wake_next_queued()
 
     async def scale_compute(self, session_id: str, complexity: str) -> bool:
         """
@@ -480,22 +498,6 @@ class SandboxManager:
             except Exception as e:
                 logger.error(f"Failed to scale compute for {session_id}: {e}")
                 return False
-                shell = self._shells.pop(session_id, None)
-                if shell:
-                    shell.stop()
-                
-                # Вернуть в пул вместо docker rm
-                if hasattr(self, 'warm_pool'):
-                    try:
-                        await self.warm_pool.release(session.container)
-                        return  # не удаляем!
-                    except Exception:
-                        pass  # fallback to removal
-                
-                await self._stop_and_remove(session.container, session_id)
-
-            # Wake next queued session
-            self._wake_next_queued()
 
     def touch_session(self, session_id: str):
         """Update last_activity timestamp. Called on every tool/message."""
