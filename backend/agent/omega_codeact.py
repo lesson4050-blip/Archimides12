@@ -211,30 +211,50 @@ class OmegaCodeAct:
         except Exception as e:
             return f"(format-patch unavailable: {e})"
     
-    def _get_repo_map(self, cwd: str) -> str:
+    def _get_repo_map(self, cwd: str, max_files: int = 60) -> str:
         """Static AST-based analysis to generate a structural map of the repository."""
         import ast
         import os
         repo_map = []
+        file_count = 0
+        
         for root, dirs, files in os.walk(cwd):
-            dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "venv", "node_modules", ".pytest_cache", ".venv")]
-            for file in files:
-                if file.endswith(".py"):
-                    file_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(file_path, cwd)
-                    try:
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            tree = ast.parse(f.read(), filename=file_path)
-                            classes = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
-                            funcs = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
-                            if classes or funcs:
-                                repo_map.append(f"File: {rel_path}")
-                                if classes:
-                                    repo_map.append(f"  Classes: {', '.join(classes[:10])}")
-                                if funcs:
-                                    repo_map.append(f"  Functions: {', '.join(funcs[:15])}")
-                    except Exception:
-                        pass
+            # Skip non-essential directories
+            dirs[:] = [d for d in dirs if d not in (
+                ".git", "__pycache__", "venv", "node_modules",
+                ".pytest_cache", ".venv", "dist", "build", "*.egg-info"
+            )]
+            # Prioritize source files over tests for the map
+            py_files = sorted([f for f in files if f.endswith(".py")])
+            
+            for file in py_files:
+                if file_count >= max_files:
+                    repo_map.append(f"... ({max_files}+ files, truncated)")
+                    return "\n".join(repo_map)[:8000]
+                
+                file_path = os.path.join(root, file)
+                rel_path = os.path.relpath(file_path, cwd)
+                file_count += 1
+                
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                        source = f.read()
+                    # Skip files larger than 100KB — likely generated
+                    if len(source) > 100_000:
+                        repo_map.append(f"{rel_path} [large file, skipped]")
+                        continue
+                    tree = ast.parse(source, filename=file_path)
+                    classes = [n.name for n in ast.walk(tree) 
+                               if isinstance(n, ast.ClassDef)]
+                    funcs = [n.name for n in ast.walk(tree) 
+                             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+                    size_kb = round(len(source) / 1024, 1)
+                    if classes or funcs:
+                        sym = ", ".join((classes + funcs)[:10])
+                        repo_map.append(f"{rel_path} [{size_kb}KB]: {sym}")
+                except Exception:
+                    repo_map.append(f"{rel_path} [parse error]")
+        
         return "\n".join(repo_map)[:8000]
     
     def _build_system_prompt(self, state: ExecutionState) -> str:
@@ -477,17 +497,54 @@ class OmegaCodeAct:
             
             # Проверить TASK_COMPLETE сигнал
             if TASK_COMPLETE_SIGNAL in agent_text:
-                # SWE-bench тесты пока не запускаем
-                patch = self._get_format_patch(cwd)
-                return {
-                    "success": True,
-                    "output": agent_text,
-                    "iterations": iteration,
-                    "duration": time.time() - start_time,
-                    "modified_files": state.modified_files,
-                    "final_diff": patch,
-                    "test_results": {"passed": 0, "failed": 0}
-                }
+                # Run targeted test first — not full suite (fast)
+                # Find which test file is relevant from modified_files
+                test_hint = None
+                for f in state.modified_files:
+                    test_candidate = f.replace("src/", "tests/").replace(".py", "_test.py")
+                    if os.path.exists(os.path.join(cwd, test_candidate)):
+                        test_hint = test_candidate
+                        break
+                
+                final_test, final_output = await self._run_tests(
+                    test_path=test_hint,  # targeted, not full suite
+                    cwd=cwd
+                )
+                
+                if final_test.all_pass or final_test.total == 0:
+                    # Tests pass — genuine completion
+                    patch = self._get_format_patch(cwd)
+                    return {
+                        "success": True,
+                        "output": agent_text,
+                        "iterations": iteration,
+                        "duration": time.time() - start_time,
+                        "modified_files": state.modified_files,
+                        "final_diff": patch,
+                        "test_results": {
+                            "passed": final_test.passed,
+                            "failed": final_test.failed
+                        }
+                    }
+                else:
+                    # Agent thinks it's done but tests still fail
+                    # Feed test results back and continue
+                    last_test_result = final_test
+                    last_output = final_output
+                    state.phase = "implement"
+                    
+                    feedback = (
+                        f"⚠️ Tests still failing after TASK_COMPLETE signal.\n"
+                        f"{final_test.passed} passed, {final_test.failed} failed.\n"
+                        f"Failed: {', '.join(final_test.failed_tests[:3])}\n"
+                        f"Continue fixing."
+                    )
+                    if websocket_send:
+                        await websocket_send({"type": "thought", "content": feedback})
+                    
+                    next_msg = self._build_context_message(state, final_output, final_test)
+                    history.append({"role": "user", "content": next_msg})
+                    continue   # don't return — keep iterating
             
             # Проверить VISION_QA сигнал
             if VISION_QA_SIGNAL in agent_text:
@@ -498,7 +555,19 @@ class OmegaCodeAct:
                         await websocket_send({"type": "info", "content": f"👁️ Visual QA: Analyzing {url}..."})
                     from backend.agent.vision_feedback import VisionFeedbackLoop
                     vision = VisionFeedbackLoop(self.router)
-                    vision_result = await vision.analyze_url(url, context="web application")
+                    try:
+                        vision_result = await asyncio.wait_for(
+                            vision.analyze_url(url, context="web application"),
+                            timeout=25  # max 25s for screenshot + vision analysis
+                        )
+                    except asyncio.TimeoutError:
+                        vision_result = {
+                            "analyzed": False,
+                            "reason": "Vision QA timed out after 25s",
+                            "has_problems": False,
+                            "quality_score": 0,
+                            "problems": []
+                        }
                     
                     if vision_result.get("analyzed"):
                         feedback = f"Visual QA Feedback for {url}:\n"
