@@ -19,38 +19,38 @@ class AgentNode:
         """
         logger.info(f"Spawning child AgentNode [Role: {role}] for task: {task[:50]}...")
         
-        # We create a new state for the child
         from backend.agent.orchestration.state import OrchestrationState, AgentMode
+        
+        # Fix: get session_id safely
+        session_id = getattr(self.parent, 'session_id', None) or "swarm-default"
+        
         child_state = OrchestrationState(
-            session_id=self.parent.context_manager.session_id,
+            session_id=f"{session_id}-{role}",
             task_description=f"[{role.upper()}] {task}",
             mode=AgentMode.FAST
         )
         
-        # Inject context into the child's memory
         if context:
             for k, v in context.items():
                 child_state.metadata[k] = v
-
-        # Execute the child agent process
+        
         try:
-            # We run process in a separate task but await it for the result
-            # For true parallel swarm, we'd fire & forget and listen to event_bus,
-            # but returning the output is cleaner for tool calls.
             result_state = await self.parent.process(child_state)
             
             output_history = [res.get("output", "") for res in result_state.results]
-            final_output = "\n".join(output_history[-3:]) if output_history else "No output generated."
+            final_output = "\n".join(output_history[-3:]) if output_history else "No output."
             
-            # Broadcast success via EventBus (T2T communication)
+            # Fix: use async emit instead of sync publish
             if hasattr(self.parent, "event_bus") and self.parent.event_bus:
-                self.parent.event_bus.publish("swarm_sync", {
-                    "role": role,
-                    "task": task,
-                    "status": "completed",
-                    "output_preview": final_output[:100]
-                })
-
+                try:
+                    await self.parent.event_bus.emit_progress(
+                        session_id=session_id,
+                        step=f"swarm_{role}_complete",
+                        data={"role": role, "output_preview": final_output[:100]}
+                    )
+                except Exception:
+                    pass  # EventBus failure must not kill swarm
+            
             return {
                 "success": True,
                 "role": role,
@@ -59,8 +59,4 @@ class AgentNode:
             }
         except Exception as e:
             logger.error(f"AgentNode swarm spawn failed for {role}: {e}")
-            return {
-                "success": False,
-                "role": role,
-                "error": str(e)
-            }
+            return {"success": False, "role": role, "error": str(e)}

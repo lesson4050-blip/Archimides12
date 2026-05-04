@@ -110,8 +110,9 @@ class ArchimedesCosmoAgent:
         self.max_retries: int = max_retries
         self.state: AgentState = AgentState.IDLE
         self.tasks: Dict[str, TaskPlan] = {}
+        from collections import deque
         self.results: Dict[str, ExecutionResult] = {}
-        self.execution_history: List[ExecutionResult] = []
+        self.execution_history: deque = deque(maxlen=500)
         self.memory: List[Dict[str, Any]] = []
         self.context: Dict[str, Any] = {}
         self.error_handlers: Dict[str, Callable] = {}
@@ -295,13 +296,7 @@ class ArchimedesCosmoAgent:
                 mode=mode.value,
             ))
             
-            # Cleanup session state
-            try:
-                from backend.agent.session_store import get_session_store
-                get_session_store().delete_session(self.session_id or "default")
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+            # Session lifecycle management should handle deletions, not task completion.
                 
         except Exception as e:
             logger.error(f"Task failed: {e}")

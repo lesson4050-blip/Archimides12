@@ -65,6 +65,15 @@ class CodeActExecutor:
             history.append({"role": "user", "content": task})
 
         all_outputs = []
+        
+        sandbox = None
+        try:
+            from backend.sandbox.e2b_sandbox import E2BSandbox
+            sandbox = E2BSandbox()
+            if hasattr(sandbox, 'start'):
+                await asyncio.to_thread(sandbox.start)
+        except Exception as e:
+            logger.warning(f"Sandbox init failed: {e}")
 
         for iteration in range(max_iterations):
             if websocket_send:
@@ -113,7 +122,7 @@ class CodeActExecutor:
             execution_results = []
             for code in code_blocks:
                 exec_result = await self._execute_code_safe(
-                    code, session_id, websocket_send
+                    code, session_id, websocket_send, sandbox=sandbox
                 )
                 execution_results.append(exec_result)
                 all_outputs.append(exec_result)
@@ -156,17 +165,28 @@ class CodeActExecutor:
         code: str,
         session_id: str,
         websocket_send=None,
+        sandbox=None
     ) -> Dict[str, Any]:
         """Execute Python code safely via sandbox."""
         try:
-            from backend.sandbox.e2b_sandbox import E2BSandbox
-            sandbox = E2BSandbox()
-            # Wrap synchronous run_command in executor to avoid blocking
+            if sandbox is None:
+                from backend.sandbox.e2b_sandbox import E2BSandbox
+                sandbox = E2BSandbox()
+            
             loop = asyncio.get_running_loop()
+            exec_cmd = f"python3 /tmp/_codeact_exec.py"
+            write_cmd = f"cat > /tmp/_codeact_exec.py << 'PYEOF'\n{code}\nPYEOF"
+            
+            _, _, _ = await loop.run_in_executor(
+                None,
+                sandbox.run_command,
+                write_cmd,
+                5
+            )
             stdout, stderr, returncode = await loop.run_in_executor(
                 None,
                 sandbox.run_command,
-                f"python3 -c {repr(code)}",
+                exec_cmd,
                 30
             )
             success = returncode == 0
