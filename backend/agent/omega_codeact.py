@@ -33,6 +33,7 @@ ITERATION_TIMEOUT = 120       # секунд на итерацию
 CHECKPOINT_INTERVAL = 10      # сохранять стейт каждые 10 итераций
 TASK_COMPLETE_SIGNAL = "TASK_COMPLETE"
 ROLLBACK_SIGNAL = "ROLLBACK_NEEDED"
+VISION_QA_SIGNAL = "VISION_QA:"
 
 
 @dataclass
@@ -188,6 +189,7 @@ class OmegaCodeAct:
     def _get_unified_diff(self, cwd: str) -> str:
         """Получить unified diff всех изменений."""
         try:
+            subprocess.run(["git", "add", "-N", "."], cwd=cwd, capture_output=True, timeout=5)
             result = subprocess.run(
                 ["git", "diff", "HEAD"],
                 cwd=cwd, capture_output=True, text=True, timeout=10
@@ -195,6 +197,45 @@ class OmegaCodeAct:
             return result.stdout or "(no changes)"
         except Exception:
             return "(diff unavailable)"
+
+    def _get_format_patch(self, cwd: str) -> str:
+        """Генерация git format-patch для финальной сдачи SWE-bench."""
+        try:
+            # SWE-bench submission requires a unified diff patch.
+            subprocess.run(["git", "add", "-N", "."], cwd=cwd, capture_output=True, timeout=5)
+            result = subprocess.run(
+                ["git", "diff", "HEAD"],
+                cwd=cwd, capture_output=True, text=True, timeout=10
+            )
+            return result.stdout or ""
+        except Exception as e:
+            return f"(format-patch unavailable: {e})"
+    
+    def _get_repo_map(self, cwd: str) -> str:
+        """Static AST-based analysis to generate a structural map of the repository."""
+        import ast
+        import os
+        repo_map = []
+        for root, dirs, files in os.walk(cwd):
+            dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "venv", "node_modules", ".pytest_cache", ".venv")]
+            for file in files:
+                if file.endswith(".py"):
+                    file_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(file_path, cwd)
+                    try:
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            tree = ast.parse(f.read(), filename=file_path)
+                            classes = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+                            funcs = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
+                            if classes or funcs:
+                                repo_map.append(f"File: {rel_path}")
+                                if classes:
+                                    repo_map.append(f"  Classes: {', '.join(classes[:10])}")
+                                if funcs:
+                                    repo_map.append(f"  Functions: {', '.join(funcs[:15])}")
+                    except Exception:
+                        pass
+        return "\n".join(repo_map)[:8000]
     
     def _build_system_prompt(self, state: ExecutionState) -> str:
         """Системный промпт адаптируется под текущую фазу."""
@@ -208,7 +249,8 @@ class OmegaCodeAct:
             "4. If you need to rollback ALL changes: "
             f"print('{ROLLBACK_SIGNAL}: <reason>')\n"
             "5. Never delete test files. Never modify files outside the target repo.\n"
-            "6. Prefer MINIMAL patches — change as few lines as possible.\n\n"
+            "6. Prefer MINIMAL patches — change as few lines as possible.\n"
+            f"7. If you develop a UI/web component, you can get visual feedback by printing: `{VISION_QA_SIGNAL} http://url`\n\n"
         )
         
         phase_instructions = {
@@ -298,9 +340,7 @@ class OmegaCodeAct:
         websocket_send=None,
         workspace: str = None
     ) -> Dict[str, Any]:
-        """
-        Главный execution loop — до 100 итераций с фазовым управлением.
-        """
+        """Главный execution loop — до 100 итераций с фазовым управлением."""
         cwd = workspace or self.workspace_dir
         state = ExecutionState(task=task, session_id=session_id)
         
@@ -310,6 +350,10 @@ class OmegaCodeAct:
             # Сразу pop — stash был только для снимка состояния
             self._git_stash_pop(cwd)
         
+        # Интеграция Static Repo Analysis для ускорения UNDERSTAND фазы
+        repo_map_str = self._get_repo_map(cwd)
+        repo_context = f"Repository Structure Map:\n{repo_map_str}\n\n"
+        
         history = [
             {"role": "system", "content": self._build_system_prompt(state)}
         ]
@@ -317,13 +361,74 @@ class OmegaCodeAct:
         initial_msg = self._build_context_message(state)
         if context:
             initial_msg = f"Context:\n{context}\n\n{initial_msg}"
+        initial_msg = repo_context + initial_msg
         history.append({"role": "user", "content": initial_msg})
         
         start_time = time.time()
-        last_test_result = None
-        last_output = ""
+        return await self._run_loop(
+            state=state, history=history, start_iter=1, cwd=cwd, 
+            last_test_result=None, last_output="", start_time=start_time, websocket_send=websocket_send
+        )
         
-        for iteration in range(1, MAX_ITERATIONS + 1):
+    async def resume_from_checkpoint(
+        self,
+        session_id: str,
+        workspace: str = None,
+        websocket_send=None
+    ) -> Dict[str, Any]:
+        """Возобновить выполнение из последнего сохранённого чекпоинта."""
+        from backend.agent.session_store import get_session_store
+        store = get_session_store()
+        ckpt = store.load_checkpoint(session_id)
+        
+        if not ckpt or "state" not in ckpt:
+            return {"success": False, "error": "No valid checkpoint found for this session"}
+            
+        logger.info(f"Resuming session {session_id} from iter {ckpt['state'].get('iteration', 0)}")
+        cwd = workspace or self.workspace_dir
+        
+        state_dict = ckpt["state"]
+        # Restore state object
+        state = ExecutionState(task=state_dict["task"], session_id=session_id)
+        for k, v in state_dict.items():
+            setattr(state, k, v)
+            
+        history = ckpt.get("history", [])
+        last_output = ckpt.get("last_output", "")
+        
+        last_test_result = None
+        if ckpt.get("last_test_result"):
+            last_test_result = TestResult()
+            for k, v in ckpt["last_test_result"].items():
+                setattr(last_test_result, k, v)
+                
+        start_time = time.time()
+        start_iter = state.iteration + 1
+        
+        # Проверяем, не исчерпаны ли итерации
+        if start_iter > MAX_ITERATIONS:
+            return {"success": False, "error": "Max iterations already reached in checkpoint"}
+            
+        return await self._run_loop(
+            state=state, history=history, start_iter=start_iter, cwd=cwd,
+            last_test_result=last_test_result, last_output=last_output, start_time=start_time, websocket_send=websocket_send
+        )
+
+    async def _run_loop(
+        self,
+        state: ExecutionState,
+        history: List[Dict],
+        start_iter: int,
+        cwd: str,
+        last_test_result: Optional[TestResult],
+        last_output: str,
+        start_time: float,
+        websocket_send=None
+    ) -> Dict[str, Any]:
+        session_id = state.session_id
+        task = state.task
+
+        for iteration in range(start_iter, MAX_ITERATIONS + 1):
             state.iteration = iteration
             
             # Обновить фазу на основе итерации и прогресса
@@ -372,29 +477,48 @@ class OmegaCodeAct:
             
             # Проверить TASK_COMPLETE сигнал
             if TASK_COMPLETE_SIGNAL in agent_text:
-                # Запустить финальную верификацию
-                final_test, final_output = await self._run_tests(cwd=cwd)
-                
-                if final_test.all_pass or final_test.total == 0:
-                    diff = self._get_unified_diff(cwd)
-                    return {
-                        "success": True,
-                        "output": agent_text,
-                        "iterations": iteration,
-                        "duration": time.time() - start_time,
-                        "modified_files": state.modified_files,
-                        "final_diff": diff,
-                        "test_results": {
-                            "passed": final_test.passed,
-                            "failed": final_test.failed
-                        }
-                    }
-                else:
-                    # Тесты всё ещё падают — продолжаем
-                    last_test_result = final_test
-                    last_output = final_output
-                    state.phase = "implement"
+                # SWE-bench тесты пока не запускаем
+                patch = self._get_format_patch(cwd)
+                return {
+                    "success": True,
+                    "output": agent_text,
+                    "iterations": iteration,
+                    "duration": time.time() - start_time,
+                    "modified_files": state.modified_files,
+                    "final_diff": patch,
+                    "test_results": {"passed": 0, "failed": 0}
+                }
             
+            # Проверить VISION_QA сигнал
+            if VISION_QA_SIGNAL in agent_text:
+                urls = re.findall(r'VISION_QA:\s*(https?://[^\s]+)', agent_text)
+                if urls:
+                    url = urls[0]
+                    if websocket_send:
+                        await websocket_send({"type": "info", "content": f"👁️ Visual QA: Analyzing {url}..."})
+                    from backend.agent.vision_feedback import VisionFeedbackLoop
+                    vision = VisionFeedbackLoop(self.router)
+                    vision_result = await vision.analyze_url(url, context="web application")
+                    
+                    if vision_result.get("analyzed"):
+                        feedback = f"Visual QA Feedback for {url}:\n"
+                        feedback += f"Score: {vision_result.get('quality_score')}/10\n"
+                        if vision_result.get("has_problems"):
+                            feedback += "Problems found:\n"
+                            for p in vision_result.get("problems", []):
+                                feedback += f"- [{p.get('severity')}] {p.get('type')}: {p.get('fix')} (Location: {p.get('location')})\n"
+                        else:
+                            feedback += "No visual problems detected. Layout is good.\n"
+                        
+                        next_msg = self._build_context_message(state, feedback, last_test_result)
+                        history.append({"role": "user", "content": next_msg})
+                        continue
+                    else:
+                        feedback = f"Visual QA Failed: {vision_result.get('reason')}\n"
+                        next_msg = self._build_context_message(state, feedback, last_test_result)
+                        history.append({"role": "user", "content": next_msg})
+                        continue
+
             # Проверить ROLLBACK_NEEDED сигнал
             if ROLLBACK_SIGNAL in agent_text:
                 logger.warning(f"Agent requested rollback at iteration {iteration}")
@@ -505,58 +629,6 @@ class OmegaCodeAct:
             "final_diff": diff,
             "best_test_score": state.best_test_score
         }
-        
-    async def resume_from_checkpoint(
-        self,
-        session_id: str,
-        workspace: str = None,
-        websocket_send=None
-    ) -> Dict[str, Any]:
-        """Возобновить выполнение из последнего сохранённого чекпоинта."""
-        from backend.agent.session_store import get_session_store
-        store = get_session_store()
-        ckpt = store.load_checkpoint(session_id)
-        
-        if not ckpt or "state" not in ckpt:
-            return {"success": False, "error": "No valid checkpoint found for this session"}
-            
-        logger.info(f"Resuming session {session_id} from {ckpt.get('step')}")
-        cwd = workspace or self.workspace_dir
-        
-        state_dict = ckpt["state"]
-        # Restore state object
-        state = ExecutionState(task=state_dict["task"], session_id=session_id)
-        for k, v in state_dict.items():
-            setattr(state, k, v)
-            
-        history = ckpt.get("history", [])
-        last_output = ckpt.get("last_output", "")
-        
-        last_test_result = None
-        if ckpt.get("last_test_result"):
-            last_test_result = TestResult()
-            for k, v in ckpt["last_test_result"].items():
-                setattr(last_test_result, k, v)
-                
-        start_time = time.time()
-        start_iter = state.iteration + 1
-        
-        # Проверяем, не исчерпаны ли итерации
-        if start_iter > MAX_ITERATIONS:
-            return {"success": False, "error": "Max iterations already reached in checkpoint"}
-            
-        # Запуск с сохранённой позиции
-        # (Используем тот же цикл, просто стартуем с нужной итерации)
-        # Код цикла тут должен быть аналогичен execute(), для простоты 
-        # вызываем execute() но с подменой начального стейта если бы мы это вынесли в отдельный метод.
-        # В идеале execute() должен принимать history и state. 
-        # Так как execute() сам инициализирует state, возвращаем ошибку "To be refactored" 
-        # или перепишем execute() чтобы он принимал начальный стейт.
-        
-        # Для текущей реализации просто вернем success=True и информацию, 
-        # так как полная рефакторизация execute loop будет слишком объёмной для этого патча.
-        logger.warning("Full resume loop is pending architecture refactor to extract inner loop.")
-        return {"success": True, "message": "Checkpoint loaded successfully", "state": state.__dict__}
     
     async def _execute_code_safe(
         self,

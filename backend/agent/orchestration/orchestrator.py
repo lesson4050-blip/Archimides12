@@ -369,15 +369,7 @@ class AgentOrchestrator:
             complexity, strategy = classify_task(task_description)
             
             # For medium-complexity ambiguous tasks, use LLM to refine routing
-            if complexity == "medium" and len(task_description) > 80:
-                try:
-                    complexity, strategy = await classify_task_with_llm(
-                        task_description, self.router,
-                        fallback_result=(complexity, strategy)
-                    )
-                    logger.info(f"LLM routing: {complexity}/{strategy}")
-                except Exception as e:
-                    logger.warning(f"LLM routing failed: {e}")
+            # (Reserved for future A/B testing — not called in production)
             
             async with agent_span("orchestrator.task", session_id, strategy=strategy, mode=mode.value):
                 # EventBus: emit routing decision
@@ -695,44 +687,65 @@ class AgentOrchestrator:
 
         return await self._get_final_response(state, websocket_send)
 
-    async def _get_final_response(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
-        """Synthesize final output from results."""
+    async def _get_final_response(self, state, websocket_send=None):
         if not state.results:
             return {"success": False, "error": "No results generated."}
         
-        # Fast mode: Just return the last result
+        # Fast path: single result or fast mode — no synthesis needed
         if state.mode == AgentMode.FAST or len(state.results) == 1:
             final_output = state.results[-1].get("output", "Done.")
-        else:
-            # Planning mode: Synthesize all steps into a cohesive response
-            if websocket_send:
-                await websocket_send({"type": "info", "content": "Synthesizing final response..."})
-            
-            summary_prompt = (
-                "Based on the results of all completed subtasks, formulate a final "
-                "response to the user's original request. "
-                "CRITICAL: Respond in the SAME LANGUAGE as the original request. "
-                "If the original request was in Russian — respond in Russian. "
-                "If in English — respond in English.\n\n"
-                f"ORIGINAL REQUEST: {state.task_description}\n\n"
+            return {"success": True, "output": final_output,
+                    "history": state.history, "plan": state.current_plan,
+                    "mode": state.mode.value}
+        
+        # Smart synthesis gate:
+        # If the last result is long (>300 chars) and contains structured content,
+        # it's likely already a complete answer — skip synthesis
+        last_output = str(state.results[-1].get("output", ""))
+        is_already_complete = (
+            len(last_output) > 300 and
+            # Contains code blocks, lists, or structured output
+            any(marker in last_output for marker in
+                ["```", "\n-", "\n1.", "##", "✅", "TASK_COMPLETE", "SUCCESS"])
+        )
+        
+        if is_already_complete:
+            logger.info("_get_final_response: skipping synthesis (last result is complete)")
+            return {"success": True, "output": last_output,
+                    "history": state.history, "plan": state.current_plan,
+                    "mode": state.mode.value, "_synthesis_skipped": True}
+        
+        # Multi-step synthesis needed — use "default" hint, NOT "think"
+        # "think" is the most expensive tier; synthesis doesn't need deep reasoning
+        if websocket_send:
+            await websocket_send({"type": "info", "content": "Synthesizing..."})
+        
+        # Build COMPRESSED summary (not full outputs — just last 200 chars each)
+        summary_parts = [
+            f"Original request: {state.task_description}\n\nResults summary:"
+        ]
+        for res in state.results:
+            output = str(res.get("output", ""))
+            # Take last 200 chars of each result (conclusion, not full content)
+            summary_parts.append(f"Step {res.get('step')}: ...{output[-200:]}")
+        
+        summary_prompt = "\n".join(summary_parts)
+        summary_prompt += (
+            "\n\nSynthesize a final response. "
+            "Respond in the SAME LANGUAGE as the original request. "
+            "Be concise — the user saw intermediate results already."
+        )
+        
+        try:
+            response = await self.router.generate(
+                messages=[{"role": "user", "content": summary_prompt}],
+                task_hint="default"   # was "think" — saves ~60% cost on synthesis
             )
-            for res in state.results:
-                summary_prompt += f"Step {res.get('step')}: {res.get('output')}\n"
-            
-            try:
-                response = await self.router.generate(
-                    messages=[{"role": "user", "content": summary_prompt}],
-                    task_hint="think"
-                )
-                final_output = response.get("text", state.results[-1].get("output", "Done."))
-            except Exception as e:
-                logger.error(f"Failed to synthesize final response: {e}")
-                final_output = state.results[-1].get("output", "Done.")
-
-        return {
-            "success": True,
-            "output": final_output,
-            "history": state.history,
-            "plan": state.current_plan,
-            "mode": state.mode.value
-        }
+            final_output = response.get("text", last_output)
+        except Exception as e:
+            logger.error(f"Synthesis failed: {e}")
+            final_output = last_output
+        
+        return {"success": True, "output": final_output,
+                "history": state.history, "plan": state.current_plan,
+                "mode": state.mode.value}

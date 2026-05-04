@@ -10,12 +10,22 @@ logger = logging.getLogger(__name__)
 MAX_TOOL_CALL_RETRIES = 3
 
 
+OLLAMA_TIMEOUT_MAP = {
+    "qwen2.5:32b": 180.0,
+    "qwen2.5-coder:32b": 180.0,
+    "qwen2.5:72b": 300.0,
+    "qwen2.5:7b": 60.0,
+    "default": 120.0
+}
+
 class OllamaClient:
     def __init__(self):
-        self.client = ollama.AsyncClient(
-            host=settings.OLLAMA_BASE_URL, timeout=15.0
-        )
+        # We will instantiate client dynamically in _get_client based on model to use OLLAMA_TIMEOUT_MAP
         self.model = settings.OLLAMA_MODEL
+
+    def _get_client(self, model_name: str) -> ollama.AsyncClient:
+        timeout = OLLAMA_TIMEOUT_MAP.get(model_name, OLLAMA_TIMEOUT_MAP["default"])
+        return ollama.AsyncClient(host=settings.OLLAMA_BASE_URL, timeout=timeout)
 
     # Task-specific model selection (if multiple models installed)
     TASK_MODELS = {
@@ -116,7 +126,8 @@ NEVER mix tool JSON with explanation text.
 
         # Only pass native tools if Ollama supports them for this model
         # We use text injection as primary method for reliability
-        return await self.client.chat(**chat_kwargs)
+        client = self._get_client(chat_kwargs["model"])
+        return await client.chat(**chat_kwargs)
 
 
     async def generate_with_tools(
@@ -173,7 +184,8 @@ NEVER mix tool JSON with explanation text.
                             "low_vram": False,
                         }
                     }
-                    response = await self.client.chat(**chat_kwargs)
+                    client = self._get_client(chat_kwargs["model"])
+                    response = await client.chat(**chat_kwargs)
                 else:
                     response = await self._call_model(messages, tools)
 
@@ -298,7 +310,8 @@ NEVER mix tool JSON with explanation text.
         # True streaming for non-tool responses
         messages = [msg.copy() for msg in messages]
         try:
-            stream = await self.client.chat(
+            client = self._get_client(self.model)
+            stream = await client.chat(
                 model=self.model,
                 messages=messages,
                 stream=True,
