@@ -448,6 +448,38 @@ class SandboxManager:
             session = self._sessions.pop(session_id, None)
             if session:
                 active_sandboxes.dec()
+
+    async def scale_compute(self, session_id: str, complexity: str) -> bool:
+        """
+        Devin-level Dynamic Compute: Adjusts CPU/RAM on the fly.
+        """
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if not session or not session.container:
+                return False
+                
+            limits = {
+                "low": {"mem_limit": "2g", "cpu_quota": 100000},
+                "medium": {"mem_limit": "4g", "cpu_quota": 200000},
+                "high": {"mem_limit": "8g", "cpu_quota": 400000},
+                "extreme": {"mem_limit": "16g", "cpu_quota": 800000}
+            }
+            
+            target = limits.get(complexity, limits["medium"])
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None, 
+                    session.container.update, 
+                    target["mem_limit"], 
+                    None, # memswap
+                    target["cpu_quota"]
+                )
+                logger.info(f"Dynamic Compute Scaled: {session_id} -> {complexity.upper()} ({target['mem_limit']} RAM)")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to scale compute for {session_id}: {e}")
+                return False
                 shell = self._shells.pop(session_id, None)
                 if shell:
                     shell.stop()

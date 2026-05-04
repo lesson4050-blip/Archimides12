@@ -265,10 +265,10 @@ class ExecutorAgent(BaseAgent):
                         while True:
                             img = ImageGrab.grab()
                             buf = io.BytesIO()
-                            img.save(buf, format='JPEG', quality=30)
+                            img.save(buf, format='JPEG', quality=20, optimize=True)
                             b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
                             await websocket_send({"type": "desktop_frame", "data": b64})
-                            await asyncio.sleep(0.5) # 2 FPS to prevent websocket flooding
+                            await asyncio.sleep(1/30) # Real-time 30FPS Perception
                     except Exception:
                         pass
                 import asyncio

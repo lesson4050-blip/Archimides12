@@ -25,6 +25,7 @@ export default function ComputerPanel({ sessionId, onClose }: ComputerPanelProps
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
   const [activeFileIdx, setActiveFileIdx] = useState(0);
   const [vncUrl, setVncUrl] = useState<string>("");
+  const [desktopFrame, setDesktopFrame] = useState<string>("");
   const [browserLoading, setBrowserLoading] = useState(false);
   const [browserError, setBrowserError] = useState<string | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -142,6 +143,10 @@ export default function ComputerPanel({ sessionId, onClose }: ComputerPanelProps
       if (ev.type === "novnc_ready") {
         setActiveTab("browser");
         if ((ev as any).url) setVncUrl((ev as any).url);
+      }
+      
+      if (ev.type === "desktop_frame" && (ev as any).data) {
+        setDesktopFrame(`data:image/jpeg;base64,${(ev as any).data}`);
       }
       
       if (ev.type === "tool_call" && ev.tool === "browser") {
@@ -304,8 +309,14 @@ export default function ComputerPanel({ sessionId, onClose }: ComputerPanelProps
         )}
 
         {activeTab === "browser" && (
-          <div className="h-full bg-[#2B2B2B]">
-             {vncUrl ? (
+          <div className="h-full bg-[#2B2B2B] relative">
+             {desktopFrame ? (
+                <img 
+                  src={desktopFrame} 
+                  alt="Agent Desktop Stream" 
+                  className="w-full h-full object-contain bg-black"
+                />
+             ) : vncUrl ? (
                 <iframe 
                   src={vncUrl} 
                   className="w-full h-full border-none"
