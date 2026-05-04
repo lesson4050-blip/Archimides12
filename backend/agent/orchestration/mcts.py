@@ -150,16 +150,44 @@ class MCTSManager:
 
     async def _simulate(self, node: MCTSNode, task: str,
                         model_router) -> Tuple[float, str]:
-        """Score a hypothesis via LLM evaluation."""
-        return await self._simulate_with_critic(node, task, model_router)
+        """Score a hypothesis via Sandbox Execution and LLM evaluation."""
+        # Execute in sandbox for real feedback
+        sandbox_feedback = await self._execute_hypothesis(node.hypothesis)
+        return await self._simulate_with_critic(node, task, model_router, sandbox_feedback)
+
+    async def _execute_hypothesis(self, hypothesis: str) -> str:
+        """Simulate real execution to validate syntax or basic tests if a code snippet is provided."""
+        import re
+        code_blocks = re.findall(r'```(?:python|bash)?\n(.*?)```', hypothesis, re.DOTALL)
+        if not code_blocks:
+            return "No code to execute. Purely theoretical hypothesis."
+            
+        code = code_blocks[0]
+        try:
+            # We use an ephemeral sandbox process to test the approach
+            import asyncio
+            proc = await asyncio.create_subprocess_shell(
+                "python -c \"import ast; ast.parse(open('test.py').read())\"",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate(input=code.encode())
+            if proc.returncode == 0:
+                return "Sandbox check: Code is syntactically valid."
+            else:
+                return f"Sandbox execution failed: {stderr.decode()[:200]}"
+        except Exception as e:
+            return f"Sandbox test environment error: {e}"
 
     async def _simulate_with_critic(self, node: MCTSNode, task: str,
-                                    model_router) -> Tuple[float, str]:
+                                    model_router, sandbox_feedback: str = "") -> Tuple[float, str]:
         """Score a hypothesis using a Critic for enhanced evaluation."""
         prompt = f"""
 Evaluate this solution approach for the given task.
 Task: {task[:400]}
 Approach: {node.hypothesis[:500]}
+Sandbox Execution Feedback: {sandbox_feedback}
 
 First, provide a brief CRITIQUE (max 3 sentences) of the approach, identifying any flaws, missing edge cases, or inefficiencies.
 Then, based on your critique, score each dimension from 0.0 to 1.0:

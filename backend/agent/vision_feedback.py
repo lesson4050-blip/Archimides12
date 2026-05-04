@@ -89,7 +89,7 @@ class VisionFeedbackLoop:
         Take screenshot of URL, analyze with Vision, return problems.
         Retries on transient failures.
         """
-        screenshot_b64 = await self._take_screenshot_with_retry(url, max_retries)
+        screenshot_b64, dom_snapshot = await self._take_screenshot_with_retry(url, max_retries)
         if not screenshot_b64:
             return {
                 "analyzed": False,
@@ -99,7 +99,7 @@ class VisionFeedbackLoop:
                 "problems": [],
             }
 
-        return await self._analyze_screenshot(screenshot_b64, context)
+        return await self._analyze_screenshot(screenshot_b64, dom_snapshot, context)
 
     async def analyze_pptx_slides(
         self,
@@ -245,25 +245,25 @@ class VisionFeedbackLoop:
 
     async def _take_screenshot_with_retry(
         self, url: str, max_retries: int = 2
-    ) -> Optional[str]:
-        """Screenshot with exponential backoff retry."""
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Screenshot with exponential backoff retry. Returns (screenshot_b64, dom_snapshot)."""
         for attempt in range(max_retries + 1):
-            result = await self._take_screenshot(url)
-            if result:
-                return result
+            screenshot_b64, dom_snapshot = await self._take_screenshot_and_dom(url)
+            if screenshot_b64:
+                return screenshot_b64, dom_snapshot
             if attempt < max_retries:
                 wait = 2 ** attempt  # 1s, 2s
                 logger.debug(f"Screenshot retry {attempt + 1}/{max_retries} in {wait}s")
                 await asyncio.sleep(wait)
-        return None
+        return None, None
 
-    async def _take_screenshot(self, url: str) -> Optional[str]:
+    async def _take_screenshot_and_dom(self, url: str) -> Tuple[Optional[str], Optional[str]]:
         """
-        Take screenshot via Playwright.
-        Returns base64 encoded JPEG or None.
+        Take screenshot via Playwright and extract DOM snapshot.
+        Returns (base64_jpeg, dom_snapshot_str).
         """
         if not await self._check_playwright():
-            return None
+            return None, None
 
         try:
             from playwright.async_api import async_playwright
@@ -280,30 +280,50 @@ class VisionFeedbackLoop:
                     wait_until="domcontentloaded",
                     timeout=15000,
                 )
-                # Wait for React/animations to settle
-                await page.wait_for_timeout(3000)
+                
+                # Extract DOM snapshot (Manus style DOM-awareness)
+                dom_snapshot = await page.evaluate('''() => {
+                    const cleanTree = (node) => {
+                        if (node.nodeType === 3) return node.textContent.trim();
+                        if (node.nodeType !== 1) return null;
+                        const tag = node.tagName.toLowerCase();
+                        if (['script', 'style', 'noscript', 'meta'].includes(tag)) return null;
+                        let attrs = {};
+                        if (node.id) attrs.id = node.id;
+                        if (node.className) attrs.class = node.className;
+                        let children = Array.from(node.childNodes).map(cleanTree).filter(n => n);
+                        if (children.length === 0 && Object.keys(attrs).length === 0) return tag;
+                        return { tag, attrs, children };
+                    };
+                    return JSON.stringify(cleanTree(document.body));
+                }''')
 
                 screenshot = await page.screenshot(
                     type="jpeg", quality=85
                 )
                 await browser.close()
-                return base64.b64encode(screenshot).decode()
+                return base64.b64encode(screenshot).decode(), dom_snapshot
         except Exception as e:
-            logger.warning(f"Playwright screenshot failed: {e}")
-            return None
+            logger.warning(f"Playwright screenshot/DOM failed: {e}")
+            return None, None
 
     async def _analyze_screenshot(
         self,
         screenshot_b64: str,
+        dom_snapshot: str,
         context: str,
     ) -> Dict[str, Any]:
-        """Send screenshot to Vision model for analysis."""
+        """Send screenshot and DOM to Vision model for analysis."""
         try:
             from backend.models.gemini_client import GeminiClient
             gemini = GeminiClient()
+            
+            prompt = VISION_PROMPT.format(context=context)
+            if dom_snapshot:
+                prompt += f"\n\nDOM Context (for element IDs and accurate structural checks):\n{dom_snapshot[:4000]}"
 
             response = await gemini.generate_with_image(
-                prompt=VISION_PROMPT.format(context=context),
+                prompt=prompt,
                 image_base64=screenshot_b64,
                 image_mime_type="image/jpeg",
             )

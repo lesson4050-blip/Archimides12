@@ -286,6 +286,12 @@ class AgentOrchestrator:
             )
             if "strategy" in result:
                 strategy = result["strategy"]
+            
+            # Record in Flywheel
+            from backend.agent.flywheel import flywheel
+            history = result.get("history", [])
+            flywheel.record_session(session_id, task_description, result, history)
+            
             return result
         except asyncio.TimeoutError:
             agent_timeouts_total.inc()
