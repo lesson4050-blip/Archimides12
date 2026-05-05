@@ -48,18 +48,12 @@ class ToolInitializer:
             logger.error(f"Failed to register ShellTool: {e}")
 
         try:
-            from backend.agent.tools.native_browser import NativeBrowserTool
-            self.agent.browser_tool = NativeBrowserTool()
+            from backend.agent.tools.browser_tool import BrowserTool
+            self.agent.browser_tool = BrowserTool(sandbox_manager)
             self.agent.register_tool("browser", self.agent.browser_tool.execute)
-            logger.info("NativeBrowserTool registered (TCP socket, <5ms latency)")
+            logger.info("BrowserTool (Gen 4) registered — socket-level control active")
         except Exception as e:
-            logger.warning(f"NativeBrowserTool unavailable ({e}), falling back to legacy BrowserTool")
-            try:
-                from backend.tools.browser_tool import BrowserTool
-                self.agent.browser_tool = BrowserTool(sandbox_manager.executor)
-                self.agent.register_tool("browser", self.agent.browser_tool.execute)
-            except Exception as e2:
-                logger.error(f"Failed to register any BrowserTool: {e2}")
+            logger.error(f"Failed to register BrowserTool: {e}")
 
         try:
             from backend.tools.web_tool import WebTool
@@ -443,9 +437,13 @@ class ToolInitializer:
         logger.info("ToolInitializer: all tools registered")
 
         # Auto-discover any additional tools
-        try:
-            new_count = self.tool_registry.auto_discover_tools("backend/tools")
-            if new_count > 0:
-                logger.info(f"ToolInitializer: auto-discovered {new_count} additional tools")
-        except Exception as e:
-            logger.debug(f"Auto-discovery skipped: {e}")
+        # Auto-discover additional tools from both directories
+        for path in ["backend/tools", "backend/agent/tools"]:
+            try:
+                new_count = self.tool_registry.auto_discover_tools(path)
+                if new_count > 0:
+                    logger.info(f"ToolInitializer: auto-discovered {new_count} tools from {path}")
+            except Exception as e:
+                logger.debug(f"Auto-discovery in {path} skipped: {e}")
+
+        logger.info("ToolInitializer: all tools registered")

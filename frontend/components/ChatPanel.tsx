@@ -103,7 +103,7 @@ export default function ChatPanel({
         onToggleComputer={onToggleComputer}
       />
 
-      <div className={`flex-1 flex flex-col items-center overflow-y-auto custom-scrollbar px-4 transition-all duration-700 ${store.messages.length === 0 ? "justify-center pt-[10vh]" : "pt-10 pb-40"}`}>
+      <div className={`flex-1 flex flex-col items-center overflow-y-auto custom-scrollbar px-4 transition-all duration-700 ${store.messages.length === 0 ? "justify-center pt-[10vh]" : "pt-10 pb-[22rem]"}`}>
         {store.messages.length === 0 ? (
           <EmptyState 
             currentMode={currentMode}

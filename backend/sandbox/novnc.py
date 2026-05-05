@@ -3,7 +3,7 @@ import asyncio
 import os
 import io
 import tarfile
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from backend.sandbox.executor import SandboxExecutor
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,46 @@ x11vnc -display :1 -nopw -forever -shared -rfbport 5900 -bg
             "url": f"http://localhost:{port}/vnc.html?autoconnect=true&reconnect=true",
             "output": "Desktop streaming started successfully."
         }
+
+    async def take_screenshot(self, session_id: str) -> Optional[str]:
+        """Captures a screenshot of the display :1 and returns base64."""
+        logger.info(f"Capturing screenshot for session {session_id}...")
+        
+        # 1. Use import (ImageMagick) or scrot inside the container
+        # We try to use xwd + convert if available, or just scrot
+        capture_cmd = "export DISPLAY=:1; scrot /tmp/screenshot.png"
+        res = await self.executor.run_command(session_id, capture_cmd)
+        
+        if not res.get("success"):
+            # Fallback to xwd if scrot fails
+            capture_cmd = "export DISPLAY=:1; xwd -root -out /tmp/screen.xwd"
+            await self.executor.run_command(session_id, capture_cmd)
+        
+        # 2. Pull the file from container
+        container = await self.executor.manager.get_container(session_id)
+        if not container:
+            return None
+
+        try:
+            # We use docker-py get_archive to pull the file
+            bits, stat = container.get_archive("/tmp/screenshot.png")
+            
+            import io
+            import tarfile
+            import base64
+            
+            with io.BytesIO() as bio:
+                for chunk in bits:
+                    bio.write(chunk)
+                bio.seek(0)
+                with tarfile.open(fileobj=bio) as tar:
+                    member = tar.getmember("screenshot.png")
+                    f = tar.extractfile(member)
+                    if f:
+                        return base64.b64encode(f.read()).decode("utf-8")
+        except Exception as e:
+            logger.debug(f"Screenshot extraction failed: {e}")
+            return None
 
     async def stop_streaming(self, session_id: str):
         # Kill fluxbox, x11vnc, websockify, Xvfb

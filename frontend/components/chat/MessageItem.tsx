@@ -6,14 +6,14 @@ import ReactMarkdown from "react-markdown";
 import MessagePill from "../MessagePill";
 import { useAppStore, Message } from "@/lib/store";
 
-const MessageItem = memo(({ msg }: { msg: Message }) => {
+const MessageItem = memo(({ msg, isConsecutive }: { msg: Message, isConsecutive?: boolean }) => {
   const { setViewingArtifact } = useAppStore();
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+      className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"} ${isConsecutive ? "-mt-4" : ""}`}
     >
       {msg.role === "user" ? (
         <div className="bg-[#2B2B2B] text-white/90 px-5 py-3 rounded-[24px] max-w-[85%] text-[15px] font-medium leading-relaxed rounded-tr-sm">
@@ -22,15 +22,19 @@ const MessageItem = memo(({ msg }: { msg: Message }) => {
       ) : msg.type === "artifact" && msg.artifactData ? (
         <div className="flex gap-4 w-full max-w-[90%] group">
           <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center mt-0.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20 flex items-center justify-center group overflow-hidden">
-               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400 group-hover:scale-110 group-hover:rotate-12 transition-all duration-300 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
-            </div>
+            {!isConsecutive && (
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20 flex items-center justify-center group overflow-hidden">
+                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400 group-hover:scale-110 group-hover:rotate-12 transition-all duration-300 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
+              </div>
+            )}
           </div>
           <div className="flex flex-col gap-1 w-full">
-            <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
-              archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
-            </div>
-            <div className="mt-2">
+            {!isConsecutive && (
+              <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
+                archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
+              </div>
+            )}
+            <div className={!isConsecutive ? "mt-2" : "mt-0"}>
               <button
                  onClick={() => setViewingArtifact(msg.artifactData!)}
                  className="flex items-center gap-3 px-4 py-3 bg-[#1A1B26] border border-[#2A2B3D] rounded-xl hover:border-blue-500/40 hover:bg-[#1E1F2E] transition-all cursor-pointer group/artifact w-fit max-w-full"
@@ -50,15 +54,19 @@ const MessageItem = memo(({ msg }: { msg: Message }) => {
       ) : (
         <div className="flex gap-4 w-full max-w-[90%] group">
           <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center mt-0.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20 flex items-center justify-center group overflow-hidden">
-               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400 group-hover:scale-110 group-hover:rotate-12 transition-all duration-300 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
-            </div>
+            {!isConsecutive && (
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20 flex items-center justify-center group overflow-hidden">
+                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400 group-hover:scale-110 group-hover:rotate-12 transition-all duration-300 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
+              </div>
+            )}
           </div>
           <div className="flex flex-col gap-1 w-full">
-            <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
-              archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
-            </div>
-            <div className="mt-2">
+            {!isConsecutive && (
+              <div className="flex items-center gap-2 text-sm text-gray-500 font-medium tracking-wide">
+                archimedes <span className="bg-[#262626] text-[10px] px-1.5 py-0.5 rounded text-gray-400">Lite</span>
+              </div>
+            )}
+            <div className={!isConsecutive ? "mt-2" : "mt-0"}>
               {(msg.type === "thought" || msg.type === "tool" || msg.type === "plan") ? (
                 <MessagePill type={msg.type} content={msg.content} />
               ) : msg.type === "file_download" ? (

@@ -164,6 +164,16 @@ export default function ComputerPanel({ sessionId, onClose }: ComputerPanelProps
     }
   }, [terminalLogs, activeTab]);
 
+  // Auto-retry VNC until ready
+  useEffect(() => {
+    if (activeTab === "browser" && !vncUrl && !desktopFrame) {
+      const interval = setInterval(() => {
+        retryVnc();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, vncUrl, desktopFrame]);
+
   // Retry VNC connection
   const retryVnc = async () => {
     setBrowserLoading(true);
@@ -180,7 +190,11 @@ export default function ComputerPanel({ sessionId, onClose }: ComputerPanelProps
         }
       } else {
         const data = await res.json().catch(() => ({}));
-        setBrowserError(data.detail || "Docker-контейнер ещё не готов или графическая сессия не активна.");
+        let errStr = data.detail || "Docker-контейнер ещё не готов или графическая сессия не активна.";
+        if (errStr === "VNC URL not found for session") {
+          errStr = "Песочница или графическая сессия пока не запущены.";
+        }
+        setBrowserError(errStr);
       }
     } catch {
       setBrowserError("Бэкенд недоступен. Проверьте подключение.");

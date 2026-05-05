@@ -150,7 +150,12 @@ class MemoryRouter:
         
         if memory_type == "episodic" and self._vector_store:
             try:
-                fact = f"Task: {task[:200]}\nResult: {result[:300]}"
+                # Experience Compression: Summarize result before storing if it's long
+                summarized_result = result
+                if len(result) > 500:
+                    summarized_result = await self._summarize_result(task, result)
+                
+                fact = f"Task: {task[:300]}\nLessons Learned: {summarized_result}"
                 await self._vector_store.add_fact(
                     fact,
                     metadata={"session_id": self.session_id, 
@@ -161,6 +166,25 @@ class MemoryRouter:
                 logger.warning(f"Episodic store failed: {e}")
         
         return False
+
+    async def _summarize_result(self, task: str, result: str) -> str:
+        """Compresses task execution result into key findings and lessons."""
+        from backend.models.model_router import get_model_router
+        router = get_model_router()
+        prompt = f"""Summarize the outcome of this task for future reference (Lessons Learned).
+Task: {task}
+Result: {result}
+
+Extract ONLY the most important technical findings, pitfalls, or verified facts. 
+Be extremely concise (max 3 sentences)."""
+        try:
+            response = await router.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_hint="quick"
+            )
+            return response.get("text", result[:300])
+        except Exception:
+            return result[:300]
 
     async def get_context_string(self, task: str, max_tokens: int = 2000) -> str:
         """Convenience method — returns combined context as string."""

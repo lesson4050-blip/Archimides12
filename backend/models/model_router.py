@@ -196,6 +196,17 @@ class ModelRouter:
                 
         raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
 
+    async def generate_with_image(
+        self,
+        prompt: str,
+        image_base64: str,
+        image_mime_type: str = "image/jpeg"
+    ) -> Dict[str, Any]:
+        """Routes vision requests to a multimodal model (Gemini)."""
+        if self.gemini:
+            return await self.gemini.generate_with_image(prompt, image_base64, image_mime_type)
+        return {"text": "No vision model available", "error": "gemini_not_configured"}
+
 _router_instance: Optional[ModelRouter] = None
 
 def get_model_router() -> ModelRouter:

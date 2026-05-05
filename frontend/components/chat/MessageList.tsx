@@ -15,9 +15,10 @@ export default function MessageList({
   return (
     <div className="w-full max-w-3xl flex flex-col gap-6">
       <AnimatePresence>
-        {messages.map((msg, idx) => (
-          <MessageItem key={idx} msg={msg} />
-        ))}
+        {messages.map((msg, idx) => {
+          const isConsecutive = idx > 0 && messages[idx - 1].role === msg.role && msg.role === "assistant";
+          return <MessageItem key={idx} msg={msg} isConsecutive={isConsecutive} />;
+        })}
         
         {isWorking && (
           <motion.div 

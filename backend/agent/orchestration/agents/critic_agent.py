@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 from backend.agent.orchestration.agents.base import BaseAgent
 from backend.agent.orchestration.state import OrchestrationState
 from backend.models.model_router import ModelRouter
@@ -23,8 +23,9 @@ class CriticAgent(BaseAgent):
     # Minimum output length to trigger full review (trivial outputs auto-pass)
     AUTO_PASS_THRESHOLD = 50
 
-    def __init__(self, router: ModelRouter):
+    def __init__(self, router: ModelRouter, tool_registry: Optional[Any] = None):
         super().__init__("Critic", router)
+        self.tool_registry = tool_registry
 
     REVIEW_PROMPT = """
 You are a senior code reviewer and quality gate. 
@@ -37,6 +38,7 @@ EXECUTION LOGS (Tool results, errors, internal thoughts):
 ---
 {logs}
 ---
+{visual_instruction}
 
 FINAL AGENT RESPONSE:
 ---
@@ -103,19 +105,42 @@ IMPORTANT: Respond in the SAME LANGUAGE as the original task description.
         
         logs_str = "\n".join(logs) if logs else "No execution logs available."
 
+        # 1. Capture Visual Context if sandbox is active
+        screenshot_b64 = None
+        if self.tool_registry and hasattr(self.tool_registry, "sandbox"):
+            try:
+                # Only take screenshot if UI tools were likely used
+                if any(k in logs_str.lower() for k in ["ui", "html", "css", "react", "view", "render"]):
+                    screenshot_b64 = await self.tool_registry.sandbox.novnc.take_screenshot(state.session_id)
+            except Exception as e:
+                logger.debug(f"Visual capture skipped: {e}")
+
+        visual_instruction = ""
+        if screenshot_b64:
+            visual_instruction = "\nVISUAL VERIFICATION: An image of the current sandbox state is attached. Verify that the UI/UX matches the code and requirements."
+
         prompt = self.REVIEW_PROMPT.format(
             task=state.task_description,
             logs=logs_str,
+            visual_instruction=visual_instruction,
             answer=truncated,
             attempt=state.current_retry_count + 1,
             max_attempts=max_retries
         )
 
         try:
-            response = await self.router.generate(
-                messages=[{"role": "user", "content": prompt}],
-                task_hint="think"
-            )
+            if screenshot_b64:
+                # Multimodal Review (Vision)
+                response = await self.router.generate_with_image(
+                    prompt=prompt,
+                    image_base64=screenshot_b64
+                )
+            else:
+                # Standard Text Review
+                response = await self.router.generate(
+                    messages=[{"role": "user", "content": prompt}],
+                    task_hint="think"
+                )
 
             review_text = response.get("text", "")
 

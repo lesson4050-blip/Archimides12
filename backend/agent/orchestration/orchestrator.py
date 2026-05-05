@@ -7,6 +7,7 @@ from backend.agent.orchestration.state import OrchestrationState, AgentMode
 from backend.agent.orchestration.agents.planner_agent import PlannerAgent
 from backend.agent.orchestration.agents.executor_agent import ExecutorAgent
 from backend.agent.orchestration.agents.critic_agent import CriticAgent
+from backend.agent.orchestration.agents.supervisor_agent import SupervisorAgent
 from backend.agent.orchestration.agents.verification_agent import VerificationAgent
 from backend.agent.orchestration.mcts import MCTSManager
 from backend.models.model_router import ModelRouter, get_model_router
@@ -248,7 +249,9 @@ class AgentOrchestrator:
         self.tool_registry = tool_registry
         self.planner = PlannerAgent(router)
         self.executor = ExecutorAgent(router, tool_registry, context_manager, self.blackboard, event_bus=None, security_gate=None)  # Updated below
-        self.critic = CriticAgent(router)
+        self.critic = CriticAgent(router, tool_registry=tool_registry)
+        self.supervisor = SupervisorAgent(router)
+        self.verifier = VerificationAgent(router)
         from backend.agent.orchestration.swarm import MicroAgentSwarm
         self.swarm = MicroAgentSwarm(router, tool_registry=tool_registry)
         self.mcts_manager = MCTSManager(workspace_dir=".")
