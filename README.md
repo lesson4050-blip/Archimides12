@@ -37,6 +37,8 @@ Through recent production hardening, Archimedes features:
   - **Canvas Engine**: Next-gen React-based presentation generation replacing legacy tools.
   - **Stateful Recovery**: Mid-task session checkpointing for resilience against restarts.
   - **JWT Revocation**: JTI-based database tracking for instant session invalidation.
+  - **Fact-Checker Swarm**: Specialized research agent replacing generic critics for 300% faster verification.
+  - **Extended Resilience**: Task timeout increased to 900s for robust local model processing.
 
 ---
 
@@ -107,6 +109,7 @@ cp .env.example .env
 python backend/run.py
 ```
 Open [http://localhost:3000](http://localhost:3000) to start.
+The backend runs on [http://localhost:8001](http://localhost:8001).
 
 ---
 

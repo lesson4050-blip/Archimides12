@@ -154,6 +154,12 @@ async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, s
 
     # Signal 3: LLM Classification (The "Brain")
     if router:
+        # Emit a status update if this might take a while
+        try:
+             import asyncio
+             # We can't easily emit to event_bus from here without passing it, 
+             # so we'll just rely on the existing logging for now.
+        except: pass
         try:
             prompt = f"""Classify this AI Agent task: "{text[:500]}"
 Available strategies: swarm_code (multi-file coding), swarm_research (web search/analysis), codeact (single file fix), direct (chat/greeting), single (simple script).
@@ -303,7 +309,7 @@ class AgentOrchestrator:
                        websocket_send: Optional[Callable] = None,
                        task_hint: str = "default",
                        stream: bool = False) -> Dict[str, Any]:
-        TIMEOUT = int(os.environ.get("AGENT_TASK_TIMEOUT", "300"))
+        TIMEOUT = int(os.environ.get("AGENT_TASK_TIMEOUT", "900"))
         import time
         from backend.metrics import agent_task_duration, agent_timeouts_total
         start = time.time()

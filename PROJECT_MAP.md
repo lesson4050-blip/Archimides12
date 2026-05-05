@@ -17,6 +17,8 @@
 
 ### 📄 `Dockerfile`
 
+### 📄 `PROJECT_MAP.md`
+
 ### 📄 `pytest.ini`
 
 ### 📄 `README.md`
@@ -25,19 +27,12 @@
 
 ### 📄 `skills-lock.json`
 
-### 📄 `tests_failure.log`
-
-### 📄 `test_phase9.py`
-**Functions:** `test_confidence`
-
 ## 📁 backend
 ### 📄 `backend\alembic.ini`
 
 ### 📄 `backend\config.py`
 **Classes:**
 - `Settings` (Methods: validate_and_isolate)
-
-### 📄 `backend\fix_exceptions.py`
 
 ### 📄 `backend\main.py`
 
@@ -48,15 +43,6 @@
 
 ### 📄 `backend\telemetry.py`
 **Functions:** `init_telemetry`
-
-### 📄 `backend\test_codeact.py`
-**Classes:**
-- `MockRouter` (Methods: )
-
-### 📄 `backend\test_mcts.py`
-**Classes:**
-- `MockRouter` (Methods: )
-- `MockOrchestrator` (Methods: )
 
 ### 📄 `backend\agent\agent_profiles.py`
 **Functions:** `get_profile`
@@ -260,7 +246,6 @@
 - `SWEBenchTask` (Methods: )
 - `SWEBenchResult` (Methods: )
 - `SWEBenchAdapter` (Methods: __init__, _build_prompt, _save_result)
-**Functions:** `load_swe_bench_tasks`
 
 ### 📄 `backend\benchmarks\__init__.py`
 
@@ -755,7 +740,7 @@
 ### 📄 `backend\agent\orchestration\orchestrator.py`
 **Classes:**
 - `AgentOrchestrator` (Methods: __init__, _check_budget)
-**Functions:** `get_parallel_semaphore, _run_mcts_subprocess, is_conversational, classify_task`
+**Functions:** `get_parallel_semaphore, _run_mcts_subprocess, is_conversational`
 
 ### 📄 `backend\agent\orchestration\sandbox_action_runner.py`
 **Classes:**
@@ -782,6 +767,10 @@
 - `SkillEngine` (Methods: __init__, _init_chroma, _load_all_skills, extract_and_save_skill, _advanced_templatize...)
 
 ### 📄 `backend\agent\skills\__init__.py`
+
+### 📄 `backend\agent\tools\browser_tool.py`
+**Classes:**
+- `BrowserTool` (Methods: __init__, get_definition)
 
 ### 📄 `backend\agent\tools\canvas_engine.py`
 **Classes:**
@@ -853,6 +842,10 @@
 - `_Phase` (Methods: )
 - `_PlanResponse` (Methods: )
 - `PlannerAgent` (Methods: __init__)
+
+### 📄 `backend\agent\orchestration\agents\supervisor_agent.py`
+**Classes:**
+- `SupervisorAgent` (Methods: __init__)
 
 ### 📄 `backend\agent\orchestration\agents\tool_models.py`
 **Classes:**
@@ -931,7 +924,7 @@
 ### 📄 `cosmo_artist\app\apple-icon.png`
 
 ### 📄 `cosmo_artist\app\ConfigurationInitializer.tsx`
-**Functions:** `checkIfSelectedCustomModelIsAvailable, fetchUserConfigState, setLoadingToFalseAfterNavigatingTo`
+**Functions:** `setLoadingToFalseAfterNavigatingTo, checkIfSelectedCustomModelIsAvailable, fetchUserConfigState`
 
 ### 📄 `cosmo_artist\app\favicon.ico`
 
@@ -962,19 +955,19 @@
 **Functions:** `Announcement`
 
 ### 📄 `cosmo_artist\components\AnthropicConfig.tsx`
-**Functions:** `onApiKeyChange, fetchAvailableModels`
+**Functions:** `fetchAvailableModels, onApiKeyChange`
 
 ### 📄 `cosmo_artist\components\BackBtn.tsx`
 **Functions:** `BackBtn`
 
 ### 📄 `cosmo_artist\components\CodexConfig.tsx`
-**Functions:** `handleSignOut, applyProfile, handleManualExchange, handleCancelPolling, handleSignIn, stopPolling, checkCurrentAuthStatus, handleRefreshToken`
+**Functions:** `applyProfile, stopPolling, handleSignOut, handleSignIn, handleCancelPolling, handleManualExchange, handleRefreshToken, checkCurrentAuthStatus`
 
 ### 📄 `cosmo_artist\components\CustomConfig.tsx`
-**Functions:** `onApiKeyChange, fetchCustomModels, onUrlChange`
+**Functions:** `fetchCustomModels, onApiKeyChange, onUrlChange`
 
 ### 📄 `cosmo_artist\components\GoogleConfig.tsx`
-**Functions:** `onApiKeyChange, fetchAvailableModels`
+**Functions:** `fetchAvailableModels, onApiKeyChange`
 
 ### 📄 `cosmo_artist\components\Header.tsx`
 **React Components:** `Header`
@@ -985,7 +978,7 @@
 **Functions:** `ImageSelectionConfig, renderQualitySelector`
 
 ### 📄 `cosmo_artist\components\LLMSelection.tsx`
-**Functions:** `handleApiKeyInputChange, needsModelSelection, handleProviderChange, getApiKeyValue, input_field_changed, needsProviderApiKey`
+**Functions:** `getApiKeyValue, handleProviderChange, input_field_changed, needsModelSelection, needsProviderApiKey, handleApiKeyInputChange`
 
 ### 📄 `cosmo_artist\components\MarkDownRender.tsx`
 **Functions:** `parseMarkdown`
@@ -995,7 +988,7 @@
 **Functions:** `fetchOllamaModels`
 
 ### 📄 `cosmo_artist\components\OpenAIConfig.tsx`
-**Functions:** `onApiKeyChange, fetchAvailableModels`
+**Functions:** `fetchAvailableModels, onApiKeyChange`
 
 ### 📄 `cosmo_artist\components\ToolTip.tsx`
 **Functions:** `ToolTip`
@@ -1062,7 +1055,7 @@
 ### 📄 `cosmo_artist\types\llm_config.ts`
 
 ### 📄 `cosmo_artist\types\pptx_models.ts`
-**Functions:** `createPptxPositionForTextbox, positionToPtList, positionToPtXyxy, createPptxSpacingAll`
+**Functions:** `createPptxPositionForTextbox, positionToPtList, createPptxSpacingAll, positionToPtXyxy`
 
 ### 📄 `cosmo_artist\types\presentation.ts`
 
@@ -1081,10 +1074,10 @@
 ### 📄 `cosmo_artist\utils\providerConstants.ts`
 
 ### 📄 `cosmo_artist\utils\providerUtils.ts`
-**Functions:** `pollOnce, onAbort, updateLLMConfig, checkIfSelectedOllamaModelIsPulled, cleanup, resetDownloadingModel, pullOllamaModel, changeProvider`
+**Functions:** `changeProvider, cleanup, resetDownloadingModel, pollOnce, onAbort, pullOllamaModel, updateLLMConfig, checkIfSelectedOllamaModelIsPulled`
 
 ### 📄 `cosmo_artist\utils\storeHelpers.ts`
-**Functions:** `handleSaveLLMConfig, hasValidLLMConfig, getLLMConfigValidationError`
+**Functions:** `hasValidLLMConfig, handleSaveLLMConfig, getLLMConfigValidationError`
 
 ### 📄 `cosmo_artist\utils\theme-registry.ts`
 **Functions:** `getThemeVariables`
@@ -1251,7 +1244,7 @@
 ### 📄 `cosmo_artist\app\hooks\compileLayout.ts`
 
 ### 📄 `cosmo_artist\app\hooks\useCustomTemplates.ts`
-**Functions:** `fetchPreviews, fetchPromise, run`
+**Functions:** `fetchPromise, fetchPreviews, run`
 
 ### 📄 `cosmo_artist\app\hooks\useRemoteSvgIcon.tsx`
 **Functions:** `approximatelyCoversViewBox, noFill`
@@ -1275,17 +1268,17 @@
 **Functions:** `layout`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\EditableLayoutWrapper.tsx`
-**Functions:** `mouseEnterHandler, handleImageChange, handleEditorClose, findAllDataPaths, clickHandler, cleanupElements, handleFocusPointClick, handleIconChange, getElementSourceUrl, wrapperWithUrl`
+**Functions:** `wrapperWithUrl, isMatchingUrl, handleImageChange, mouseLeaveHandler, handleFocusPointClick, findAllDataPaths, clickHandler, findBestDataPath, handleEditorClose, handleIconChange`
 **React Components:** `EditableLayoutWrapper`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\HeaderNab.tsx`
 **Functions:** `HeaderNav`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\IconsEditor.tsx`
-**Functions:** `handleIconSearch, IconsEditor, handleClose, handleIconChange`
+**Functions:** `IconsEditor, handleIconChange, handleClose, handleIconSearch`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\ImageEditor.tsx`
-**Functions:** `handleDeleteImage, handleImageChange, handleFileUpload, getUploadedImages, toggleFocusPointMode, saveImageProperties, handleFocusPointClick, handleTabChange, handleGenerateImage, getPreviousGeneratedImage`
+**Functions:** `getUploadedImages, handleImageChange, handleFocusPointClick, ImageEditor, toggleFocusPointMode, handleTabChange, getPreviousGeneratedImage, handleGenerateImage, handleDeleteImage, handleClose`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\MarkdownEditor.tsx`
 
@@ -1296,7 +1289,7 @@
 **React Components:** `PresentationLayoutRenderer`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\PresentationMode.tsx`
-**Functions:** `handleEscKey, handleKeyDown, handleSlideClick`
+**Functions:** `handleSlideClick, handleKeyDown, handleEscKey`
 **React Components:** `PresentationMode`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\PresentationRender.tsx`
@@ -1310,7 +1303,7 @@
 **React Components:** `TiptapText`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\TiptapTextReplacer.tsx`
-**Functions:** `getDirectTextContent, getValueByPath, replaceTextElements, hasTextChildren, isInIgnoredElementTree, shouldSkipElement, findDataPath`
+**Functions:** `getDirectTextContent, isInIgnoredElementTree, hasTextChildren, shouldSkipElement, findDataPath, replaceTextElements, getValueByPath`
 **React Components:** `TiptapTextReplacer`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\components\V1ContentRender.tsx`
@@ -1332,10 +1325,10 @@
 **Functions:** `useKeyboardShortcut`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\hooks\useFontLoad.tsx`
-**Functions:** `ensureStylesheetLink, injectFonts, useFontLoader, ensureFontFaceStyle`
+**Functions:** `ensureStylesheetLink, useFontLoader, injectFonts, ensureFontFaceStyle`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\hooks\useFontLoader.tsx`
-**Functions:** `injectFonts, useFontLoader`
+**Functions:** `useFontLoader, injectFonts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\outline\loading.tsx`
 **Functions:** `CreatePageLoadingSkeleton`
@@ -1349,7 +1342,7 @@
 **Functions:** `PdfMakerContent`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\pdf-maker\PdfMakerPage.tsx`
-**Functions:** `fetchData, PresentationPage`
+**Functions:** `PresentationPage, fetchData`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\loading.tsx`
 **Functions:** `loading`
@@ -1393,7 +1386,7 @@
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\dashboard\types.ts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\ImageProvider.tsx`
-**Functions:** `ImageProvider, updateFieldValue, renderQualitySelector, getTextProviderApiField, handleChangeImageGenerationDisabled, getFieldValue, input_field_changed`
+**Functions:** `renderQualitySelector, ImageProvider, input_field_changed, getTextProviderApiField, handleChangeImageGenerationDisabled, getFieldValue, updateFieldValue`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\loading.tsx`
 
@@ -1401,22 +1394,22 @@
 **Functions:** `page`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\PrivacySettings.tsx`
-**Functions:** `handleTrackingToggle, PrivacySettings`
+**Functions:** `PrivacySettings, handleTrackingToggle`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\SettingCodex.tsx`
-**Functions:** `handleSignOut, applyProfile, handleManualExchange, handleCancelPolling, handleSignIn, stopPolling, checkCurrentAuthStatus, handleRefreshToken`
+**Functions:** `applyProfile, stopPolling, handleSignOut, handleSignIn, handleCancelPolling, handleManualExchange, handleRefreshToken, checkCurrentAuthStatus`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\SettingPage.tsx`
-**Functions:** `handleBeforeUnload, handleSaveConfig, handleModelDownload, handlePopState, ensureSelectedStockProviderReady, handleClick, SettingsPage, checkCurrentAuthStatus, provider`
+**Functions:** `handleClick, handleBeforeUnload, SettingsPage, ensureSelectedStockProviderReady, handlePopState, handleModelDownload, handleSaveConfig, checkCurrentAuthStatus, provider`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\SettingSideBar.tsx`
 **Functions:** `SettingSideBar`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\settings\TextProvider.tsx`
-**Functions:** `TextProvider, onApiKeyChange, selectedProvider, fetchAvailableModels`
+**Functions:** `selectedProvider, onApiKeyChange, TextProvider, fetchAvailableModels`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\templates\loading.tsx`
-**Functions:** `TemplateCardSkeleton, Loading`
+**Functions:** `Loading, TemplateCardSkeleton`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\templates\page.tsx`
 **Functions:** `page`
@@ -1438,10 +1431,10 @@
 **Functions:** `Header`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\dashboard\components\PresentationCard.tsx`
-**Functions:** `PresentationCard, handlePreview, handleDelete, applyTheme`
+**Functions:** `handleDelete, PresentationCard, applyTheme, handlePreview`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\dashboard\components\PresentationGrid.tsx`
-**Functions:** `ShimmerCard, handleCreateNewPresentation, PresentationGrid, CreateNewCard`
+**Functions:** `CreateNewCard, handleCreateNewPresentation, PresentationGrid, ShimmerCard`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\dashboard\components\PresentationListItem.tsx`
 **React Components:** `PresentationListItem`
@@ -1464,7 +1457,7 @@
 **React Components:** `FontCard`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\theme\components\ThemePanel\index.tsx`
-**Functions:** `saveAsCustom, loadDefaultThemes, renderLogoStep, createNewCustomTheme, handleFontSelect, generateTheme, handleClickOutside, renderColorStep, refeshTheme, handleDelete`
+**Functions:** `refeshTheme, renderLogoStep, handleClickOutside, loadCustomThemes, handleColorChange, loadUserFonts, handleCloseSheet, handleFontSelect, loadDefaultThemes, generateTheme`
 **React Components:** `ThemePanel`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\(dashboard)\theme\components\ThemePanel\StepIndicator.tsx`
@@ -1497,14 +1490,14 @@
 **React Components:** `SaveLayoutModal`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\SchemaEditor.tsx`
-**Functions:** `isFieldModified, getConstraintSummary, methodName, isTypeChanged, isDirectChild, walkChain, handleCancel, handleFieldChange, getParentPath, handleFillContent`
+**Functions:** `replaceZodType, isFieldModified, renderFieldItem, walkChain, parentCallee, isTypeChanged, handleFieldChange, handleCancel, getConstraintSummary, formatFieldName`
 **React Components:** `SchemaEditor`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\SchemaEditorPanel.tsx`
 **React Components:** `SchemaEditorPanel`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\SchemaElementHighlighter.tsx`
-**Functions:** `handleMouseLeave, handleMouseOver, buildMap, handleClick, handleUpdate`
+**Functions:** `handleUpdate, handleClick, handleMouseOver, handleMouseLeave, buildMap`
 **React Components:** `SchemaElementHighlighter`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\SchemaHighlightContext.tsx`
@@ -1517,7 +1510,7 @@
 **React Components:** `SlidePreviewSection`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\TemplateCreationProgress.tsx`
-**Functions:** `getCurrentStepIndex, getStepStatus`
+**Functions:** `getStepStatus, getCurrentStepIndex`
 **React Components:** `TemplateCreationProgress`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\TemplateStudioHeader.tsx`
@@ -1539,7 +1532,7 @@
 **Functions:** `useLayoutSaving`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\hooks\useSlideEdit.ts`
-**Functions:** `handleCancelEdit, handleEditClick, useSlideEdit, handleSave`
+**Functions:** `handleCancelEdit, handleSave, handleEditClick, useSlideEdit`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\hooks\useSlideUndoRedo.ts`
 
@@ -1549,7 +1542,7 @@
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\types\index.ts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\EachSlide\NewEachSlide.tsx`
-**Functions:** `handleRetrySlide, handleClearPreview, submitEditPrompt, handleSelectionUpdate, closeEditPrompt, handleDeleteSlide`
+**Functions:** `handleSelectionUpdate, handleClearPreview, handleRetrySlide, submitEditPrompt, closeEditPrompt, handleDeleteSlide`
 **React Components:** `EachSlide`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\custom-template\components\EachSlide\SlideContentDisplay.tsx`
@@ -1568,7 +1561,7 @@
 **React Components:** `Step4TemplateCreation`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\documents-preview\components\DocumentPreviewPage.tsx`
-**Functions:** `handleCreatePresentation, updateSelectedDocument, readFile, renderDocumentContent, renderSidebar, maintainDocumentTexts`
+**Functions:** `updateSelectedDocument, readFile, renderDocumentContent, handleCreatePresentation, maintainDocumentTexts, renderSidebar`
 **React Components:** `DocumentsPreviewPage`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\documents-preview\components\MarkdownRenderer.tsx`
@@ -1601,7 +1594,7 @@
 **Functions:** `useOutlineManagement`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\outline\hooks\useOutlineStreaming.ts`
-**Functions:** `scheduleRetry, closeEventSource, openStream, resetStreamingState, useOutlineStreaming, clearRetryTimer`
+**Functions:** `useOutlineStreaming, closeEventSource, clearRetryTimer, resetStreamingState, scheduleRetry, openStream`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\outline\hooks\usePresentationGeneration.ts`
 **Functions:** `usePresentationGeneration, clearTheme`
@@ -1618,7 +1611,7 @@
 **Functions:** `NewSlideV1, fetchLayouts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\components\PresentationHeader.tsx`
-**Functions:** `onTitleCancelMouseDown, PresentationHeader, handleTitleBlur, load, normalizedTitle, handleExportPptx, commitTitleEdit, handleExportPdf, handleReGenerate, ExportOptions`
+**Functions:** `PresentationHeader, cancelTitleEdit, handleExportPptx, titleBlock, handleReGenerate, onTitleSaveMouseDown, onTitleCancelMouseDown, commitTitleEdit, get_presentation_pptx_model, handleTitleBlur`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\components\PresentationMode.tsx`
 **Functions:** `handleSlideAreaClick`
@@ -1629,10 +1622,10 @@
 **React Components:** `PresentationPage`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\components\SidePanel.tsx`
-**Functions:** `handleDragEnd, SidePanel, handleAddSlideClick`
+**Functions:** `handleAddSlideClick, handleDragEnd, SidePanel`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\components\SlideContent.tsx`
-**Functions:** `SlideContent, onDeleteSlide, handleSubmit`
+**Functions:** `SlideContent, handleSubmit, onDeleteSlide`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\components\SortableListItem.tsx`
 **Functions:** `handleClick`
@@ -1641,7 +1634,7 @@
 **Functions:** `handleClick`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\components\ThemeSelector.tsx`
-**Functions:** `ThemeSelector, resetTheme, applyTheme`
+**Functions:** `resetTheme, ThemeSelector, applyTheme`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\hooks\index.ts`
 
@@ -1658,14 +1651,14 @@
 **Functions:** `usePresentationNavigation`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\hooks\usePresentationStreaming.ts`
-**Functions:** `scheduleRetry, usePresentationStreaming, closeEventSource, openStream, clearRetryTimer, finalizeFailure`
+**Functions:** `finalizeFailure, closeEventSource, usePresentationStreaming, clearRetryTimer, scheduleRetry, openStream`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\types\index.ts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\presentation\utils\applyPresentationThemeDom.ts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\services\api\api-error-handler.ts`
-**Functions:** `maybeLoc, maybeMsg`
+**Functions:** `maybeMsg, maybeLoc`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\services\api\dashboard.ts`
 
@@ -1673,7 +1666,7 @@
 **Functions:** `getHeader, getHeaderForFormData`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\services\api\images.ts`
-**Functions:** `normalizedProvider, trimmedApiKey`
+**Functions:** `trimmedApiKey, normalizedProvider`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\services\api\params.ts`
 
@@ -1694,7 +1687,7 @@
 ### 📄 `cosmo_artist\app\(presentation-generator)\template-preview\types\index.ts`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\upload\components\AdvanceSettings.tsx`
-**Functions:** `syncDraftFromConfig, handleCloseAdvanced, handleSaveAdvanced, AdvanceSettings, onKeyDown, handleOpenAdvanced`
+**Functions:** `syncDraftFromConfig, handleSaveAdvanced, AdvanceSettings, onKeyDown, handleOpenAdvanced, handleCloseAdvanced`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\upload\components\ConfigurationSelects.tsx`
 **Functions:** `applyCustomValue, sanitizeToPositiveInteger`
@@ -1713,13 +1706,13 @@
 **Functions:** `handleChange`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\upload\components\SupportingDoc.tsx`
-**Functions:** `applyFileLimit, formatFileSize, handleValidate, handleDragOver, handleFilesSelected, handleRemoveFileAt, type, name, SupportingDoc, handleDragLeave`
+**Functions:** `name, handleFilesSelected, handleClearFiles, SupportingDoc, handleDragOver, handleDragLeave, applyFileLimit, handleDrop, handleRemoveFileAt, formatFileSize`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\upload\components\UploadPage.cy.tsx`
-**Functions:** `createRouter, checkToast, RouterWrapper`
+**Functions:** `RouterWrapper, checkToast, createRouter`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\upload\components\UploadPage.tsx`
-**Functions:** `handleGeneratePresentation, trackUploadValidationFailure, selectedProvider, validateConfiguration, getUploadSnapshotProps, getFileExtension, getSelectedTextModel, getFileCategory, handleConfigChange, handleGenerationError`
+**Functions:** `getUploadSnapshotProps, getFileCategory, UploadPage, handleDocumentProcessing, getSelectedTextModel, trimmedInstructions, validateConfiguration, getFileExtension, handleGenerationError, getSelectedImageQuality`
 
 ### 📄 `cosmo_artist\app\(presentation-generator)\upload\styles\main.module.css`
 
@@ -1730,7 +1723,7 @@
 ### 📄 `cosmo_artist\app\api\has-required-key\route.ts`
 
 ### 📄 `cosmo_artist\app\api\presentation_to_pptx_model\route.ts`
-**Functions:** `parseShadow, rgbToHex, hex, areaB, areaA, zDiff`
+**Functions:** `areaB, parseShadow, rgbToHex, areaA, zDiff, hex`
 
 ### 📄 `cosmo_artist\app\api\read-file\route.ts`
 
@@ -1756,7 +1749,7 @@
 **Functions:** `parseAndFormat`
 
 ### 📄 `cosmo_artist\app\presentation-templates\Code\CodeExplanationSplitSlide.tsx`
-**Functions:** `CodeSlide02CodeExplanationSplit, handleSubmit`
+**Functions:** `handleSubmit, CodeSlide02CodeExplanationSplit`
 
 ### 📄 `cosmo_artist\app\presentation-templates\Code\CoverSlide.tsx`
 **Functions:** `CodeSlide01RoadmapCover`
@@ -1788,7 +1781,7 @@
 **Functions:** `EducationAboutSlide`
 
 ### 📄 `cosmo_artist\app\presentation-templates\Education\EducationChartPrimitives.tsx`
-**Functions:** `toNum, rad, renderPieInsideLabel, chart`
+**Functions:** `chart, rad, renderPieInsideLabel, toNum`
 
 ### 📄 `cosmo_artist\app\presentation-templates\Education\EducationContentSplitSlide.tsx`
 **Functions:** `EducationContentSplitSlide`
@@ -1827,7 +1820,7 @@
 **React Components:** `BulletWithIconsSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\general\ChartWithBulletsSlideLayout.tsx`
-**Functions:** `CustomTooltip, renderPieLabel, renderChart`
+**Functions:** `renderChart, renderPieLabel, CustomTooltip`
 **React Components:** `ChartWithBulletsSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\general\IntroSlideLayout.tsx`
@@ -1900,7 +1893,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\ChartWithBulletsSlideLayout.tsx`
-**Functions:** `transformDivergingData, transformMultiSeriesData, graphColors, renderPieLabel, renderChart, formatComma, CustomTooltip`
+**Functions:** `transformDivergingData, graphColors, formatComma, transformMultiSeriesData, renderPieLabel, CustomTooltip, renderChart`
 **React Components:** `ChartWithBulletsSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\GridBasedEightMetricsSnapshots.tsx`
@@ -1919,7 +1912,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\LayoutTextBlockWithMetricCards.tsx`
-**Functions:** `KPICard, SemiCircleProgress, dynamicSlideLayout`
+**Functions:** `dynamicSlideLayout, SemiCircleProgress, KPICard`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\LeftAlignQuote.tsx`
 **React Components:** `dynamicSlideLayout`
@@ -1928,7 +1921,7 @@
 **React Components:** `MetricsWithImageSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\MultiChartGridSlideLayout.tsx`
-**Functions:** `transformDivergingData, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, MultiChartGridSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\NumberedBulletsSlideLayout.tsx`
@@ -1953,22 +1946,22 @@
 **Functions:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\Timeline.tsx`
-**Functions:** `totalWidth, startX`
+**Functions:** `startX, totalWidth`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleDescriptionMultiChartGridWithBullets.tsx`
-**Functions:** `transformDivergingData, bullets, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, bullets, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, MultiChartGridWithBulletsSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleDescriptionMultiChartGridWithMetrics.tsx`
-**Functions:** `transformDivergingData, metrics, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, metrics, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, MultiChartGridWithMetricsSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleDescriptionWithTable.tsx`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleMetricsWithChart.tsx`
-**Functions:** `transformDivergingData, buildChartData, buildSimpleData, graphColors, formatComma, CustomTooltip`
+**Functions:** `transformDivergingData, graphColors, buildSimpleData, formatComma, CustomTooltip, buildChartData`
 **React Components:** `ChartLegend, ChartRenderer, dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleMetricValueMetricLabelFunnelStages.tsx`
@@ -1981,7 +1974,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleWithFullWidthChart.tsx`
-**Functions:** `transformDivergingData, getSpreadIndex, buildChartData, buildSimpleData, graphColors, formatComma, CustomTooltip`
+**Functions:** `transformDivergingData, graphColors, buildSimpleData, formatComma, CustomTooltip, buildChartData, getSpreadIndex`
 **React Components:** `ChartLegend, ChartRenderer, dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-general\TitleWithGridBasedHeadingAndDescription.tsx`
@@ -2005,22 +1998,22 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDescriptionMetricsChart.tsx`
-**Functions:** `hasValue2, graphColors, renderChart, formatComma, CustomTooltip`
+**Functions:** `graphColors, formatComma, hasValue2, renderChart, CustomTooltip`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDescriptionMetricsImage.tsx`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDescriptionMultiChartGrid.tsx`
-**Functions:** `transformDivergingData, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, TitleDescriptionMultiChartGridLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDescriptionMultiChartGridWithBullets.tsx`
-**Functions:** `transformDivergingData, bullets, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, bullets, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, TitleDescriptionMultiChartGridWithBulletsLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDescriptionMultiChartGridWithMetrics.tsx`
-**Functions:** `transformDivergingData, metrics, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, metrics, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, TitleDescriptionMultiChartGridWithMetricsLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDescriptionTable.tsx`
@@ -2030,7 +2023,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleDualComparisonCharts.tsx`
-**Functions:** `formatComma, CustomTooltip, graphColors, renderChart`
+**Functions:** `renderChart, graphColors, formatComma, CustomTooltip`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleHorizontalAlternatingTimeline.tsx`
@@ -2040,7 +2033,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleSubtitlesChart.tsx`
-**Functions:** `graphColors, getDataKey, hasValue2, renderChart, formatComma, CustomTooltip`
+**Functions:** `graphColors, formatComma, hasValue2, getDataKey, renderChart, CustomTooltip`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-modern\TitleTwoColumnNumberedList.tsx`
@@ -2065,19 +2058,19 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDescriptionMultiChartGrid.tsx`
-**Functions:** `transformDivergingData, getChartHeight, graphColors, transformMultiSeriesData, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, graphColors, transformDivergingData, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, TitleDescriptionMultiChartGridLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDescriptionMultiChartGridWithBullets.tsx`
-**Functions:** `transformDivergingData, bullets, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, bullets, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, TitleDescriptionMultiChartGridWithBulletsLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDescriptionMultiChartGridWithMetrics.tsx`
-**Functions:** `transformDivergingData, metrics, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, metrics, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip`
 **React Components:** `MiniChartRenderer, TitleDescriptionMultiChartGridWithMetricsLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDescriptionRadialCards.tsx`
-**Functions:** `radius, RadialProgress`
+**Functions:** `RadialProgress, radius`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDescriptionTable.tsx`
@@ -2087,7 +2080,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDualChartsComparison.tsx`
-**Functions:** `hasValue2, graphColors, renderChart, formatComma, CustomTooltip`
+**Functions:** `graphColors, formatComma, hasValue2, renderChart, CustomTooltip`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleDualComparisonCards.tsx`
@@ -2098,24 +2091,24 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleMetricsChart.tsx`
-**Functions:** `hasValue2, graphColors, renderChart, formatComma, CustomTooltip`
+**Functions:** `graphColors, formatComma, hasValue2, renderChart, CustomTooltip`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitleMetricsImage.tsx`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-standard\TitlePointsDonutGrid.tsx`
-**Functions:** `radius, RadialProgress`
+**Functions:** `RadialProgress, radius`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\settings.json`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleCenteredChart.tsx`
-**Functions:** `renderCustomLabel, graphColors, renderChart, formatComma, CustomTooltip`
+**Functions:** `graphColors, formatComma, renderChart, CustomTooltip, renderCustomLabel`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleChartMetricsSidebar.tsx`
-**Functions:** `formatComma, CustomTooltip, graphColors, renderChart`
+**Functions:** `renderChart, graphColors, formatComma, CustomTooltip`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleDescriptionBulletList.tsx`
@@ -2125,7 +2118,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleDescriptionFourChartsSixBullets.tsx`
-**Functions:** `transformDivergingData, bullets, gradId, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, bullets, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip, gradId`
 **React Components:** `MiniChartRenderer, dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleDescriptionImageRight.tsx`
@@ -2138,11 +2131,11 @@
 **Functions:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleDescriptionSixChartsFourMetrics.tsx`
-**Functions:** `transformDivergingData, metrics, gradId, getChartHeight, transformMultiSeriesData, graphColors, renderPieLabel, getGridLayout, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, metrics, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip, gradId`
 **React Components:** `MiniChartRenderer, dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleDescriptionSixChartsGrid.tsx`
-**Functions:** `transformDivergingData, gradId, getChartHeight, transformMultiSeriesData, graphColors, getGridLayout, renderPieLabel, formatComma, CustomTooltip`
+**Functions:** `getChartHeight, transformDivergingData, graphColors, formatComma, transformMultiSeriesData, getGridLayout, renderPieLabel, CustomTooltip, gradId`
 **React Components:** `MiniChartRenderer, dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleDualComparisonBlocks.tsx`
@@ -2158,7 +2151,7 @@
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\neo-swift\TitleThreeByThreeMetricsGrid.tsx`
-**Functions:** `rowsArray, Card`
+**Functions:** `Card, rowsArray`
 **React Components:** `dynamicSlideLayout`
 
 ### 📄 `cosmo_artist\app\presentation-templates\ProductOverview\BusinessChallengesCardsSlide.tsx`
@@ -2204,7 +2197,7 @@
 **Functions:** `ProcessSlide`
 
 ### 📄 `cosmo_artist\app\presentation-templates\ProductOverview\ReportSnapshotSlide.tsx`
-**Functions:** `radius, visibleMetricCards, y, ReportSnapshotSlide, x, donutTotal, PulseIcon, renderDonutPercentLabel`
+**Functions:** `radius, visibleMetricCards, x, donutTotal, y, ReportSnapshotSlide, renderDonutPercentLabel, PulseIcon`
 
 ### 📄 `cosmo_artist\app\presentation-templates\ProductOverview\settings.json`
 
@@ -2221,7 +2214,7 @@
 **Functions:** `DataAnalysisDashboardSlide`
 
 ### 📄 `cosmo_artist\app\presentation-templates\Report\flexibleReportChart.tsx`
-**Functions:** `rad, renderPieInsideLabel, graphVar, toNum, formatComma`
+**Functions:** `rad, formatComma, renderPieInsideLabel, graphVar, toNum`
 
 ### 📄 `cosmo_artist\app\presentation-templates\Report\HorizontalHeightSpanningImagesWithTitleSlide.tsx`
 **Functions:** `TeamSlide`
@@ -2321,7 +2314,7 @@
 **React Components:** `Timeline`
 
 ### 📄 `cosmo_artist\components\OnBoarding\FinalStep.tsx`
-**Functions:** `handleGoToDashboard, FinalStep, handleGoToUpload`
+**Functions:** `handleGoToDashboard, handleGoToUpload, FinalStep`
 
 ### 📄 `cosmo_artist\components\OnBoarding\GenerationWithImage.tsx`
 **Functions:** `GenerationWithImage`
@@ -2336,7 +2329,7 @@
 **Functions:** `OnBoardingSlidebar`
 
 ### 📄 `cosmo_artist\components\OnBoarding\PresentonMode.tsx`
-**Functions:** `handleSaveConfig, renderQualitySelector, getSelectedTextModel, handleModelDownload, handleProviderChange, fetchAvailableModels, getFieldValue, PresentonMode, checkCurrentAuthStatus, getSelectedImageQuality`
+**Functions:** `renderQualitySelector, handleProviderChange, getSelectedTextModel, handleSaveConfig, PresentonMode, getSelectedImageQuality, fetchAvailableModels, handleModelDownload, getFieldValue, checkCurrentAuthStatus`
 
 ### 📄 `cosmo_artist\components\ui\accordion.tsx`
 
@@ -2353,7 +2346,7 @@
 **Functions:** `CommandDialog, CommandShortcut`
 
 ### 📄 `cosmo_artist\components\ui\dialog.tsx`
-**Functions:** `DialogFooter, DialogHeader`
+**Functions:** `DialogHeader, DialogFooter`
 
 ### 📄 `cosmo_artist\components\ui\input.tsx`
 
@@ -2368,7 +2361,7 @@
 ### 📄 `cosmo_artist\components\ui\popover.tsx`
 
 ### 📄 `cosmo_artist\components\ui\progress-bar.tsx`
-**Functions:** `ProgressBar, updateProgress, calculatedProgress`
+**Functions:** `updateProgress, ProgressBar, calculatedProgress`
 
 ### 📄 `cosmo_artist\components\ui\progress.tsx`
 
@@ -2381,7 +2374,7 @@
 ### 📄 `cosmo_artist\components\ui\separator.tsx`
 
 ### 📄 `cosmo_artist\components\ui\sheet.tsx`
-**Functions:** `SheetHeader, SheetFooter`
+**Functions:** `SheetFooter, SheetHeader`
 
 ### 📄 `cosmo_artist\components\ui\skeleton.tsx`
 
@@ -2449,7 +2442,7 @@
 ### 📄 `cosmo_artist\public\providers\pixabay.png`
 
 ### 📄 `cosmo_artist\store\slices\presentationGeneration.ts`
-**Functions:** `setNestedIconValue, setNestedImageValue, setNestedValue`
+**Functions:** `setNestedValue, setNestedImageValue, setNestedIconValue`
 
 ### 📄 `cosmo_artist\store\slices\presentationGenUpload.ts`
 
@@ -2503,6 +2496,42 @@
 ### 📄 `data\sessions\chaos-test-1-4dcc8422.json`
 
 ### 📄 `data\sessions\chaos-test-1-9ac9a398.json`
+
+### 📄 `data\checkpoints\e2e_test_120217\snapshot.json`
+
+### 📄 `data\checkpoints\e2e_test_120217\wal.jsonl`
+
+### 📄 `data\checkpoints\e2e_test_120277\snapshot.json`
+
+### 📄 `data\checkpoints\e2e_test_120277\wal.jsonl`
+
+### 📄 `data\checkpoints\e2e_test_120345\snapshot.json`
+
+### 📄 `data\checkpoints\e2e_test_120345\wal.jsonl`
+
+### 📄 `data\checkpoints\e2e_test_120427\snapshot.json`
+
+### 📄 `data\checkpoints\e2e_test_120427\wal.jsonl`
+
+### 📄 `data\checkpoints\e2e_test_120482\snapshot.json`
+
+### 📄 `data\checkpoints\e2e_test_120482\wal.jsonl`
+
+### 📄 `data\checkpoints\e2e_test_121588\snapshot.json`
+
+### 📄 `data\checkpoints\e2e_test_121588\wal.jsonl`
+
+### 📄 `data\checkpoints\health_check_1\snapshot.json`
+
+### 📄 `data\checkpoints\health_check_1\wal.jsonl`
+
+### 📄 `data\checkpoints\health_check_4\snapshot.json`
+
+### 📄 `data\checkpoints\health_check_4\wal.jsonl`
+
+### 📄 `data\checkpoints\session-for3jtm\snapshot.json`
+
+### 📄 `data\checkpoints\session-for3jtm\wal.jsonl`
 
 ### 📄 `data\checkpoints\session-pvc9c2g\snapshot.json`
 
@@ -2596,28 +2625,28 @@
 ### 📄 `frontend\components\ActionsTab.tsx`
 
 ### 📄 `frontend\components\AgentDashboard.tsx`
-**Functions:** `getStatusColor, fetchTasks, createTask, fetchStatistics, fetchAgentStatus`
+**Functions:** `getStatusColor, createTask, fetchAgentStatus, fetchStatistics, fetchTasks`
 **React Components:** `AgentDashboard`
 
 ### 📄 `frontend\components\AgentModal.tsx`
 
 ### 📄 `frontend\components\ArtifactGallery.tsx`
-**Functions:** `handleView, toggleSelect, handleDownload`
+**Functions:** `handleDownload, handleView, toggleSelect`
 
 ### 📄 `frontend\components\ArtifactsDrawer.tsx`
 **Functions:** `handleEvent`
 
 ### 📄 `frontend\components\ArtifactViewer.tsx`
-**Functions:** `fetchContent, handleCopy`
+**Functions:** `handleCopy, fetchContent`
 
 ### 📄 `frontend\components\ChatPanel.tsx`
 **Functions:** `handleWindowDragOver, handleWindowDrop, handleWindowDragLeave`
 
 ### 📄 `frontend\components\ComputerPanel.tsx`
-**Functions:** `handleEvent, getMonacoLanguage, content, upsertFileTab, loadFile, retryVnc, path`
+**Functions:** `handleEvent, path, content, retryVnc, getMonacoLanguage, upsertFileTab, loadFile`
 
 ### 📄 `frontend\components\ConnectorsPanel.tsx`
-**Functions:** `connectToken, authHeader, connectOAuth, disconnect`
+**Functions:** `connectToken, connectOAuth, authHeader, disconnect`
 
 ### 📄 `frontend\components\DesktopTab.tsx`
 
@@ -2627,17 +2656,17 @@
 ### 📄 `frontend\components\Header.tsx`
 
 ### 📄 `frontend\components\HistoryDrawer.tsx`
-**Functions:** `formatDate, fetchTasks`
+**Functions:** `fetchTasks, formatDate`
 
 ### 📄 `frontend\components\LibraryDrawer.tsx`
-**Functions:** `fetchFiles, formatSize`
+**Functions:** `formatSize, fetchFiles`
 
 ### 📄 `frontend\components\MessagePill.tsx`
 
 ### 📄 `frontend\components\ModeDiscovery.tsx`
 
 ### 📄 `frontend\components\ModeSelector.tsx`
-**Functions:** `ModeButton, handleModeClick`
+**Functions:** `handleModeClick, ModeButton`
 
 ### 📄 `frontend\components\PlanTab.tsx`
 
@@ -2658,7 +2687,7 @@
 **React Components:** `HeroLayout, BulletLayout, SplitContentLayout, DataGridLayout, QuoteLayout, CodeShowcaseLayout, ConclusionLayout, SlideRenderer`
 
 ### 📄 `frontend\components\ThemeInitializer.tsx`
-**Functions:** `fetchAndApply, applyTheme`
+**Functions:** `applyTheme, fetchAndApply`
 
 ### 📄 `frontend\components\ThoughtsTab.tsx`
 
@@ -2666,10 +2695,10 @@
 **Functions:** `startVisualizer, update, stopVisualizer`
 
 ### 📄 `frontend\hooks\useArchimedesChat.ts`
-**Functions:** `handleSend, stopTask, handleFileUpload, handleAgentEvent, cleanMessageContent, flushBuffer, SpeechRecognition, toggleMic`
+**Functions:** `SpeechRecognition, handleSend, handleFileUpload, stopTask, handleAgentEvent, flushBuffer, toggleMic, cleanMessageContent`
 
 ### 📄 `frontend\hooks\useSettings.ts`
-**Functions:** `fetchSettings, updateSettings, fetchUsage, applyTheme`
+**Functions:** `updateSettings, fetchUsage, fetchSettings, applyTheme`
 
 ### 📄 `frontend\lib\modes.ts`
 
@@ -2729,7 +2758,7 @@
 
 ### 📄 `frontend\.next\cache\images\YcjEn5HoSy51ared6lc+3wK5YA8Cqr5bpUZlZwz3mFU=\60.1777586126363.uZkqrNHJ04qQANAm4T8xNHKpHfev+UJ09uv06qmcXH4=.webp`
 
-### 📄 `frontend\.next\cache\images\Ywnf8E0r63SCdwcffyoZXWo+iiOe5lAmAcPmfFXN-VI=\60.1777991236398.rrDvJdym0dta1TR90lYAJ-8WZWqEDN8t4bEw9H20-nM=.webp`
+### 📄 `frontend\.next\cache\images\Ywnf8E0r63SCdwcffyoZXWo+iiOe5lAmAcPmfFXN-VI=\60.1778002301934.rrDvJdym0dta1TR90lYAJ-8WZWqEDN8t4bEw9H20-nM=.webp`
 
 ### 📄 `frontend\.next\cache\webpack\client-development\0.pack.gz`
 
@@ -2748,6 +2777,8 @@
 ### 📄 `frontend\.next\cache\webpack\client-development\7.pack.gz`
 
 ### 📄 `frontend\.next\cache\webpack\client-development\8.pack.gz`
+
+### 📄 `frontend\.next\cache\webpack\client-development\9.pack.gz`
 
 ### 📄 `frontend\.next\cache\webpack\client-development\index.pack.gz`
 
@@ -2794,6 +2825,8 @@
 ### 📄 `frontend\.next\cache\webpack\server-development\7.pack.gz`
 
 ### 📄 `frontend\.next\cache\webpack\server-development\8.pack.gz`
+
+### 📄 `frontend\.next\cache\webpack\server-development\9.pack.gz`
 
 ### 📄 `frontend\.next\cache\webpack\server-development\index.pack.gz`
 
@@ -3005,10 +3038,6 @@
 
 ### 📄 `frontend\.next\server\app\favicon.ico\route.js`
 
-### 📄 `frontend\.next\server\app\_not-found\page.js`
-
-### 📄 `frontend\.next\server\app\_not-found\page_client-reference-manifest.js`
-
 ### 📄 `frontend\.next\static\chunks\app-pages-internals.js`
 
 ### 📄 `frontend\.next\static\chunks\main-app.js`
@@ -3037,25 +3066,19 @@
 
 ### 📄 `frontend\.next\static\media\e4af272ccee01ff0-s.p.woff2`
 
-### 📄 `frontend\.next\static\webpack\50ce672114d6fe7d.webpack.hot-update.json`
-
 ### 📄 `frontend\.next\static\webpack\633457081244afec._.hot-update.json`
 
-### 📄 `frontend\.next\static\webpack\fe4728a36fbd2a4a.webpack.hot-update.json`
+### 📄 `frontend\.next\static\webpack\a3b43743ca0ae4bf.webpack.hot-update.json`
 
-### 📄 `frontend\.next\static\webpack\webpack.50ce672114d6fe7d.hot-update.js`
-
-### 📄 `frontend\.next\static\webpack\webpack.fe4728a36fbd2a4a.hot-update.js`
+### 📄 `frontend\.next\static\webpack\webpack.a3b43743ca0ae4bf.hot-update.js`
 
 ### 📄 `frontend\.next\static\chunks\app\layout.js`
 
 ### 📄 `frontend\.next\static\chunks\app\page.js`
 
-### 📄 `frontend\.next\static\chunks\app\_not-found\page.js`
-
 ### 📄 `frontend\.next\static\css\app\layout.css`
 
-### 📄 `frontend\.next\static\webpack\app\layout.50ce672114d6fe7d.hot-update.js`
+### 📄 `frontend\.next\static\webpack\app\layout.a3b43743ca0ae4bf.hot-update.js`
 
 ### 📄 `frontend\.next\types\app\layout.ts`
 
@@ -3112,12 +3135,16 @@
 ### 📄 `k8s\deployment.yaml`
 
 ## 📁 scripts
+### 📄 `scripts\agent_health_check.py`
+
 ### 📄 `scripts\backup.sh`
 
 ### 📄 `scripts\chaos_engineer.py`
 **Classes:**
 - `ChaosResult` (Methods: __init__)
 **Functions:** `print_report`
+
+### 📄 `scripts\list_google_models.py`
 
 ### 📄 `scripts\project_mapper.py`
 **Classes:**
@@ -3206,6 +3233,8 @@
 ## 📁 tests
 ### 📄 `tests\conftest.py`
 **Functions:** `pytest_sessionstart, _init_test_database, mock_redis_globally, mock_router, mock_sandbox, temp_db, mock_tool_registry`
+
+### 📄 `tests\e2e_agent_flow.py`
 
 ### 📄 `tests\e2e_tester.py`
 
@@ -3371,6 +3400,9 @@
 
 ### 📄 `tests\__init__.py`
 
+### 📄 `tests\tools\test_file_tool.py`
+**Functions:** `mock_filesystem, file_tool`
+
 ## 📁 vscode-extension
 ### 📄 `vscode-extension\package-lock.json`
 
@@ -3383,7 +3415,7 @@
 ### 📄 `vscode-extension\out\extension.js.map`
 
 ### 📄 `vscode-extension\src\extension.ts`
-**Functions:** `ARCHIMEDES_URL, task`
+**Functions:** `task, ARCHIMEDES_URL`
 
 ## 📁 workspace
 ### 📄 `workspace\browser_server.py`

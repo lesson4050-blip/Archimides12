@@ -98,6 +98,17 @@ MICRO_AGENT_TEMPLATES = {
             "Output: optimized solution with explanation."
         ),
         "tools": ["file", "shell", "fast_linter"]
+    },
+    "fact_checker": {
+        "specialty": "Verifying claims, identifying bias, and ensuring accuracy",
+        "system_prompt": (
+            "You are an elite fact-checker and analyst. "
+            "Your job is to verify claims made by the researcher. "
+            "Identify potential biases, check for contradictions, and ensure the information is up-to-date. "
+            "CRITICAL: Use the search tool to verify specific facts or dates. "
+            "Output: List of verified points, corrections, and a confidence score (0-100%)."
+        ),
+        "tools": ["search", "web_read"]
     }
 }
 
@@ -135,7 +146,7 @@ class MicroAgentSwarm:
             kw in task_lower for kw in
             ["research", "find", "compare", "analyze", "исследуй", "найди"]
         ):
-            return ["researcher", "critic"]
+            return ["researcher", "fact_checker"]
 
         if any(kw in task_lower for kw in
                ["design", "architecture", "system", "архитектура", "дизайн"]):
@@ -430,12 +441,13 @@ class MicroAgentSwarm:
         # Phase 2: Other agents review/augment in parallel (with tools)
         review_tasks = []
         for reviewer in agents[1:]:
+            # Optimization: pass a smaller, more focused context to the next agent
             context = (
-                f"The {primary.role} produced this:\n"
-                f"{primary_result[:2000]}\n\n"
+                f"The {primary.role} produced this summary of findings:\n"
+                f"{primary_result[:1000]}\n\n"
                 f"Your job as {reviewer.role}: "
                 f"{reviewer.specialty}. "
-                f"Review and improve the above. Use your tools to VERIFY claims."
+                f"Verify the accuracy of these specific findings. Use your tools to check facts."
             )
             review_tasks.append(
                 self._run_agent_with_tools(

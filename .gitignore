@@ -144,6 +144,8 @@ cosmo_engine_core/container.db
 cosmo_engine_core/presenton.db
 cosmo_engine_core/placeholder
 archimedes_cosmo*/
+data/checkpoints/
+chroma/
 
 # VSCode Extension build artifacts
 vscode-extension/out/
