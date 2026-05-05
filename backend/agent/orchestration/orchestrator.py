@@ -292,6 +292,19 @@ class AgentOrchestrator:
             history = result.get("history", [])
             flywheel.record_session(session_id, task_description, result, history)
             
+            # Store episodic memory
+            if result.get("success"):
+                try:
+                    from backend.memory.memory_router import MemoryRouter
+                    mem_router = MemoryRouter(user_id="default", session_id=session_id)
+                    await mem_router.store(
+                        task=task_description,
+                        result=str(result.get("output", ""))[:300],
+                        memory_type="episodic"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store episodic memory: {e}")
+            
             return result
         except asyncio.TimeoutError:
             agent_timeouts_total.inc()
@@ -354,6 +367,19 @@ class AgentOrchestrator:
         
         # Add initial greeting/task to history
         state.add_message("user", task_description)
+        
+        # Unified Memory Router integration
+        try:
+            from backend.memory.memory_router import MemoryRouter
+            mem_router = MemoryRouter(
+                user_id=state.metadata.get("user_id", "default"),
+                session_id=session_id
+            )
+            context_str = await mem_router.get_context_string(task_description, max_tokens=2000)
+            if context_str:
+                state.add_message("system", f"Memory Context:\n{context_str}")
+        except Exception as e:
+            logger.warning(f"MemoryRouter context retrieval failed: {e}")
 
         # ── ALL return paths wrapped in try/finally for guaranteed consumer cleanup ──
         try:

@@ -637,6 +637,46 @@ class OmegaCodeAct:
                 output = exec_result.get("output", "")
                 execution_output += output + "\n"
                 
+                # Auto Visual Check for web-related code
+                should_auto_vision = (
+                    any(kw in code.lower() for kw in 
+                        ["flask", "fastapi", "streamlit", "gradio", "http.server",
+                         "uvicorn", "django", "subprocess.run", "npm start", "npm run"]) and
+                    exec_result.get("success", False)
+                )
+                
+                if should_auto_vision:
+                    await asyncio.sleep(2)  # Wait for server to start
+                    for port in [3000, 5000, 8000, 8080, 8501]:
+                        url = f"http://localhost:{port}"
+                        try:
+                            import httpx
+                            async with httpx.AsyncClient(timeout=1.0) as client:
+                                resp = await client.get(url)
+                                if resp.status_code < 500:
+                                    try:
+                                        from backend.agent.vision_feedback import VisionFeedbackLoop
+                                        vision = VisionFeedbackLoop(self.router)
+                                        vision_result = await asyncio.wait_for(
+                                            vision.analyze_url(url, context="check if app looks correct"),
+                                            timeout=15
+                                        )
+                                        if vision_result.get("has_problems"):
+                                            issues_list = [p.get('type', '') for p in vision_result.get('problems', [])]
+                                            auto_vision_feedback = (
+                                                f"\n🔍 Auto-Vision Check (port {port}):\n"
+                                                f"Quality: {vision_result.get('quality_score', 0)}\n"
+                                                f"Issues: {'; '.join(issues_list)[:200]}"
+                                            )
+                                            execution_output += auto_vision_feedback + "\n"
+                                            if websocket_send:
+                                                await websocket_send({"type": "info", "content": f"👁️ Auto-Vision triggered on {url}: issues found!"})
+                                    except asyncio.TimeoutError:
+                                        pass
+                                    break  # Found open port
+                        except Exception:
+                            continue
+                
                 # Track modified files via git diff
                 try:
                     diff_result = subprocess.run(

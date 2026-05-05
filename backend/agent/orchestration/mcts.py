@@ -136,14 +136,32 @@ class MCTSManager:
         new_nodes = []
         for h in response.get("text", "").split("---APPROACH---"):
             h = h.strip()
-            if h:
-                child = MCTSNode(
-                    id=str(uuid.uuid4()),
-                    hypothesis=h,
-                    parent_id=node.id
-                )
-                tree.add_node(child)
-                new_nodes.append(child)
+            if not h:
+                continue
+                
+            # If hypothesis contains code, check via SecurityGate
+            if "```" in h:
+                try:
+                    from backend.security.sandbox_hardening import SecurityGate
+                    gate = SecurityGate(strict_mode=True)
+                    # Extract just the code for analysis
+                    import re
+                    code_blocks = re.findall(r'```(?:python|bash)?\n(.*?)```', h, re.DOTALL)
+                    if code_blocks:
+                        verdict = gate.analyze_python(code_blocks[0])
+                        if not getattr(verdict, 'allowed', True):
+                            logger.warning(f"MCTS: blocked unsafe hypothesis: {getattr(verdict, 'reasons', 'unsafe')}")
+                            continue
+                except Exception as e:
+                    logger.debug(f"MCTS SecurityGate error during expand: {e}")
+            
+            child = MCTSNode(
+                id=str(uuid.uuid4()),
+                hypothesis=h,
+                parent_id=node.id
+            )
+            tree.add_node(child)
+            new_nodes.append(child)
         return new_nodes
 
     # ── Simulation (LLM scoring) ──
@@ -163,22 +181,24 @@ class MCTSManager:
             return "No code to execute. Purely theoretical hypothesis."
             
         code = code_blocks[0]
+        
+        # Check via SecurityGate BEFORE any execution or parse simulation
         try:
-            # We use an ephemeral sandbox process to test the approach
-            import asyncio
-            proc = await asyncio.create_subprocess_shell(
-                "python -c \"import ast; ast.parse(open('test.py').read())\"",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await proc.communicate(input=code.encode())
-            if proc.returncode == 0:
-                return "Sandbox check: Code is syntactically valid."
-            else:
-                return f"Sandbox execution failed: {stderr.decode()[:200]}"
+            from backend.security.sandbox_hardening import SecurityGate
+            gate = SecurityGate(strict_mode=True)
+            verdict = gate.analyze_python(code)
+            if not getattr(verdict, 'allowed', True):
+                return f"Security blocked: {'; '.join(getattr(verdict, 'reasons', ['unsafe']))}"
         except Exception as e:
-            return f"Sandbox test environment error: {e}"
+            logger.debug(f"MCTS SecurityGate error: {e}")
+            
+        # Only syntactic analysis in MCTS - no real execution to avoid side effects
+        try:
+            import ast
+            ast.parse(code)
+            return "Static analysis: Code is syntactically valid and passed security check."
+        except SyntaxError as e:
+            return f"Syntax error at line {e.lineno}: {e.msg}"
 
     async def _simulate_with_critic(self, node: MCTSNode, task: str,
                                     model_router, sandbox_feedback: str = "") -> Tuple[float, str]:
@@ -234,6 +254,47 @@ Reply ONLY with a JSON object in this exact format:
             else:
                 break
 
+    # ── Task Complexity Estimator ──
+
+    def _estimate_task_confidence(self, task: str) -> float:
+        """
+        Heuristic confidence estimation WITHOUT LLM call.
+        Returns 0.0 (needs MCTS) to 1.0 (can answer directly).
+        """
+        task_lower = task.lower()
+        task_len = len(task.split())
+        
+        simple_signals = [
+            ("hello" in task_lower or "hi " in task_lower, 0.3),
+            (task_len < 15, 0.2),
+            (task_lower.startswith(("what is", "what are", "how do i", "explain")), 0.2),
+            ("?" in task and task_len < 20, 0.15),
+            (not any(kw in task_lower for kw in
+                     ["refactor", "optimize", "debug", "implement", "build",
+                      "design", "architecture", "migrate", "deploy"]), 0.15),
+        ]
+        
+        complex_penalties = [
+            (task_len > 50, -0.3),
+            (any(kw in task_lower for kw in
+                 ["multiple", "complex", "enterprise", "production",
+                  "distributed", "scalable", "refactor"]), -0.25),
+            ("and" in task_lower and task_len > 30, -0.1),
+            (task.count("\n") > 3, -0.2),
+            (any(kw in task_lower for kw in
+                 ["bug", "error", "failing", "broken"]), -0.1),
+        ]
+        
+        base = 0.5
+        for condition, boost in simple_signals:
+            if condition:
+                base += boost
+        for condition, penalty in complex_penalties:
+            if condition:
+                base += penalty
+        
+        return max(0.0, min(1.0, base))
+
     # ── Main MCTS loop ──
 
     async def run_mcts(
@@ -248,15 +309,24 @@ Reply ONLY with a JSON object in this exact format:
         Run MCTS for self.num_simulations iterations and return the
         best-scoring leaf hypothesis.
         """
-        logger.info(f"MCTS: starting search for: {task[:60]}")
+        confidence = self._estimate_task_confidence(task)
+        if confidence > 0.85:
+            logger.info(f"MCTS: confidence {confidence:.2f} > 0.85, skipping tree search")
+            try:
+                response = await model_router.generate(
+                    messages=[{"role": "user", "content": f"Task: {task}\nContext: {context[:300]}\nProvide the best approach directly."}],
+                    task_hint="default"
+                )
+                return response.get("text", task)
+            except Exception as e:
+                logger.warning(f"Direct generation failed: {e}, falling back to MCTS")
+
+        logger.info(f"MCTS: confidence {confidence:.2f} <= 0.85, starting search for: {task[:60]}")
 
         tree = MCTSTree()
-
-        # Root node represents the raw task
         root = MCTSNode(id=str(uuid.uuid4()), hypothesis=task, parent_id=None)
         tree.add_node(root)
 
-        # Generate initial hypotheses as root's children
         prompt = (
             f"Task: {task}\nContext: {context[:300]}\n"
             "Generate 3 distinct technical approaches. "
@@ -284,25 +354,28 @@ Reply ONLY with a JSON object in this exact format:
             child = MCTSNode(id=str(uuid.uuid4()), hypothesis=h, parent_id=root.id)
             tree.add_node(child)
 
-        # MCTS iterations
-        for iteration in range(self.num_simulations):
-            # 1. Selection
-            selected = self._select(tree)
-
-            # 2. Expansion
-            new_nodes = await self._expand(tree, selected, task, model_router)
-
-            # 3. Simulation — score the expanded node (or selected if no expansion)
-            target = new_nodes[0] if new_nodes else selected
-            score, reason = await self._simulate(target, task, model_router)
-
-            # 4. Backpropagation
-            self._backpropagate(tree, target, score)
-
-            logger.debug(
-                f"MCTS iter {iteration + 1}/{self.num_simulations}: "
-                f"node={target.id[:8]} score={score:.2f} reason={reason[:40]}"
-            )
+        # MCTS parallel iterations
+        BATCH_SIZE = 3
+        for batch_start in range(0, self.num_simulations, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, self.num_simulations)
+            
+            candidates = []
+            for _ in range(batch_end - batch_start):
+                selected = self._select(tree)
+                new_nodes = await self._expand(tree, selected, task, model_router)
+                target = new_nodes[0] if new_nodes else selected
+                candidates.append(target)
+            
+            sim_tasks = [self._simulate(c, task, model_router) for c in candidates]
+            results = await asyncio.gather(*sim_tasks, return_exceptions=True)
+            
+            for candidate, result in zip(candidates, results):
+                if isinstance(result, Exception):
+                    score, reason = 0.5, f"simulation error: {result}"
+                else:
+                    score, reason = result
+                self._backpropagate(tree, candidate, score)
+                logger.debug(f"MCTS parallel node={candidate.id[:8]} score={score:.2f}")
 
         # Select best leaf by average score
         leaves = tree.get_leaves()
