@@ -480,6 +480,28 @@ class OmegaCodeAct:
                 "content": self._build_system_prompt(state)
             }
             
+            # Context window management — prevent OOM and context overflow
+            MAX_HISTORY_MESSAGES = 40
+            if len(history) > MAX_HISTORY_MESSAGES:
+                kept_recent = history[-10:]
+                dropped_count = len(history) - 2 - 10
+                summary_msg = {
+                    "role": "user",
+                    "content": (
+                        f"[Context compressed: {dropped_count} earlier messages summarized]\n"
+                        f"Progress so far: iteration {state.iteration}, "
+                        f"phase {state.phase}, "
+                        f"modified: {', '.join(state.modified_files[:5]) or 'none'}, "
+                        f"best test score: {state.best_test_score:.0%}"
+                    )
+                }
+                history = [history[0], history[1], summary_msg] + kept_recent
+            
+            # Cap all_outputs
+            if len(state.all_outputs) > 50:
+                state.all_outputs = state.all_outputs[-20:]
+
+            
             # LLM генерирует следующий шаг
             try:
                 response = await asyncio.wait_for(
@@ -554,7 +576,29 @@ class OmegaCodeAct:
             if VISION_QA_SIGNAL in agent_text:
                 urls = re.findall(r'VISION_QA:\s*(https?://[^\s]+)', agent_text)
                 if urls:
-                    url = urls[0]
+                    raw_url = urls[0]
+                    
+                    # SSRF prevention: only allow localhost with known safe ports
+                    from urllib.parse import urlparse
+                    parsed = urlparse(raw_url)
+                    
+                    SAFE_VISION_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
+                    SAFE_VISION_PORTS = {3000, 3001, 5000, 5173, 8000, 8080, 8501, 8502}
+                    
+                    is_safe_host = parsed.hostname in SAFE_VISION_HOSTS
+                    is_safe_port = parsed.port in SAFE_VISION_PORTS if parsed.port else False
+                    
+                    if not (is_safe_host and is_safe_port):
+                        logger.warning(f"SSRF blocked: Vision QA refused unsafe URL: {raw_url}")
+                        next_msg = self._build_context_message(
+                            state,
+                            f"Vision QA blocked: only localhost:{SAFE_VISION_PORTS} allowed. Start your server on one of those ports.",
+                            last_test_result
+                        )
+                        history.append({"role": "user", "content": next_msg})
+                        continue
+                    
+                    url = raw_url
                     if websocket_send:
                         await websocket_send({"type": "info", "content": f"👁️ Visual QA: Analyzing {url}..."})
                     from backend.agent.vision_feedback import VisionFeedbackLoop
@@ -596,6 +640,34 @@ class OmegaCodeAct:
             if ROLLBACK_SIGNAL in agent_text:
                 logger.warning(f"Agent requested rollback at iteration {iteration}")
                 loop = asyncio.get_running_loop()
+                
+                # 1. Kill runaway background tasks (os.killpg)
+                import os
+                import signal
+                try:
+                    import psutil
+                    current_pid = os.getpid()
+                    for proc in psutil.process_iter(['pid', 'cwd', 'name']):
+                        try:
+                            # If running inside our workspace, terminate it
+                            p_cwd = proc.info.get('cwd')
+                            if p_cwd and os.path.abspath(p_cwd).startswith(os.path.abspath(cwd)):
+                                if proc.pid != current_pid:
+                                    # Use killpg on Unix, fallback to terminate on Windows
+                                    if hasattr(os, 'killpg'):
+                                        try:
+                                            pgid = os.getpgid(proc.pid)
+                                            os.killpg(pgid, signal.SIGTERM)
+                                        except Exception:
+                                            proc.terminate()
+                                    else:
+                                        proc.terminate()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+                            pass
+                except Exception as e:
+                    logger.warning(f"Failed to kill background processes: {e}")
+
+                # 2. Git rollback
                 await loop.run_in_executor(
                     None,
                     lambda: subprocess.run(
@@ -729,14 +801,21 @@ class OmegaCodeAct:
             if iteration % CHECKPOINT_INTERVAL == 0:
                 from backend.agent.session_store import get_session_store
                 store = get_session_store()
-                checkpoint_data = {
-                    "state": state.__dict__,
-                    "history": history,
+                # Async checkpoint — don't block event loop
+                safe_checkpoint = {
+                    "state": {k: v for k, v in state.__dict__.items() if k != "all_outputs"},
+                    "history": history[-20:],
                     "last_test_result": last_test_result.__dict__ if last_test_result else None,
-                    "last_output": last_output
+                    "last_output": (last_output or "")[:500]
                 }
-                store.save_checkpoint(session_id, f"iter_{iteration}", checkpoint_data)
-                logger.info(f"Checkpoint saved for session {session_id} at iter {iteration}")
+                try:
+                    await asyncio.to_thread(
+                        store.save_checkpoint,
+                        session_id, f"iter_{iteration}", safe_checkpoint
+                    )
+                    logger.info(f"Checkpoint saved for session {session_id} at iter {iteration}")
+                except Exception as e:
+                    logger.warning(f"Checkpoint save failed at iter {iteration}: {e}")
         
         # Исчерпали итерации
         diff = self._get_unified_diff(cwd)

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -16,6 +17,7 @@ class SharedBlackboard:
     def __init__(self, redis_url: Optional[str] = None, namespace: str = "archimedes:blackboard"):
         self.namespace = namespace
         self.redis_client = None
+        self._lock = asyncio.Lock()
         
         # Use Redis if URL provided, otherwise fallback to global shared dict
         if redis_url:
@@ -49,27 +51,40 @@ class SharedBlackboard:
 
     async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> bool:
         """Sets a value in the blackboard."""
-        self._local_store[key] = value
-        if self.redis_client:
-            try:
-                val_str = json.dumps(value)
-                if ttl_seconds:
-                    await self.redis_client.setex(self._make_key(key), ttl_seconds, val_str)
-                else:
-                    await self.redis_client.set(self._make_key(key), val_str)
-                return True
-            except Exception as e:
-                logger.error(f"Redis set error: {e}")
-                return False
-        return True
+        async with self._lock:
+            self._local_store[key] = value
+            if self.redis_client:
+                try:
+                    val_str = json.dumps(value, default=str)
+                    if ttl_seconds:
+                        await self.redis_client.setex(self._make_key(key), ttl_seconds, val_str)
+                    else:
+                        await self.redis_client.set(self._make_key(key), val_str)
+                    return True
+                except Exception as e:
+                    logger.error(f"Redis set error: {e}")
+                    return False
+            return True
 
     async def append_list(self, key: str, value: Any) -> bool:
         """Appends a value to a list stored at key. Useful for collecting logs/results."""
-        current = await self.get(key, [])
-        if not isinstance(current, list):
-            current = [current]
-        current.append(value)
-        return await self.set(key, current)
+        async with self._lock:
+            current = await self.get(key, [])
+            if not isinstance(current, list):
+                current = [current]
+            current.append(value)
+            
+            # Inline the set functionality since we already hold the lock
+            self._local_store[key] = current
+            if self.redis_client:
+                try:
+                    val_str = json.dumps(current, default=str)
+                    await self.redis_client.set(self._make_key(key), val_str)
+                    return True
+                except Exception as e:
+                    logger.error(f"Redis set error: {e}")
+                    return False
+            return True
 
     async def get_all(self) -> Dict[str, Any]:
         """Fetch entire blackboard state."""

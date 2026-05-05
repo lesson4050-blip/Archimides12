@@ -25,10 +25,26 @@ def get_parallel_semaphore() -> asyncio.Semaphore:
         _PARALLEL_SEMAPHORE = asyncio.Semaphore(4)
     return _PARALLEL_SEMAPHORE
 
+_SENSITIVE_ENV_PREFIXES = (
+    "DATABASE_", "DB_", "REDIS_", "SECRET_", "JWT_", "STRIPE_",
+    "AWS_SECRET", "GITHUB_TOKEN", "PRIVATE_KEY", "SMTP_PASS",
+)
+
 def _run_mcts_subprocess(task: str, context: str) -> str:
-    """Runs MCTS in a separate process to avoid blocking the event loop."""
+    """Runs MCTS in a separate process to avoid blocking the event loop.
+    
+    SECURITY: Strips sensitive environment variables before execution
+    to prevent secret leakage through subprocess inheritance.
+    """
     import asyncio
+    import os
     from backend.agent.orchestration.mcts import MCTSManager
+    
+    # Sanitize environment — remove secrets from subprocess
+    for key in list(os.environ.keys()):
+        if any(key.upper().startswith(p) for p in _SENSITIVE_ENV_PREFIXES):
+            del os.environ[key]
+    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -262,6 +278,23 @@ class AgentOrchestrator:
         # Wire production modules into executor (created above)
         self.executor.event_bus = self.event_bus
         self.executor.security_gate = self.security_gate
+        
+        self._session_llm_call_count: Dict[str, int] = {}
+        self.MAX_LLM_CALLS_PER_SESSION = int(
+            os.environ.get("MAX_LLM_CALLS_PER_SESSION", "200")
+        )
+
+    def _check_budget(self, session_id: str) -> bool:
+        """Returns False if session has exceeded LLM call budget."""
+        count = self._session_llm_call_count.get(session_id, 0)
+        if count >= self.MAX_LLM_CALLS_PER_SESSION:
+            logger.error(
+                f"[{session_id}] Budget cap hit: {count} LLM calls >= "
+                f"{self.MAX_LLM_CALLS_PER_SESSION} limit"
+            )
+            return False
+        self._session_llm_call_count[session_id] = count + 1
+        return True
 
 
     async def run_task(self, 
@@ -537,26 +570,44 @@ class AgentOrchestrator:
                 # Reset per-subtask state to prevent cross-contamination
                 state.reset_for_subtask()
                 
-                # Subtask loop (includes critic retries)
                 # Circuit Breaker: hard cap to prevent infinite loops
-                _circuit_breaker_limit = 15
-                _circuit_breaker_count = 0
+                _MAIN_LOOP_LIMIT = 15     # Main executor+critic iterations
+                _RESCUE_LOOP_LIMIT = 8    # Rescue pass gets its own budget
+                _main_count = 0
+                _rescue_count = 0
+                _in_rescue = False
                 
                 current_target = subtask.get("description", state.task_description)
                 
                 async with agent_span("executor.subtask", state.session_id, subtask_index=i, target=current_target[:50]):
                     while True:
-                        _circuit_breaker_count += 1
-                        if _circuit_breaker_count > _circuit_breaker_limit:
+                        if not self._check_budget(state.session_id):
                             from backend.metrics import agent_circuit_breaker_total
                             agent_circuit_breaker_total.inc()
-                            logger.warning(f"[{state.session_id}] Circuit breaker tripped! >15 iterations.")
                             if websocket_send:
                                 await websocket_send({
                                     "type": "error",
-                                    "content": "⚠️ Maximum execution steps reached. The task might be too complex or the agent is stuck."
+                                    "content": "⚠️ Session budget limit reached. Task stopped to prevent runaway costs."
                                 })
                             break
+                        
+                        if _in_rescue:
+                            _rescue_count += 1
+                            if _rescue_count > _RESCUE_LOOP_LIMIT:
+                                logger.warning(f"[{state.session_id}] Rescue pass exhausted ({_RESCUE_LOOP_LIMIT} iters).")
+                                break
+                        else:
+                            _main_count += 1
+                            if _main_count > _MAIN_LOOP_LIMIT:
+                                from backend.metrics import agent_circuit_breaker_total
+                                agent_circuit_breaker_total.inc()
+                                logger.warning(f"[{state.session_id}] Main circuit breaker tripped! >{_MAIN_LOOP_LIMIT} iterations.")
+                                if websocket_send:
+                                    await websocket_send({
+                                        "type": "error",
+                                        "content": "⚠️ Maximum execution steps reached. The task might be too complex or the agent is stuck."
+                                    })
+                                break
                         
                         # Strategy-aware dispatch: use swarm for matching strategies
                         agent_override = STRATEGY_AGENTS.get(strategy)
@@ -674,7 +725,9 @@ class AgentOrchestrator:
                             if not state.metadata.get("rescue_attempted", False):
                                 logger.info(f"[{state.session_id}] Triggering Recursive Self-Correction Rescue Pass.")
                                 state.metadata["rescue_attempted"] = True
-                            
+                                _in_rescue = True          # ← Switch to rescue counter
+                                _rescue_count = 0          # ← Reset rescue counter
+                                
                                 issues = state.metadata.get("critic_issues", [])
                                 issues_text = "\n".join(issues)
                             
