@@ -502,6 +502,30 @@ class OmegaCodeAct:
                 state.all_outputs = state.all_outputs[-20:]
 
             
+            # --- BACKGROUND VISUAL STREAM (Manus-style) ---
+            if state.phase in ('verify', 'implement'):
+                try:
+                    import urllib.request
+                    for port in [3000, 5173, 8000, 8501]:
+                        try:
+                            if urllib.request.urlopen(f"http://localhost:{port}", timeout=0.1).getcode() == 200:
+                                if hasattr(self, 'vision_feedback_loop') and self.vision_feedback_loop:
+                                    bg_vision = await asyncio.wait_for(
+                                        self.vision_feedback_loop.analyze_url(f"http://localhost:{port}", context="Background visual check"),
+                                        timeout=4.0
+                                    )
+                                    if bg_vision and "error" not in bg_vision:
+                                        history.append({
+                                            "role": "system",
+                                            "content": f"[BACKGROUND VISION STREAM] Current UI state on port {port}:\n{bg_vision.get('summary', 'No changes')}"
+                                        })
+                                break
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.debug(f"Background vision check failed: {e}")
+            # --- END BACKGROUND VISUAL STREAM ---
+
             # LLM генерирует следующий шаг
             try:
                 response = await asyncio.wait_for(

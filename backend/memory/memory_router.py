@@ -91,8 +91,9 @@ class MemoryRouter:
         # Tier 2: Episodic memory — search past similar tasks
         if include_episodic and self._vector_store and token_budget > 200:
             try:
-                similar = await self._vector_store.retrieve_similar(
-                    task, limit=3
+                similar = await asyncio.wait_for(
+                    self._vector_store.retrieve_similar(task, limit=3),
+                    timeout=3.0
                 )
                 if similar:
                     episodic_text = "\n---\n".join(
@@ -104,6 +105,8 @@ class MemoryRouter:
                         ctx.episodic = episodic_text
                         tokens_used += int(ep_tokens)
                         token_budget -= int(ep_tokens)
+            except asyncio.TimeoutError:
+                logger.warning("Episodic memory search timed out (3.0s)")
             except Exception as e:
                 logger.debug(f"Episodic memory read failed: {e}")
         
@@ -115,8 +118,9 @@ class MemoryRouter:
                 keywords = re.findall(r'\b[A-Z][a-z]+\b|\b\w{6,}\b', task)[:5]
                 facts = []
                 for kw in keywords:
-                    nodes = await asyncio.to_thread(
-                        self._knowledge_graph.search, kw
+                    nodes = await asyncio.wait_for(
+                        self._knowledge_graph.search(kw),
+                        timeout=3.0
                     ) if hasattr(self._knowledge_graph, 'search') else []
                     if nodes:
                         facts.extend(nodes[:2])
@@ -126,6 +130,8 @@ class MemoryRouter:
                     if sem_tokens < token_budget:
                         ctx.semantic = semantic_text
                         tokens_used += int(sem_tokens)
+            except asyncio.TimeoutError:
+                logger.warning("Semantic memory search timed out (3.0s)")
             except Exception as e:
                 logger.debug(f"Semantic memory read failed: {e}")
         

@@ -1,3 +1,4 @@
+import logging
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -6,6 +7,8 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from contextlib import asynccontextmanager
 from typing import Optional, Dict, Any
 import os
+ 
+logger = logging.getLogger(__name__)
 
 tracer: Optional[trace.Tracer] = None
 
@@ -13,6 +16,12 @@ def init_telemetry(app=None):
     """Initialize OpenTelemetry with OTLP exporter (works with Grafana Tempo)."""
     global tracer
     
+    # Only initialize if explicitly enabled via environment variable
+    if not os.environ.get("ENABLE_TELEMETRY") and not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
+        logger.debug("Telemetry is disabled (ENABLE_TELEMETRY not set).")
+        tracer = None
+        return None
+
     # Try to load telemetry modules, fail gracefully if not installed
     try:
         otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4317")

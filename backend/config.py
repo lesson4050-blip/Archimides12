@@ -11,16 +11,16 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.1-flash"
     
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "gemma4:26b"
+    OLLAMA_MODEL: str = "qwen2.5:14b"
     
     TAVILY_API_KEY: str = ""
     EXA_API_KEY: str = ""
     
     # Image Generation
-    IMAGE_CRITIQUE_MODEL: str = "gemini-2.5-flash"
+    IMAGE_CRITIQUE_MODEL: str = "gemini-3.1-flash"
     
     # Sandbox
     SANDBOX_IMAGE: str = "archimedes-sandbox:latest"

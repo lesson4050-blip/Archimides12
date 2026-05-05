@@ -70,11 +70,16 @@ CONVERSATIONAL_PATTERNS = [
 def is_conversational(text: str) -> bool:
     """Check if the task is a simple conversational message (greeting, etc.)."""
     cleaned = text.strip().lower()
-    # Very short messages are likely conversational
-    if len(cleaned) < 15 and not any(c in cleaned for c in ["/", "\\", "{", "}", "http"]):
-        for pattern in CONVERSATIONAL_PATTERNS:
-            if re.match(pattern, cleaned, re.IGNORECASE):
-                return True
+    
+    # Check regex patterns first
+    for pattern in CONVERSATIONAL_PATTERNS:
+        if re.search(pattern, cleaned, re.IGNORECASE):
+            return True
+            
+    # Fallback for very short messages without technical symbols
+    if len(cleaned) < 20 and not any(c in cleaned for c in ["/", "\\", "{", "}", "http", "pip ", "npm "]):
+        return True
+        
     return False
 
 
@@ -117,62 +122,53 @@ ROUTING_RULES = [
 ]
 
 
-def classify_task(text: str) -> Tuple[str, str]:
+async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, str]:
     """
     Returns (complexity, strategy) using multi-signal classification.
     
-    Signal 1: Regex pattern match (fast path for obvious cases)
-    Signal 2: Multi-signal heuristic for ambiguous cases
+    Signal 1: Regex pattern match (fast path)
+    Signal 2: Heuristic-based scoring
+    Signal 3: LLM classification (slow but accurate fallback)
     """
     text_lower = text.lower().strip()
     
-    # Ultra-short messages are always direct
+    # Signal 1: Ultra-short or obvious patterns
     if len(text_lower) < 15:
         return "simple", "direct"
     
-    # Signal 1: Regex pattern match
     for pattern, complexity, strategy in ROUTING_RULES:
         if re.search(pattern, text_lower, re.IGNORECASE):
             return complexity, strategy
     
-    # Signal 2: Multi-signal heuristic for unmatched tasks
+    # Signal 2: Heuristic scoring
     signals = {
-        "has_code_markers": bool(re.search(
-            r'[{}\[\]();=]|```|def |class |import |function |const |var ',
-            text
-        )),
-        "has_tool_keywords": bool(re.search(
-            r'(файл|file|запуст|run|выполн|exec|установ|install|pip |npm )',
-            text_lower
-        )),
-        "has_url": bool(re.search(r'https?://', text)),
-        "is_question": text_lower.rstrip().endswith('?') or text_lower.startswith(('что ', 'как ', 'где ', 'why ', 'how ', 'what ')),
-        "is_long": len(text_lower) > 150,
-        "is_medium": len(text_lower) > 50,
-        "has_multiple_steps": bool(re.search(
-            r'(\d+[\.\)]\s|\bа также\b|\bи потом\b|\bthen\b|\bafter that\b|шаг\s*\d)',
-            text_lower
-        )),
+        "has_code_markers": bool(re.search(r'[{}\[\]();=]|```|def |class |import |function ', text)),
+        "has_tool_keywords": bool(re.search(r'(файл|file|запуст|run|выполн|exec|установ|install)', text_lower)),
+        "has_multiple_steps": bool(re.search(r'(\d+[\.\)]\s|\bа также\b|\bи потом\b|\bthen\b)', text_lower)),
+        "is_long": len(text_lower) > 200,
     }
     
-    complexity_score = sum([
-        signals["has_code_markers"] * 3,
-        signals["has_tool_keywords"] * 2,
-        signals["has_url"] * 1,
-        signals["is_long"] * 2,
-        signals["is_medium"] * 1,
-        signals["has_multiple_steps"] * 3,
-    ])
-    
-    if complexity_score >= 5:
-        return "complex", "swarm_code"
-    elif complexity_score >= 3 or signals["is_medium"]:
-        return "medium", "single"
-    elif signals["is_question"]:
-        return "simple", "direct"
-    else:
-        # Ambiguous — will be LLM-classified by orchestrator if needed
-        return "medium", "single"
+    score = signals["has_code_markers"]*3 + signals["has_tool_keywords"]*2 + signals["has_multiple_steps"]*3
+    if score >= 5: return "complex", "swarm_code"
+
+    # Signal 3: LLM Classification (The "Brain")
+    if router:
+        try:
+            prompt = f"""Classify this AI Agent task: "{text[:500]}"
+Available strategies: swarm_code (multi-file coding), swarm_research (web search/analysis), codeact (single file fix), direct (chat/greeting), single (simple script).
+Return ONLY: complexity,strategy (e.g. complex,swarm_code)"""
+            response = await router.generate(
+                messages=[{"role": "user", "content": prompt}],
+                task_hint="quick"
+            )
+            raw = response.get("text", "").strip().lower()
+            if "," in raw:
+                comp, strat = raw.split(",", 1)
+                return comp.strip(), strat.strip()
+        except Exception:
+            pass
+
+    return "medium", "single"
 
 
 async def classify_task_with_llm(
@@ -408,7 +404,7 @@ class AgentOrchestrator:
                 user_id=state.metadata.get("user_id", "default"),
                 session_id=session_id
             )
-            context_str = await mem_router.get_context_string(task_description, max_tokens=2000)
+            context_str = await mem_router.get_context_string(task_description, max_tokens=8000)
             if context_str:
                 state.add_message("system", f"Memory Context:\n{context_str}")
         except Exception as e:
@@ -431,7 +427,7 @@ class AgentOrchestrator:
                 return await self._run_conversational(state, websocket_send)
             
             # Semantic task routing
-            complexity, strategy = classify_task(task_description)
+            complexity, strategy = await classify_task(task_description, self.router)
             
             # For medium-complexity ambiguous tasks, use LLM to refine routing
             # (Reserved for future A/B testing — not called in production)
@@ -457,6 +453,9 @@ class AgentOrchestrator:
                     logger.warning(f"Checkpoint save failed (non-critical): {e}")
 
                 if complexity == "simple":
+                    if strategy == "direct":
+                        logger.info(f"[{session_id}] Simple direct task → conversational mode")
+                        return await self._run_conversational(state, websocket_send)
                     logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
                     return await self._run_fast_mode(state, websocket_send)
                 
@@ -476,20 +475,37 @@ class AgentOrchestrator:
         """Direct LLM response for simple conversational messages — no tools, no critic."""
         logger.info(f"[{state.session_id}] Orchestrator: conversational shortcut")
         
+        system_prompt = (
+            "You are Archimedes, a professional AI assistant. "
+            "Respond in the same language the user uses. "
+            "Be concise and friendly."
+        )
         messages = [
-            {"role": "system", "content": "Ты — Archimedes, дружелюбный и профессиональный AI-ассистент. Respond in the same language the user used. Будь кратким и приветливым."},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": state.task_description}
         ]
         
         try:
-            response = await self.cascade.generate(messages=messages, task_hint="quick")
-            result_text = response.get("text", "Привет! Чем могу помочь?")
+            if websocket_send:
+                async def _on_token(token):
+                    await websocket_send({"type": "token", "content": token})
+                
+                response = await self.cascade.generate_stream(
+                    messages=messages, 
+                    task_hint="quick",
+                    on_token=_on_token
+                )
+            else:
+                response = await self.cascade.generate(messages=messages, task_hint="quick")
             
+            result_text = response.get("text", "Привет! Чем могу помочь?")
             state.results.append({"step": 0, "output": result_text})
             return await self._get_final_response(state, websocket_send)
         except Exception as e:
             logger.error(f"Conversational response failed: {e}")
-            fallback = "Привет! Я Archimedes — ваш AI-ассистент. Чем могу помочь?"
+            # Dynamic fallback based on input language
+            is_russian = any(c in 'йцукенгшщзхъфывапролджэячсмитьбю' for c in state.task_description.lower())
+            fallback = "Привет! Я Archimedes — твой AI-ассистент. Чем могу помочь?" if is_russian else "Hello! I am Archimedes, your AI assistant. How can I help you?"
             state.results.append({"step": 0, "output": fallback})
             return await self._get_final_response(state, websocket_send)
 
@@ -832,6 +848,26 @@ class AgentOrchestrator:
             logger.error(f"Synthesis failed: {e}")
             final_output = last_output
         
+        # Episodic Memory Storage
+        try:
+            from backend.memory.memory_router import MemoryRouter
+            mem_router = MemoryRouter(
+                user_id=state.metadata.get("user_id", "default"),
+                session_id=state.session_id
+            )
+            # Store the task and the final synthesized result
+            await mem_router.store(
+                task=state.task_description,
+                result=final_output,
+                metadata={
+                    "strategy": state.metadata.get("strategy", "unknown"),
+                    "mode": state.mode.value
+                }
+            )
+            logger.info(f"[{state.session_id}] Orchestrator: Result stored in episodic memory")
+        except Exception as e:
+            logger.warning(f"Failed to store result in memory: {e}")
+
         return {"success": True, "output": final_output,
                 "history": state.history, "plan": state.current_plan,
                 "mode": state.mode.value}

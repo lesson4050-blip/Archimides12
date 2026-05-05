@@ -40,7 +40,7 @@ class VectorStore:
         self._collection = None
         self._init_lock = None
         self.genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY) if settings.GOOGLE_API_KEY else None
-        self.embedding_model = "gemini-embedding-exp-03-07"
+        self.embedding_model = "models/gemini-embedding-2"
 
     async def _get_collection(self):
         """Lazy async initialization of the collection."""

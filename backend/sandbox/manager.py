@@ -252,7 +252,7 @@ class WarmContainerPool:
                 security_opt=["no-new-privileges:true"],
                 cap_drop=["ALL"],
                 cap_add=["CHOWN", "SETUID", "SETGID"],
-                network_mode="none",
+                network_mode="bridge",
                 ports={"6080/tcp": None, "9222/tcp": None},
                 detach=True,
                 tty=True,
@@ -379,25 +379,22 @@ class SandboxManager:
         self.warm_pool.stop()
 
     def cleanup_stale_containers(self):
-        """Remove any lingering archimedes-session-* containers from previous runs."""
+        """Remove any lingering archimedes-session-* and archimedes-warm-* containers from previous runs."""
         client = self.client
         if not client:
             return
         try:
-            stale = client.containers.list(all=True, filters={"name": "archimedes-session-"})
-            for c in stale:
-                logger.info(f"Cleaning up stale container: {c.name}")
-                try:
-                    c.stop(timeout=5)
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
-                try:
-                    c.remove(force=True)
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+            # We must fetch all and filter manually because Docker filters are exact or prefix matches can be tricky
+            all_containers = client.containers.list(all=True)
+            for c in all_containers:
+                if c.name.startswith("archimedes-session-") or c.name.startswith("archimedes-warm-"):
+                    logger.info(f"Cleaning up stale container: {c.name}")
+                    try:
+                        c.remove(force=True)
+                    except Exception as e:
+                        logger.warning(f"Failed to remove stale container {c.name}: {e}")
         except Exception as e:
+            logger.error(f"Failed to cleanup stale containers: {e}")
             logger.warning(f"Stale container cleanup error: {e}")
 
     # ------------------------------------------------------------------
@@ -418,6 +415,8 @@ class SandboxManager:
                     self._sessions[session_id] = SessionInfo(
                         container=container, session_id=session_id
                     )
+                    # Start VNC/Desktop streaming for the warm container
+                    await self.novnc.start_streaming(session_id)
                     # Запустить persistent shell на уже работающем контейнере
                     shell = PersistentShell(container)
                     await shell.start()
@@ -621,8 +620,8 @@ class SandboxManager:
                 session_id=session_id,
             )
 
-            # Start noVNC inside the container
-            safe_create_task(self.novnc.start_streaming(session_id))
+            # Start noVNC inside the container and wait for it to initialize
+            await self.novnc.start_streaming(session_id)
 
             # Create workspace dir
             await loop.run_in_executor(
@@ -645,8 +644,8 @@ class SandboxManager:
             logger.error(f"Failed to create container: {e}")
             return False
 
-    def get_novnc_url(self, session_id: str) -> Optional[str]:
-        """Get the VNC URL for the host to expose to the frontend."""
+    def get_novnc_url(self, session_id: str, base_url: str = "localhost") -> Optional[str]:
+        """Returns the public URL for noVNC access."""
         session = self._sessions.get(session_id)
         if not session:
             return None
@@ -657,7 +656,9 @@ class SandboxManager:
             novnc_port = ports.get('6080/tcp')
             if novnc_port and len(novnc_port) > 0:
                 host_port = novnc_port[0].get('HostPort')
-                return f"http://localhost:{host_port}/vnc.html?autoconnect=true&reconnect=true"
+                # Use provided base_url (stripping port/protocol if needed)
+                clean_host = base_url.split(":")[0].split("//")[-1] if base_url else "localhost"
+                return f"http://{clean_host}:{host_port}/vnc.html?autoconnect=true&reconnect=true"
         except Exception as e:
             logger.error(f"Failed to get novnc port: {e}")
         return None

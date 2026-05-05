@@ -2,7 +2,7 @@
 КОСМО-уровневые API маршруты для Archimedes.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request
 from fastapi.responses import FileResponse
 from backend.auth.dependencies import get_current_user, require_admin
 from pydantic import BaseModel
@@ -344,11 +344,12 @@ async def list_workspace_files(user: dict = Depends(get_current_user)) -> Dict[s
     }
 
 @router.get("/sandbox/{session_id}/vnc", summary="Получить URL-адрес VNC для сессии")
-async def get_sandbox_vnc(session_id: str, user: dict = Depends(get_current_user)) -> Dict[str, Any]:
+async def get_sandbox_vnc(session_id: str, request: Request, user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Возвращает URL-адрес VNC для указанной сессии."""
     from backend.sandbox.singleton import sandbox_manager
     
-    url = sandbox_manager.get_novnc_url(session_id)
+    base_url = request.headers.get("host", "localhost")
+    url = sandbox_manager.get_novnc_url(session_id, base_url=base_url)
     if not url:
         raise HTTPException(status_code=404, detail="VNC URL not found for session")
     

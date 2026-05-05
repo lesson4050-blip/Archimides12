@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 import ollama
 from backend.config import settings
 from backend.utils.json_repair import repair_and_parse
@@ -11,8 +11,9 @@ MAX_TOOL_CALL_RETRIES = 3
 
 
 OLLAMA_TIMEOUT_MAP = {
+    "qwen2.5:14b": 120.0,
     "qwen2.5:32b": 180.0,
-    "qwen2.5-coder:32b": 180.0,
+    "qwen2.5-coder:14b": 120.0,
     "qwen2.5:72b": 300.0,
     "qwen2.5:7b": 60.0,
     "default": 120.0
@@ -29,11 +30,11 @@ class OllamaClient:
 
     # Task-specific model selection (if multiple models installed)
     TASK_MODELS = {
-        "think": "qwen2.5:32b",
-        "plan": "qwen2.5:32b",
-        "code": "qwen2.5-coder:32b",
-        "fast": "qwen2.5:7b",
-        "summarize": "qwen2.5:7b",
+        "think": "qwen2.5:14b",
+        "plan": "qwen2.5:14b",
+        "code": "qwen2.5:14b",
+        "fast": "qwen2.5:14b",
+        "summarize": "qwen2.5:14b",
     }
 
     def _select_model(self, task_hint: str = "default") -> str:
@@ -329,7 +330,7 @@ NEVER mix tool JSON with explanation text.
                 if token:
                     full_text += token
                     if on_token:
-                        await on_token({"type": "token", "content": token})
+                        await on_token(token)
 
             return {
                 "model_used": "ollama",

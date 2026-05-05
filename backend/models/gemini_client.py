@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from google import genai
 from google.genai import types
 from backend.config import settings
@@ -79,13 +79,13 @@ class GeminiClient:
             if fns:
                 genai_tools = [types.Tool(function_declarations=fns)]
 
-        # Route model based on task complexity
+        # Route model based on task complexity (May 2026 SOTA - Fixed Names)
         if task_hint in ("think", "plan"):
-            selected_model = "gemini-1.5-pro"
+            selected_model = "gemini-3.1-pro-preview"
         elif task_hint in ("quick", "default"):
-            selected_model = "gemini-1.5-flash"
+            selected_model = "gemini-3.1-flash-lite-preview"
         else:
-            selected_model = self.model_name
+            selected_model = self.model_name or "gemini-3.1-flash-lite-preview"
 
         while retries < 3:
             try:
@@ -224,51 +224,81 @@ class GeminiClient:
 
     async def generate_stream(
         self,
-        messages: list,
-        tools: list = None,
-        on_token=None,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        on_token: Optional[Callable[[str], Any]] = None,
         task_hint: str = "default",
         **kwargs
-    ) -> dict:
-        """True streaming from Gemini API."""
-        import google.generativeai as genai
+    ) -> Dict[str, Any]:
+        """Modern streaming using the google-genai SDK."""
+        # Prepare content
+        contents = []
+        for msg in messages:
+            if msg["role"] == "system": continue
+            role = "user" if msg["role"] in ("user", "tool") else "model"
+            parts = [types.Part(text=msg.get("content", ""))]
+            contents.append(types.Content(role=role, parts=parts))
+
+        system_instruction = next((m["content"] for m in messages if m["role"] == "system"), None)
+
+        # Tools
+        genai_tools = []
+        if tools:
+            fns = [types.FunctionDeclaration(
+                name=t["function"]["name"],
+                description=t["function"]["description"],
+                parameters=t["function"]["parameters"]
+            ) for t in tools if t.get("type") == "function"]
+            if fns:
+                genai_tools = [types.Tool(function_declarations=fns)]
+
+        model_name = "gemini-3.1-flash-lite-preview" if task_hint in ("quick", "default") else "gemini-3.1-pro-preview"
         
         full_text = ""
-        
+        tool_calls = []
+
         try:
-            genai.configure(api_key=self.client.api_key)
-            model_name = "gemini-1.5-flash" if task_hint in ("quick", "default") else "gemini-1.5-pro"
-            model = genai.GenerativeModel(model_name)
-            
-            # Simple message format for genai directly
-            formatted = []
-            for msg in messages:
-                if msg["role"] == "system":
-                    continue
-                role = "user" if msg["role"] in ["user", "tool"] else "model"
-                formatted.append({"role": role, "parts": [msg.get("content", "")]})
-            
-            response = await asyncio.to_thread(
-                model.generate_content,
-                formatted,
-                stream=True,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=4096,
-                    temperature=0.7
+            # Use the new SDK's streaming generator
+            async for chunk in await asyncio.to_thread(
+                self.client.models.generate_content_stream,
+                model=model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    tools=genai_tools,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
                 )
-            )
-            
-            for chunk in response:
-                if chunk.text:
-                    full_text += chunk.text
-                    if on_token:
-                        await on_token({"type": "token", "content": chunk.text})
-            
-            return {"text": full_text, "tool_call": None, "model_used": model_name}
-            
+            ):
+                if chunk.candidates:
+                    candidate = chunk.candidates[0]
+                    for part in candidate.content.parts:
+                        if part.text:
+                            full_text += part.text
+                            if on_token:
+                                await on_token(part.text)
+                        
+                        if part.function_call:
+                            # If we get a function call mid-stream or at end
+                            from backend.utils.tool_schemas import validate_tool_call
+                            raw_tc = {
+                                "name": part.function_call.name,
+                                "params": part.function_call.args or {}
+                            }
+                            validated = validate_tool_call(raw_tc)
+                            if validated:
+                                tool_calls.append(validated.model_dump())
+
+            return {
+                "text": full_text,
+                "tool_calls": tool_calls,
+                "tool_call": tool_calls[0] if tool_calls else None,
+                "model_used": model_name,
+                "tokens_used": 0 # SDK usage metadata in stream is complex to aggregate here
+            }
         except Exception as e:
-            logger.error(f"Gemini stream error: {e}")
-            return await self.generate_with_tools(messages, tools=tools)
+            logger.error(f"Gemini modern stream error: {e}")
+            # Fallback to non-streaming for reliability
+            return await self.generate_with_tools(messages, tools=tools, task_hint=task_hint)
 
     async def generate_with_image(
         self,
@@ -287,8 +317,8 @@ class GeminiClient:
             import base64
             import os
 
-            genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 
             image_bytes = base64.b64decode(image_base64)
             image = Image.open(io.BytesIO(image_bytes))

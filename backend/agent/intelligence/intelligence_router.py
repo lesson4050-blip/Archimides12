@@ -115,7 +115,7 @@ class IntelligenceRouter:
         elif mode == "medium":
             return await self._generate_medium(messages, task, tools, on_token)
         else:
-            return await self._generate_complex(messages, task, tools)
+            return await self._generate_complex(messages, task, tools, on_token)
 
     async def _generate_simple(
         self, messages, task, tools=None, on_token=None
@@ -164,9 +164,14 @@ class IntelligenceRouter:
         Reflection applies only to text output, not tool calls.
         """
         cot_messages = inject_cot(messages, task)
-        initial = await self.router.generate(
-            messages=cot_messages, tools=tools, task_hint="quality"
-        )
+        if on_token:
+            initial = await self.router.generate_stream(
+                messages=cot_messages, tools=tools, task_hint="quality", on_token=on_token
+            )
+        else:
+            initial = await self.router.generate(
+                messages=cot_messages, tools=tools, task_hint="quality"
+            )
 
         # If the model wants to call a tool, DON'T reflect — pass through
         if initial.get("tool_call"):
@@ -192,7 +197,7 @@ class IntelligenceRouter:
         }
 
     async def _generate_complex(
-        self, messages, task, tools=None
+        self, messages, task, tools=None, on_token=None
     ) -> Dict[str, Any]:
         """
         Multi-agent synthesis + Reflection.

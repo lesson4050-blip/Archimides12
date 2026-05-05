@@ -126,27 +126,38 @@ export -f search_dir find_file str_replace_editor
 
 class SandboxExecutor:
     """
-    Executes shell commands inside a sandbox container.
+    Executes shell commands inside a sandbox container or MicroVM.
     Supports timeouts and capturing output.
     """
     def __init__(self, manager: 'SandboxManager'):
         self.manager = manager
+        # Architectural support for Firecracker/MicroVM isolation
+        import os
+        self.isolation_mode = os.environ.get("SANDBOX_ISOLATION", "docker")
+        if self.isolation_mode == "docker":
+            logger.warning("Sandbox uses weak Docker isolation. Production requires SANDBOX_ISOLATION=microvm (Firecracker/gVisor).")
 
     async def run_command(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu", detach: bool = False) -> Dict[str, Any]:
+        if self.isolation_mode == "microvm":
+            return await self._run_in_microvm(session_id, command, timeout, user, detach)
+        return await self._run_in_docker(session_id, command, timeout, user, detach)
+
+    async def _run_in_microvm(self, session_id: str, command: str, timeout: int, user: str, detach: bool) -> Dict[str, Any]:
+        """Firecracker MicroVM execution wrapper."""
+        # TODO: Implement Firecracker socket communication here
+        logger.critical(f"MicroVM execution requested for session {session_id} but infrastructure is pending.")
+        return {"success": False, "error": "MicroVM infrastructure not yet provisioned. Fallback to docker required."}
+
+    async def _run_in_docker(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu", detach: bool = False) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
             return {"success": False, "error": "Sandbox container not available."}
 
         # Wrap command in timeout and bash
-        # Note: we use a list for cmd to avoid quoting issues with bash -c
         cmd_list = ["timeout", str(timeout), "bash", "-c", command] if not detach else ["bash", "-c", command]
         
         try:
-            # Run using docker-py exec_run
-            # execute in a separate thread to avoid blocking the event loop
             loop = asyncio.get_running_loop()
-            
-            # Using partial or lambda for exec_run
             exec_res = await loop.run_in_executor(
                 None, 
                 lambda: container.exec_run(

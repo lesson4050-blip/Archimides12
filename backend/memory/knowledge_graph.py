@@ -14,6 +14,22 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("KG_DB_PATH", "data/knowledge_graph.db")
 
 
+class KnowledgeGraph:
+    """Wrapper for standalone KG functions to match MemoryRouter expectations."""
+    def __init__(self):
+        self.db_path = DB_PATH
+
+    async def search(self, query: str) -> List[str]:
+        # Simple keyword search on entity names or context
+        await _init_db()
+        async with aiosqlite.connect(self.db_path) as conn:
+            cursor = await conn.execute(
+                "SELECT name FROM entities WHERE name LIKE ? LIMIT 5",
+                (f"%{query}%",)
+            )
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+
 async def _init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as conn:

@@ -243,11 +243,48 @@ class CascadingRouter:
                 metrics.escalations += 1
                 logger.warning(f"Cascade tier {current_tier} failed: {e}")
                 if attempt >= max_escalations:
+                    logger.critical(f"All external LLM tiers failed. Triggering local Hydra fallback.")
+                    try:
+                        from backend.agent.orchestration.hydra_swarm import get_local_hydra
+                        local_engine = get_local_hydra()
+                        if local_engine:
+                            hydra_result = await local_engine.generate(messages, tools)
+                            hydra_result["_cascade_tier"] = "local_hydra"
+                            hydra_result["_cascade_escalated"] = True
+                            return hydra_result
+                    except Exception as fallback_err:
+                        logger.error(f"Local Hydra fallback also failed: {fallback_err}")
                     raise
                 continue
 
         # Should never reach here, but fallback
         return await self.router.generate(messages=messages, tools=tools, task_hint="think")
+
+    async def generate_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        on_token=None,
+        task_hint: str = "default",
+    ) -> Dict[str, Any]:
+        """
+        Streaming version of the cascading router.
+        Note: Currently picks the best tier once and streams it.
+        Cascading on stream failure is limited to ensure UX consistency.
+        """
+        tier, _ = estimate_complexity(messages, tools, task_hint)
+        effective_hint = self.TIER_HINTS[tier]
+        
+        try:
+            return await self.router.generate_stream(
+                messages=messages,
+                tools=tools,
+                task_hint=effective_hint,
+                on_token=on_token
+            )
+        except Exception as e:
+            logger.warning(f"Cascading stream failed for tier {tier}: {e}. Falling back to non-stream.")
+            return await self.generate(messages, tools, task_hint)
 
     def get_metrics_summary(self) -> Dict[str, Any]:
         """Returns cost/performance metrics for monitoring."""

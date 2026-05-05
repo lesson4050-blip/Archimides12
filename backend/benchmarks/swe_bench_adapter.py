@@ -1,31 +1,19 @@
 """
-SWE-bench Adapter — Run Archimedes against SWE-bench tasks.
-
-Format:
-  instance_id, repo, base_commit, problem_statement,
-  patch (gold), test_patch (verification tests)
-
-Pipeline:
-1. Clone repo at base_commit
-2. Send problem_statement to Archimedes orchestrator
-3. Capture agent's patch
-4. Apply test_patch and run tests
-5. Report pass/fail
+SWE-bench Adapter v2 — Secure Sandbox Execution.
+Archimedes Agent benchmarking engine.
 """
 import asyncio
 import json
 import logging
 import os
-import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path("data/swe_bench_results")
-
 
 @dataclass
 class SWEBenchTask:
@@ -38,7 +26,6 @@ class SWEBenchTask:
     patch: str = ""
     version: str = ""
 
-
 @dataclass
 class SWEBenchResult:
     instance_id: str
@@ -49,116 +36,95 @@ class SWEBenchResult:
     tokens_used: int = 0
     error: str = ""
 
-
 class SWEBenchAdapter:
-    """Adapter to run Archimedes on SWE-bench evaluation tasks."""
+    """Secure adapter that runs SWE-bench tasks inside isolated Docker sandboxes."""
 
-    def __init__(self, orchestrator, workspace_base: str = "/tmp/swe_bench"):
+    def __init__(self, orchestrator, sandbox_manager):
         self.orchestrator = orchestrator
-        self.workspace_base = workspace_base
+        self.sandbox_manager = sandbox_manager
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    async def run_task(
-        self, task: SWEBenchTask, timeout: int = 300
-    ) -> SWEBenchResult:
-        """Run a single SWE-bench task."""
+    async def run_task(self, task: SWEBenchTask, timeout: int = 600) -> SWEBenchResult:
+        """Run a single SWE-bench task inside a fresh sandbox session."""
         start = time.time()
-        repo_dir = os.path.join(self.workspace_base, task.instance_id)
-
+        session_id = f"bench_{task.instance_id.replace('-', '_')}"
+        
         try:
-            # Clone repo at base commit
-            os.makedirs(repo_dir, exist_ok=True)
-            clone_result = subprocess.run(
-                ["git", "clone", f"https://github.com/{task.repo}", repo_dir],
-                capture_output=True, text=True, timeout=60
-            )
-            if clone_result.returncode != 0:
-                return SWEBenchResult(
-                    instance_id=task.instance_id, resolved=False,
-                    error=f"Clone failed: {clone_result.stderr[:200]}"
-                )
+            # 1. Initialize Sandbox Session
+            await self.sandbox_manager.create_session(session_id)
+            executor = self.sandbox_manager.executor
+            filesystem = self.sandbox_manager.filesystem
 
-            subprocess.run(
-                ["git", "checkout", task.base_commit],
-                cwd=repo_dir, capture_output=True, timeout=30
-            )
+            # 2. Setup Environment inside Sandbox
+            await executor.run_command(session_id, "git config --global user.email 'bench@archimedes.ai'")
+            await executor.run_command(session_id, "git config --global user.name 'Archimedes Bench'")
+            
+            # 3. Clone and Checkout
+            clone_cmd = f"git clone https://github.com/{task.repo} ."
+            clone_res = await executor.run_command(session_id, clone_cmd)
+            if not clone_res.get("success"):
+                return SWEBenchResult(instance_id=task.instance_id, resolved=False, error=f"Clone failed: {clone_res.get('error')}")
+            
+            await executor.run_command(session_id, f"git checkout {task.base_commit}")
 
-            # Build prompt for agent
-            prompt = self._build_prompt(task, repo_dir)
+            # 4. Build Prompt
+            prompt = self._build_prompt(task)
 
-            # Run agent
+            # 5. Run Agent in the SAME session
+            # We pass the session_id so the agent works in this specific container
             result = await asyncio.wait_for(
-                self.orchestrator.run_task(prompt, mode="omega_codeact"),
+                self.orchestrator.run_task(prompt, session_id=session_id),
                 timeout=timeout
             )
 
-            # Get agent's patch
-            diff_result = subprocess.run(
-                ["git", "diff"], cwd=repo_dir,
-                capture_output=True, text=True, timeout=10
-            )
-            agent_patch = diff_result.stdout
+            # 6. Extract Agent's Patch (diff between base and current)
+            diff_res = await executor.run_command(session_id, "git diff")
+            agent_patch = diff_res.get("output", "")
 
-            # Apply test patch and run tests
+            # 7. Apply verification tests
             if task.test_patch:
-                with open("/tmp/test.patch", "w") as f:
-                    f.write(task.test_patch)
-                subprocess.run(
-                    ["patch", "-p1", "-i", "/tmp/test.patch"],
-                    cwd=repo_dir, capture_output=True, timeout=30
-                )
+                await filesystem.write_file(session_id, "verification.patch", task.test_patch)
+                await executor.run_command(session_id, "patch -p1 -i verification.patch")
 
-            test_result = subprocess.run(
-                ["python", "-m", "pytest", "--tb=short", "-q"],
-                cwd=repo_dir, capture_output=True, text=True, timeout=120
-            )
-            test_output = test_result.stdout + test_result.stderr
-            resolved = test_result.returncode == 0
+            # 8. Run Tests
+            test_res = await executor.run_command(session_id, "python3 -m pytest --tb=short -q")
+            test_output = test_res.get("output", "")
+            resolved = test_res.get("exit_code") == 0
 
-            swe_result = SWEBenchResult(
+            bench_result = SWEBenchResult(
                 instance_id=task.instance_id,
                 resolved=resolved,
                 agent_patch=agent_patch,
                 test_output=test_output,
                 duration_seconds=time.time() - start,
+                tokens_used=result.get("metadata", {}).get("tokens_used", 0)
             )
-            self._save_result(swe_result)
-            return swe_result
+            self._save_result(bench_result)
+            return bench_result
 
         except asyncio.TimeoutError:
-            return SWEBenchResult(
-                instance_id=task.instance_id, resolved=False,
-                error=f"Timeout after {timeout}s",
-                duration_seconds=time.time() - start
-            )
+            return SWEBenchResult(instance_id=task.instance_id, resolved=False, error=f"Timeout after {timeout}s", duration_seconds=time.time()-start)
         except Exception as e:
-            return SWEBenchResult(
-                instance_id=task.instance_id, resolved=False,
-                error=str(e), duration_seconds=time.time() - start
-            )
+            logger.error(f"Bench task {task.instance_id} failed: {e}")
+            return SWEBenchResult(instance_id=task.instance_id, resolved=False, error=str(e), duration_seconds=time.time()-start)
         finally:
-            import shutil
-            shutil.rmtree(repo_dir, ignore_errors=True)
+            # 9. Cleanup Sandbox
+            await self.sandbox_manager.destroy_session(session_id)
 
-    def _build_prompt(self, task: SWEBenchTask, repo_dir: str) -> str:
-        prompt = f"""Repository: {task.repo}
-Commit: {task.base_commit}
-Working directory: {repo_dir}
+    def _build_prompt(self, task: SWEBenchTask) -> str:
+        return f"""You are working on a real GitHub issue in an isolated environment.
+Repository: {task.repo}
+Instance: {task.instance_id}
 
 ## Problem Statement
 {task.problem_statement}
-"""
-        if task.hints_text:
-            prompt += f"\n## Hints\n{task.hints_text}\n"
-        prompt += """
+
 ## Instructions
-1. Analyze the problem statement carefully
-2. Explore the repository to understand the relevant code
-3. Identify the root cause
-4. Generate a minimal fix
-5. Run tests to verify
+1. Explore the codebase using the available tools.
+2. Reproduce the issue if possible.
+3. Fix the issue by modifying the files.
+4. Verify your fix.
 """
-        return prompt
 
     def _save_result(self, result: SWEBenchResult):
         result_path = RESULTS_DIR / f"{result.instance_id}.json"
@@ -167,51 +133,21 @@ Working directory: {repo_dir}
                 "instance_id": result.instance_id,
                 "resolved": result.resolved,
                 "duration_seconds": result.duration_seconds,
+                "tokens_used": result.tokens_used,
                 "error": result.error,
-                "test_output": result.test_output[:2000],
+                "test_output": result.test_output[:5000],
             }, f, indent=2)
 
-    async def run_batch(
-        self, tasks: List[SWEBenchTask], max_concurrent: int = 2
-    ) -> Dict[str, Any]:
-        """Run multiple SWE-bench tasks sequentially."""
+    async def run_batch(self, tasks: List[SWEBenchTask]) -> Dict[str, Any]:
         results = []
         for task in tasks:
-            result = await self.run_task(task)
-            results.append(result)
-            logger.info(
-                f"SWE-bench {task.instance_id}: "
-                f"{'RESOLVED' if result.resolved else 'FAILED'}"
-            )
+            res = await self.run_task(task)
+            results.append(res)
+        
         resolved = sum(1 for r in results if r.resolved)
         return {
             "total": len(results),
             "resolved": resolved,
-            "resolution_rate": round(resolved / max(len(results), 1) * 100, 1),
-            "avg_duration": round(
-                sum(r.duration_seconds for r in results) / max(len(results), 1), 1
-            ),
-            "results": [
-                {"id": r.instance_id, "resolved": r.resolved, "error": r.error}
-                for r in results
-            ],
+            "resolution_rate": round(resolved / len(results) * 100, 1) if results else 0,
+            "results": [{"id": r.instance_id, "resolved": r.resolved} for r in results]
         }
-
-
-def load_swe_bench_tasks(dataset_path: str) -> List[SWEBenchTask]:
-    """Load tasks from SWE-bench JSONL dataset."""
-    tasks = []
-    with open(dataset_path) as f:
-        for line in f:
-            data = json.loads(line)
-            tasks.append(SWEBenchTask(
-                instance_id=data["instance_id"],
-                repo=data["repo"],
-                base_commit=data["base_commit"],
-                problem_statement=data["problem_statement"],
-                hints_text=data.get("hints_text", ""),
-                test_patch=data.get("test_patch", ""),
-                patch=data.get("patch", ""),
-                version=data.get("version", ""),
-            ))
-    return tasks

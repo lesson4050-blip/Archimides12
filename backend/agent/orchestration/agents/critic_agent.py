@@ -27,39 +27,42 @@ class CriticAgent(BaseAgent):
         super().__init__("Critic", router)
 
     REVIEW_PROMPT = """
-You are a strict Quality Gate for Archimedes AI.
-Review this agent response RIGOROUSLY across multiple dimensions.
+You are a senior code reviewer and quality gate. 
+Review the agent's performance RIGOROUSLY.
 
 ORIGINAL TASK: {task}
 RETRY ATTEMPT: {attempt}/{max_attempts}
-AGENT RESPONSE:
+
+EXECUTION LOGS (Tool results, errors, internal thoughts):
+---
+{logs}
+---
+
+FINAL AGENT RESPONSE:
 ---
 {answer}
 ---
 
 SCORE EACH DIMENSION (1-10):
-1. CORRECTNESS: Does the response factually/logically solve the task?
-2. COMPLETENESS: Does it address ALL parts of the task, not just some?
-3. LANGUAGE: Is it in the correct language (RUSSIAN unless English was asked)?
-4. QUALITY: Is the output production-ready (no TODOs, placeholders, broken code)?
+1. CORRECTNESS: Does the code/response logically solve the task?
+2. COMPLETENESS: Are all requirements met?
+3. SECURITY: Are there any leaked keys, path traversals, or insecure patterns?
+4. QUALITY: Is it production-ready?
 
-AUTO-FAIL if ANY are true:
-- Response is empty, "I don't know", or refuses without reason
-- Response addresses a DIFFERENT task than requested
-- Code has obvious syntax errors or uses undefined variables
-- Response contains placeholder text like TODO, [INSERT], FIXME, "example.com"
-- Response is less than 20% complete relative to task complexity
-- Response claims to do X but the output clearly does NOT do X
+AUTO-FAIL TRIGGERS:
+- Tool execution failed but the agent claims success.
+- Code has syntax errors or missing imports.
+- Placeholders (TODO, [INSERT]) are present.
+- Security violation (e.g., hardcoded secrets).
 
 VERDICT RULES:
-- If ALL scores >= 8 and no auto-fail triggers: output "VERDICT: PASS"
-- If ANY score < 8 or auto-fail triggered: output "VERDICT: FAIL"
-- Otherwise: output "VERDICT: FAIL" (imperfect results are not allowed)
+- If ALL scores >= 8 and no auto-fail: "VERDICT: PASS"
+- Otherwise: "VERDICT: FAIL"
 
-For FAIL, list each issue as "ISSUE: [specific, actionable problem]"
-Include the dimension scores as "SCORES: correctness=N, completeness=N, language=N, quality=N"
+For FAIL, list specific issues: "ISSUE: [actionable technical problem]"
+Include scores: "SCORES: correctness=N, completeness=N, security=N, quality=N"
 
-Respond in RUSSIAN.
+IMPORTANT: Respond in the SAME LANGUAGE as the original task description.
 """
 
     async def process(
@@ -90,8 +93,19 @@ Respond in RUSSIAN.
         truncated = last_result[:3000] + (
             "\n... [truncated]" if len(last_result) > 3000 else ""
         )
+        # Extract recent tool logs from history
+        logs = []
+        for msg in state.history[-10:]:
+            if msg["role"] == "tool":
+                logs.append(f"Tool [{msg.get('name')}]: {str(msg.get('content'))[:500]}")
+            elif msg["role"] == "assistant" and "thought" in msg:
+                logs.append(f"Thought: {msg['thought']}")
+        
+        logs_str = "\n".join(logs) if logs else "No execution logs available."
+
         prompt = self.REVIEW_PROMPT.format(
             task=state.task_description,
+            logs=logs_str,
             answer=truncated,
             attempt=state.current_retry_count + 1,
             max_attempts=max_retries
@@ -116,7 +130,7 @@ Respond in RUSSIAN.
             # Parse scores for metadata
             scores_match = re.search(
                 r"SCORES:\s*correctness=(\d+),\s*completeness=(\d+),"
-                r"\s*language=(\d+),\s*quality=(\d+)",
+                r"\s*security=(\d+),\s*quality=(\d+)",
                 review_text, re.IGNORECASE
             )
             if scores_match:

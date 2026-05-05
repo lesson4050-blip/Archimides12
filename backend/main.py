@@ -82,28 +82,36 @@ async def lifespan(app: FastAPI):
     # Start the inactivity reaper
     sandbox_manager.start_reaper()
     
+    logger.info("Starting Self-Play Loop initialization...")
     # Start Self-Play Loop
     from backend.agent.self_play_loop import SelfPlayLoop
     from backend.models.model_router import ModelRouter
     from backend.agent.skill_library import SkillLibrary
     
     global self_play_loop_instance
+    logger.info("Initializing ModelRouter and SkillLibrary...")
     self_play_loop_instance = SelfPlayLoop(
         router=ModelRouter(),
         skill_library=SkillLibrary(),
         idle_threshold_mins=30
     )
+    logger.info("Starting SelfPlayLoop task...")
     safe_create_task(self_play_loop_instance.start())
     logger.info("SelfPlayLoop starting...")
     
     # Start the scheduler
+    logger.info("Initializing Scheduler...")
     from backend.tools.scheduler_singleton import get_scheduler
     get_scheduler().start()
     
     # Start COSMO Presentation engine
-    from backend.cosmo.engine import start_engine, stop_engine
-    safe_create_task(start_engine())
-    logger.info("COSMO Presentation engine starting...")
+    logger.info("Initializing COSMO Presentation engine...")
+    try:
+        from backend.cosmo.engine import start_engine, stop_engine
+        safe_create_task(start_engine())
+        logger.info("COSMO Presentation engine starting...")
+    except ImportError:
+        logger.warning("COSMO engine not found. Skipping.")
 
     # ChromaDB Monitoring Task
     async def _monitor_chroma():
@@ -163,9 +171,12 @@ async def lifespan(app: FastAPI):
     safe_create_task(_archive_old_facts())
 
     # Start COSMO Artist (Next.js template server)
-    from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn
-    artist_task = safe_create_task(start_artist())
-    logger.info("COSMO Artist server starting on port 3005...")
+    try:
+        from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn
+        artist_task = safe_create_task(start_artist())
+        logger.info("COSMO Artist server starting on port 3005...")
+    except ImportError:
+        logger.warning("COSMO Artist not found. Skipping.")
     
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
@@ -209,8 +220,16 @@ async def lifespan(app: FastAPI):
         self_play_loop_instance.stop()
 
     await sandbox_manager.cleanup()
-    await stop_engine()
-    await stop_artist_fn()
+    try:
+        from backend.cosmo.engine import stop_engine
+        await stop_engine()
+    except ImportError:
+        pass
+    try:
+        from backend.cosmo.artist import stop_artist as stop_artist_fn
+        await stop_artist_fn()
+    except ImportError:
+        pass
 
 app = FastAPI(
     title="Archimedes COSMO",
@@ -360,4 +379,5 @@ async def model_health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port, reload=True)

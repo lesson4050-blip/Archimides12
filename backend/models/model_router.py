@@ -35,7 +35,12 @@ class ModelRouter:
         
         try:
             self.groq = GroqClient() if settings.GROQ_API_KEY else None
-        except Exception:
+            # Validate key presence (not validity yet)
+            if self.groq and not settings.GROQ_API_KEY.startswith("gsk_"):
+                 logger.warning("GROQ_API_KEY does not look valid. Disabling Groq.")
+                 self.groq = None
+        except Exception as e:
+            logger.error(f"Groq initialization failed: {e}")
             self.groq = None
             
         try:
