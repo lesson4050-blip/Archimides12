@@ -14,8 +14,8 @@ class SharedBlackboard:
     Prevents context drift across complex, multi-step subtasks by providing
     a shared key-value store that can optionally be backed by Redis for multi-node setups.
     """
-    def __init__(self, redis_url: Optional[str] = None, namespace: str = "archimedes:blackboard"):
-        self.namespace = namespace
+    def __init__(self, session_id: str, redis_url: Optional[str] = None, namespace: str = "archimedes:blackboard"):
+        self.namespace = f"{namespace}:{session_id}"
         self.redis_client = None
         self._lock = asyncio.Lock()
         
@@ -46,13 +46,13 @@ class SharedBlackboard:
                 return default
             except Exception as e:
                 logger.error(f"Redis get error: {e}")
-                return self._local_store.get(key, default)
-        return self._local_store.get(key, default)
+                return self._local_store.get(self._make_key(key), default)
+        return self._local_store.get(self._make_key(key), default)
 
     async def set(self, key: str, value: Any, ttl_seconds: Optional[int] = None) -> bool:
         """Sets a value in the blackboard."""
         async with self._lock:
-            self._local_store[key] = value
+            self._local_store[self._make_key(key)] = value
             if self.redis_client:
                 try:
                     val_str = json.dumps(value, default=str)
@@ -75,7 +75,7 @@ class SharedBlackboard:
             current.append(value)
             
             # Inline the set functionality since we already hold the lock
-            self._local_store[key] = current
+            self._local_store[self._make_key(key)] = current
             if self.redis_client:
                 try:
                     val_str = json.dumps(current, default=str)

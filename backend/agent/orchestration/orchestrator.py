@@ -248,9 +248,11 @@ class AgentOrchestrator:
     def __init__(self, 
                  router: ModelRouter, 
                  tool_registry: ToolRegistry, 
-                 context_manager: ContextManager):
+                 context_manager: ContextManager,
+                 session_id: str = "default"):
         from backend.agent.shared_blackboard import SharedBlackboard
-        self.blackboard = SharedBlackboard()
+        from backend.config import settings
+        self.blackboard = SharedBlackboard(session_id=session_id, redis_url=settings.REDIS_URL)
         self.router = router
         self.tool_registry = tool_registry
         self.planner = PlannerAgent(router)

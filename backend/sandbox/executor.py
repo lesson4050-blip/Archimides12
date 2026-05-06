@@ -131,22 +131,10 @@ class SandboxExecutor:
     """
     def __init__(self, manager: 'SandboxManager'):
         self.manager = manager
-        # Architectural support for Firecracker/MicroVM isolation
-        import os
-        self.isolation_mode = os.environ.get("SANDBOX_ISOLATION", "docker")
-        if self.isolation_mode == "docker":
-            logger.warning("Sandbox uses weak Docker isolation. Production requires SANDBOX_ISOLATION=microvm (Firecracker/gVisor).")
+        logger.info("SandboxExecutor initialized (Docker isolation).")
 
     async def run_command(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu", detach: bool = False) -> Dict[str, Any]:
-        if self.isolation_mode == "microvm":
-            return await self._run_in_microvm(session_id, command, timeout, user, detach)
         return await self._run_in_docker(session_id, command, timeout, user, detach)
-
-    async def _run_in_microvm(self, session_id: str, command: str, timeout: int, user: str, detach: bool) -> Dict[str, Any]:
-        """Firecracker MicroVM execution wrapper."""
-        # TODO: Implement Firecracker socket communication here
-        logger.critical(f"MicroVM execution requested for session {session_id} but infrastructure is pending.")
-        return {"success": False, "error": "MicroVM infrastructure not yet provisioned. Fallback to docker required."}
 
     async def _run_in_docker(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu", detach: bool = False) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)

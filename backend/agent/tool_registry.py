@@ -1,6 +1,7 @@
 from typing import Dict, Any, List, Optional, Callable
 import logging
 import os
+import asyncio
 import importlib
 import inspect
 
@@ -10,6 +11,19 @@ class ToolRegistry:
     def __init__(self):
         self.tools: Dict[str, Callable] = {}
         self.tool_definitions: List[Dict[str, Any]] = []
+        self._ready_event = asyncio.Event()
+
+    async def wait_until_ready(self, timeout: float = 30.0):
+        """Wait for the registry to be fully initialized."""
+        try:
+            await asyncio.wait_for(self._ready_event.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning(f"ToolRegistry initialization timed out after {timeout}s")
+
+    def set_ready(self):
+        """Signal that all tools are registered."""
+        self._ready_event.set()
+        logger.info("ToolRegistry is now READY")
 
     def auto_discover_tools(
         self,

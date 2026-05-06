@@ -15,6 +15,18 @@ class SandboxFilesystem:
     Handles file operations inside the sandbox container.
     Uses docker exec and docker cp equivalent.
     """
+    WORKSPACE_ROOT = "/home/ubuntu/workspace"
+
+    def _safe_path(self, path: str) -> str:
+        """Enforce path boundaries within the workspace."""
+        base = os.path.normpath(self.WORKSPACE_ROOT)
+        # Handle absolute paths by stripping leading slash
+        target = os.path.normpath(os.path.join(base, path.lstrip("/")))
+        
+        if not target.startswith(base):
+            raise ValueError(f"Path traversal attempt blocked: {path}")
+        return target
+
     def __init__(self, manager: 'SandboxManager'):
         self.manager = manager
 
@@ -60,8 +72,7 @@ class SandboxFilesystem:
             return {"success": False, "error": "Sandbox container not available."}
             
         try:
-            # Use docker cp logic (put_archive) to write files safely
-            # This avoids shell escaping issues with 'echo'
+            safe_path = self._safe_path(path)
             
             tar_stream = io.BytesIO()
             with tarfile.open(fileobj=tar_stream, mode='w') as tar:
@@ -70,20 +81,19 @@ class SandboxFilesystem:
                 else:
                     content_bytes = content
                     
-                file_info = tarfile.TarInfo(name=os.path.basename(path))
+                file_info = tarfile.TarInfo(name=os.path.basename(safe_path))
                 file_info.size = len(content_bytes)
                 tar.addfile(file_info, io.BytesIO(content_bytes))
                 
             tar_stream.seek(0)
             
-            # Ensure directory exists
-            dirname = os.path.dirname(path)
+            dirname = os.path.dirname(safe_path)
             loop = asyncio.get_running_loop()
             if dirname:
                 await loop.run_in_executor(None, lambda: container.exec_run(f"mkdir -p {dirname}", user="ubuntu"))
                 
-            logger.info(f"SandboxFilesystem: Writing {len(content_bytes)} bytes to {path} via put_archive...")
-            await loop.run_in_executor(None, lambda: container.put_archive(dirname or "/home/ubuntu/workspace", tar_stream))
+            logger.info(f"SandboxFilesystem: Writing {len(content_bytes)} bytes to {safe_path} via put_archive...")
+            await loop.run_in_executor(None, lambda: container.put_archive(dirname, tar_stream))
             
             return {"success": True, "size": len(content_bytes)}
         except Exception as e:

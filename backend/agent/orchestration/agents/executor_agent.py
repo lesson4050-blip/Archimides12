@@ -10,6 +10,7 @@ from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
 from backend.agent.error_recovery import ErrorRecovery
 from backend.agent.skill_engine import SkillEngine
+from backend.agent.self_improvement import check_tool_safety
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -170,8 +171,14 @@ class ExecutorAgent(BaseAgent):
         except Exception as e:
             logger.debug(f"Skill lookup skipped: {e}")
 
-        # Loop for tool execution
-        for step in range(self.max_steps):
+        # Loop for tool execution with separate counters (Security Audit Fix #8)
+        reasoning_steps = 0
+        tool_call_steps = 0
+        max_reasoning = 15
+        max_tool = 25
+
+        while reasoning_steps < max_reasoning and tool_call_steps < max_tool:
+            step = reasoning_steps + tool_call_steps
             # Phase 2 Context Compression (Context Overload Protection)
             if hasattr(self.context_manager, "summarize_if_needed"):
                 await self.context_manager.summarize_if_needed(self.router)
@@ -598,6 +605,7 @@ class ExecutorAgent(BaseAgent):
                 
                 await self.context_manager.summarize_if_needed(self.router)
                 # CONTINUE the loop to process tool output
+                tool_call_steps += 1
                 continue
             else:
                 # No tool call — this is the final answer for this subtask
@@ -610,6 +618,7 @@ class ExecutorAgent(BaseAgent):
                         "Continue with the task. Use a tool or provide "
                         "the final answer."
                     )
+                    reasoning_steps += 1
                     continue
 
                 if not res_text and step == 0:
@@ -699,6 +708,6 @@ class ExecutorAgent(BaseAgent):
 
                 return state
         
-        await self.log_info(f"Subtask hit iteration limit ({self.max_steps} steps).", websocket_send)
+        await self.log_info(f"Subtask hit iteration limit (Reasoning: {reasoning_steps}, Tools: {tool_call_steps}).", websocket_send)
         state.history = self.context_manager.get_messages()
         return state

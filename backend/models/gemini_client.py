@@ -3,6 +3,7 @@ import asyncio
 from typing import List, Dict, Any, Optional, Callable
 from google import genai
 from google.genai import types
+from backend.agent.self_improvement import log_error, check_tool_safety
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,18 @@ class GeminiClient:
     def __init__(self):
         self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         self.model_name = settings.GEMINI_MODEL
+
+    def _clean_schema(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively remove fields that Gemini API doesn't support."""
+        if not isinstance(schema, dict):
+            return schema
+        new_schema = {k: v for k, v in schema.items() if k not in ("$schema", "additionalProperties")}
+        for k, v in new_schema.items():
+            if isinstance(v, dict):
+                new_schema[k] = self._clean_schema(v)
+            elif isinstance(v, list):
+                new_schema[k] = [self._clean_schema(i) if isinstance(i, dict) else i for i in v]
+        return new_schema
 
     async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
         # Prepare content from messages
@@ -61,19 +74,20 @@ class GeminiClient:
             for t in tools:
                 if t.get("type") == "function":
                     f = t["function"]
+                    params = self._clean_schema(f["parameters"])
                     fns.append(types.FunctionDeclaration(
                         name=f["name"],
                         description=f["description"],
-                        parameters=f["parameters"]
+                        parameters=params
                     ))
             if fns:
                 genai_tools = [types.Tool(function_declarations=fns)]
 
         # Route model based on task complexity
         if task_hint in ("think", "plan"):
-            selected_model = "gemini-3.1-pro-preview"
+            selected_model = "gemini-2.5-pro"
         else:
-            selected_model = "gemini-3.1-flash-lite-preview"
+            selected_model = "gemini-2.0-flash"
 
         try:
             # Use generate_content
@@ -136,7 +150,7 @@ class GeminiClient:
         Supports text-only and vision (text + image) requests.
         Used by Prompt Enhancer and Vision Critic.
         """
-        model = model_override or self.model_name
+        model = model_override or "gemini-2.0-flash"
         parts = []
 
         if image_bytes:
@@ -191,28 +205,30 @@ class GeminiClient:
             fns = [types.FunctionDeclaration(
                 name=t["function"]["name"],
                 description=t["function"]["description"],
-                parameters=t["function"]["parameters"]
+                parameters=self._clean_schema(t["function"]["parameters"])
             ) for t in tools if t.get("type") == "function"]
             if fns:
                 genai_tools = [types.Tool(function_declarations=fns)]
 
-        model_name = "gemini-3.1-flash-lite-preview" if task_hint in ("quick", "default") else "gemini-3.1-pro-preview"
+        model_name = "gemini-2.0-flash" if task_hint in ("quick", "default") else "gemini-2.5-pro"
         
         full_text = ""
         tool_calls = []
 
         try:
-            # Use the new SDK's streaming generator
-            async for chunk in await asyncio.to_thread(
-                self.client.models.generate_content_stream,
-                model=model_name,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    tools=genai_tools,
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+            # Use to_thread for the entire iteration if it's a sync generator
+            def get_stream():
+                return self.client.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        tools=genai_tools,
+                        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+                    )
                 )
-            ):
+
+            for chunk in await asyncio.to_thread(get_stream):
                 if chunk.candidates:
                     candidate = chunk.candidates[0]
                     for part in candidate.content.parts:
@@ -222,7 +238,6 @@ class GeminiClient:
                                 await on_token(part.text)
                         
                         if part.function_call:
-                            # If we get a function call mid-stream or at end
                             from backend.utils.tool_schemas import validate_tool_call
                             raw_tc = {
                                 "name": part.function_call.name,

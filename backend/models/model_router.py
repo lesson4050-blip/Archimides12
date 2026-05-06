@@ -90,12 +90,29 @@ class ModelRouter:
         }
 
     def classify_complexity(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]]) -> str:
-        """Classify task complexity based on context length and tools to optimize routing."""
-        text_length = sum(len(m.get("content", "")) for m in messages if isinstance(m.get("content"), str))
+        """
+        Classify task complexity based on intent, context depth, and tool surface.
+        Prevents routing complex reasoning/coding tasks to fast models with small contexts.
+        """
+        # 1. Check for intent keywords in the last user message
+        last_user_msg = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
+        complexity_keywords = {"debug", "fix", "refactor", "implement", "analyze", "audit", "bottleneck", "deadlock"}
+        if any(kw in last_user_msg.lower() for kw in complexity_keywords):
+            return "complex"
+
+        # 2. Check conversation depth (history > 5 messages usually implies a complex follow-up)
+        if len(messages) > 6:
+            return "complex"
+
+        # 3. Check tool surface (more than 2 tools suggests coordination needs)
         if tools and len(tools) > 2:
             return "complex"
-        if text_length > 2500:
+
+        # 4. Fallback to text length (but with a stricter threshold for triviality)
+        text_length = sum(len(m.get("content", "")) for m in messages if isinstance(m.get("content"), str))
+        if text_length > 3000:
             return "complex"
+
         return "trivial"
 
     async def _get_order(
@@ -115,13 +132,13 @@ class ModelRouter:
         if task_hint in ("local", "private"):
             order = [self.ollama, self.groq]
         elif task_hint in self.QUALITY_TASKS or complexity == "complex":
-            order = [self.gemini, self.anthropic, self.ollama, self.groq]
+            order = [self.gemini, self.anthropic, self.groq, self.ollama]
         elif task_hint in self.SPEED_TASKS or complexity == "trivial":
             order = [self.groq, self.gemini, self.ollama, self.anthropic]
         elif tools:
             order = [self.gemini, self.anthropic, self.groq, self.ollama]
         else:
-            order = [self.groq, self.gemini, self.ollama, self.anthropic]
+            order = [self.groq, self.gemini, self.anthropic, self.ollama]
         
         available = [c for c in order if c is not None]
         if not ollama_ok and self.ollama in available:

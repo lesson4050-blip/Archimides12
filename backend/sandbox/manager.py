@@ -43,7 +43,7 @@ class SnapshotManager:
     Creates snapshots before destructive operations, allows instant rollback.
     """
 
-    SNAPSHOT_DIR = "data/snapshots"
+    SNAPSHOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/snapshots"))
     MAX_SNAPSHOTS_PER_SESSION = 20
 
     def __init__(self):

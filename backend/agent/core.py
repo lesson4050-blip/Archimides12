@@ -130,7 +130,8 @@ class ArchimedesCosmoAgent:
         self.orchestrator: AgentOrchestrator = AgentOrchestrator(
             router=self.router, 
             tool_registry=self.tool_registry, 
-            context_manager=self.context_manager
+            context_manager=self.context_manager,
+            session_id=self.session_id or "default"
         )
 
         from backend.mcp_hub.client import ArchimedesMCPClient
@@ -166,8 +167,13 @@ class ArchimedesCosmoAgent:
 
     async def initialize(self) -> None:
         """Performs asynchronous initialization including MCP connection and connector syncing."""
-        await self._init_mcp()
-        await self._init_connectors()
+        try:
+            await self._init_mcp()
+            await self._init_connectors()
+        except Exception as e:
+            logger.error(f"Async initialization failed: {e}")
+        finally:
+            self.tool_registry.set_ready()
 
     async def _init_connectors(self) -> None:
         """Synchronizes connected services and updates system prompt with connector context."""
@@ -186,6 +192,11 @@ class ArchimedesCosmoAgent:
         """Discover and register tools from external MCP servers using event-based polling."""
         try:
             await self.mcp_client.connect_all()
+            
+            # Optimization: only wait if there are actually servers to connect to
+            if not getattr(self.mcp_client, "servers_config", {}):
+                return
+
             MAX_WAIT, POLL_INTERVAL, elapsed = 10.0, 0.5, 0.0
             mcp_tools = []
             while elapsed < MAX_WAIT:
@@ -241,6 +252,9 @@ class ArchimedesCosmoAgent:
         task_id = str(uuid.uuid4())
         start_time = asyncio.get_running_loop().time()
         mode = AgentMode.FAST if kwargs.get("mode", "planning").lower() == "fast" else AgentMode.PLANNING
+        
+        # Wait for tools to be ready
+        await self.tool_registry.wait_until_ready()
         
         try:
             self.state = AgentState.PLANNING if mode == AgentMode.PLANNING else AgentState.EXECUTING

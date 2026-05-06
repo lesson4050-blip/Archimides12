@@ -51,8 +51,7 @@ class GroqClient:
                 response = await self.client.chat.completions.create(
                     model=self.model,
                     messages=formatted_messages,
-                    tools=tools,
-                    tool_choice="auto" if tools else None,
+                    tools=tools
                 )
                 
                 message = response.choices[0].message
@@ -156,7 +155,8 @@ class GroqClient:
         }
         if tools:
             payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+            # Some Groq versions prefer no tool_choice if it's auto
+            # payload["tool_choice"] = "auto" 
 
         full_text = ""
         tool_call_accumulator = {}

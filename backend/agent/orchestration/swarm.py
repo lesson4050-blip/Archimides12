@@ -441,13 +441,14 @@ class MicroAgentSwarm:
         # Phase 2: Other agents review/augment in parallel (with tools)
         review_tasks = []
         for reviewer in agents[1:]:
-            # Optimization: pass a smaller, more focused context to the next agent
+            # Use larger context for reviews to prevent data loss
             context = (
-                f"The {primary.role} produced this summary of findings:\n"
-                f"{primary_result[:1000]}\n\n"
-                f"Your job as {reviewer.role}: "
-                f"{reviewer.specialty}. "
-                f"Verify the accuracy of these specific findings. Use your tools to check facts."
+                f"The {primary.role} produced this work for the task:\n"
+                f"--- BEGIN {primary.role.upper()} OUTPUT ---\n"
+                f"{primary_result[:4000]}\n"
+                f"--- END {primary.role.upper()} OUTPUT ---\n\n"
+                f"Your specific mission as {reviewer.role}: {reviewer.specialty}.\n"
+                f"Verify the implementation, run tests if needed, and find any missed requirements."
             )
             review_tasks.append(
                 self._run_agent_with_tools(
@@ -470,12 +471,12 @@ class MicroAgentSwarm:
             f"You are a senior technical lead synthesizing multi-agent work.\n\n"
             f"TASK: {task}\n\n"
             f"=== PRIMARY SOLUTION by [{primary.role.upper()}] ===\n"
-            f"{primary_result[:2500]}\n\n"
+            f"{primary_result[:6000]}\n\n"
         )
         for reviewer, review in zip(agents[1:], reviews):
             synthesis_prompt += (
                 f"=== REVIEW by [{reviewer.role.upper()}] ===\n"
-                f"{review[:1500]}\n\n"
+                f"{review[:3000]}\n\n"
             )
         
         # Include tool execution evidence

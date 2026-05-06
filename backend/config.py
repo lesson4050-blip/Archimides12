@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
-    AUTH_ENABLED: bool = True  # Production default; set False in .env for dev
+    AUTH_ENABLED: bool = True
     
     # MCP
     MCP_SERVER_PORT: int = 8002
