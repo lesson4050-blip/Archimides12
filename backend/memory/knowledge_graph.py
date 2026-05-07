@@ -106,6 +106,29 @@ async def add_relation(
         await conn.commit()
 
 
+async def query_related(
+    entity: str,
+    depth: int = 2,
+    max_results: int = 15
+) -> List[Dict[str, Any]]:
+    """Query entities related to the given entity.
+    
+    Backward-compatible wrapper around query_causal_chains.
+    Flattens causal chain paths into a flat list of edges.
+    """
+    paths = await query_causal_chains(entity, depth=depth, max_paths=max_results)
+    # Flatten paths into unique edges
+    seen = set()
+    edges = []
+    for path in paths:
+        for edge in path:
+            key = (edge["from"], edge["relation"], edge["to"])
+            if key not in seen:
+                seen.add(key)
+                edges.append(edge)
+    return edges
+
+
 async def query_causal_chains(
     entity: str,
     depth: int = 3,
