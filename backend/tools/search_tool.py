@@ -88,20 +88,29 @@ class SearchTool:
                 "note": "Neural Research Engine completed (Tavily + Exa)"
             }
 
-        # Try Tavily first
+        # Try Tavily first (best quality)
         if settings.TAVILY_API_KEY:
             result = await self._search_tavily(query, search_depth, max_results)
             if result.get("success"):
                 return result
-            logger.warning(f"Tavily failed: {result.get('error')}. Trying DuckDuckGo...")
+            logger.warning(f"Tavily failed: {result.get('error')}. Trying Brave...")
 
-        # Fallback: DuckDuckGo (free, no API key)
+        # Fallback 1: Brave Search (high quality, free tier available)
+        brave_key = getattr(settings, 'BRAVE_API_KEY', '')
+        if brave_key:
+            result = await self._search_brave(query, max_results, brave_key)
+            if result.get("success"):
+                result["note"] = "Results from Brave Search"
+                return result
+            logger.warning(f"Brave failed: {result.get('error')}. Trying DuckDuckGo...")
+
+        # Fallback 2: DuckDuckGo (free, no API key, lowest quality)
         result = await self._search_duckduckgo(query, max_results)
         if result.get("success"):
-            result["note"] = "Results from DuckDuckGo (set TAVILY_API_KEY for better results)"
+            result["note"] = "Results from DuckDuckGo (set TAVILY_API_KEY or BRAVE_API_KEY for better results)"
             return result
 
-        return {"success": False, "error": "All search engines failed"}
+        return {"success": False, "error": "All search engines failed (Tavily, Brave, DuckDuckGo)"}
 
     async def _read_top_pages(
         self, results: list, query: str
@@ -299,6 +308,43 @@ Do not output any reasoning, just 'DONE' or the new query.
 
         except Exception as e:
             logger.error(f"DuckDuckGo search error: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _search_brave(
+        self, query: str, max_results: int, api_key: str
+    ) -> Dict[str, Any]:
+        """Brave Search API — high quality, free tier (1 req/sec, 2000/month)."""
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+                    params={"q": query, "count": min(max_results, 20)},
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                results = []
+                formatted = []
+
+                for i, r in enumerate(data.get("web", {}).get("results", [])[:max_results]):
+                    title = r.get("title", "No title")
+                    url = r.get("url", "")
+                    desc = r.get("description", "")[:400]
+                    formatted.append(f"[{i+1}] {title}\nURL: {url}\n{desc}")
+                    results.append({"title": title, "url": url, "content": desc})
+
+                if not formatted:
+                    return {"success": False, "error": "Brave returned no results"}
+
+                return {
+                    "success": True,
+                    "output": "\n\n".join(formatted),
+                    "results": results,
+                    "source": "brave",
+                }
+        except Exception as e:
+            logger.error(f"Brave search error: {e}")
             return {"success": False, "error": str(e)}
 
     async def _search_exa(

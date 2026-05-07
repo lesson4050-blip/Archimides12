@@ -565,13 +565,20 @@ class AgentOrchestrator:
         """Proactively search if the query looks like an information question.
         
         Returns search context string or empty string if not applicable.
-        Non-blocking: failures return empty string silently.
+        Guards against empty ToolRegistry — logs warning if search tool is missing.
         """
         if not self._SEARCH_TRIGGER.search(query):
             return ""
         
+        # GUARD: Verify search tool is actually registered (not silent fail)
+        if "search" not in self.tool_registry.tools:
+            logger.warning(
+                "TOOL REGISTRY GUARD: 'search' tool not registered. "
+                "Proactive search skipped. This may indicate a ToolInitializer failure."
+            )
+            return ""
+        
         try:
-            # Try to use the registered search tool
             search_result = await self.tool_registry.execute_tool(
                 "search", {"query": query, "max_results": 3}
             )

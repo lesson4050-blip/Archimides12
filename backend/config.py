@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     TAVILY_API_KEY: str = ""
     EXA_API_KEY: str = ""
+    BRAVE_API_KEY: str = ""
     
     # Image Generation
     IMAGE_CRITIQUE_MODEL: str = "gemini-3.1-flash"
@@ -128,12 +129,19 @@ def validate_config() -> dict:
     else:
         _config_logger.info(f"LLM keys active: {', '.join(active_llm.keys())}")
     
-    # Check search key
-    if not settings.TAVILY_API_KEY:
+    # Check search keys
+    search_keys = {
+        "TAVILY_API_KEY": settings.TAVILY_API_KEY,
+        "BRAVE_API_KEY": settings.BRAVE_API_KEY,
+    }
+    active_search = {k for k, v in search_keys.items() if v}
+    if not active_search:
         warnings.append(
-            "TAVILY_API_KEY not set — search will fall back to DuckDuckGo "
-            "(lower quality). Set TAVILY_API_KEY in .env for best results."
+            "No search API key set (TAVILY_API_KEY or BRAVE_API_KEY). "
+            "Search will fall back to DuckDuckGo (lower quality)."
         )
+    else:
+        _config_logger.info(f"Search keys active: {', '.join(active_search)}")
     
     # Check JWT in production
     if settings.AUTH_ENABLED and settings.JWT_SECRET_KEY:
