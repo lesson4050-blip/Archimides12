@@ -69,17 +69,32 @@ CONVERSATIONAL_PATTERNS = [
 ]
 
 def is_conversational(text: str) -> bool:
-    """Check if the task is a simple conversational message (greeting, etc.)."""
+    """Check if the task is a simple conversational message (greeting, etc.).
+    
+    IMPORTANT: This must NOT match information-seeking questions.
+    "What is Python?" is a QUESTION, not a greeting.
+    Only explicit greetings/farewells/meta-questions should match.
+    """
     cleaned = text.strip().lower()
     
-    # Check regex patterns first
+    # Never match if the message contains a question word — it's a real question
+    question_signals = re.compile(
+        r'\b(what|who|when|where|how|why|which|find|search|explain|tell me|show me|'
+        r'что\b|кто\b|когда|где\b|как\b|почему|какой|какая|какие|найди|покажи|'
+        r'расскажи|объясни|сколько|зачем)\b', re.IGNORECASE
+    )
+    # Exception: "что ты умеешь" / "кто ты" are meta-questions (handled by patterns)
+    meta_questions = re.compile(
+        r'(что\s+ты\s+(умеешь|такое|можешь)|кто\s+ты|'
+        r'what can you do|who are you|what are you)', re.IGNORECASE
+    )
+    if question_signals.search(cleaned) and not meta_questions.search(cleaned):
+        return False
+    
+    # Check explicit greeting/farewell patterns
     for pattern in CONVERSATIONAL_PATTERNS:
         if re.search(pattern, cleaned, re.IGNORECASE):
             return True
-            
-    # Fallback for very short messages without technical symbols
-    if len(cleaned) < 20 and not any(c in cleaned for c in ["/", "\\", "{", "}", "http", "pip ", "npm "]):
-        return True
         
     return False
 
@@ -483,7 +498,11 @@ class AgentOrchestrator:
                 self.event_bus.remove_consumer(websocket_send)
 
     async def _run_conversational(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
-        """Direct LLM response for simple conversational messages — no tools, no critic."""
+        """Direct LLM response for simple conversational messages — no tools, no critic.
+        
+        FIX-2: Now includes proactive search for information-seeking questions
+        that reach this path (e.g. via classify_task → "direct").
+        """
         logger.info(f"[{state.session_id}] Orchestrator: conversational shortcut")
         
         system_prompt = (
@@ -491,6 +510,15 @@ class AgentOrchestrator:
             "Respond in the same language the user uses. "
             "Be concise and friendly."
         )
+        
+        # FIX-2: Proactive search for information questions
+        search_context = await self._maybe_search_for_context(state.task_description)
+        if search_context:
+            system_prompt += (
+                f"\n\nRelevant search results (use these to answer accurately):\n"
+                f"{search_context}"
+            )
+        
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": state.task_description}
@@ -524,6 +552,39 @@ class AgentOrchestrator:
         logger.info(f"[{state.session_id}] Orchestrator entering FAST mode")
         state = await self.executor.process(state, websocket_send)
         return await self._get_final_response(state, websocket_send)
+
+    # ── FIX-2: Proactive search for information questions ──
+    
+    _SEARCH_TRIGGER = re.compile(
+        r'\b(what|who|when|where|how|why|which|find|search|look up|'
+        r'tell me about|explain|latest|current|today|news|price|weather|'
+        r'что|кто|когда|где|как|почему|найди|расскажи|объясни|'
+        r'последн|сейчас|новост|цена|погода|курс|сколько)\b', re.IGNORECASE
+    )
+
+    async def _maybe_search_for_context(self, query: str) -> str:
+        """Proactively search if the query looks like an information question.
+        
+        Returns search context string or empty string if not applicable.
+        Non-blocking: failures return empty string silently.
+        """
+        if not self._SEARCH_TRIGGER.search(query):
+            return ""
+        
+        try:
+            # Try to use the registered search tool
+            search_result = await self.tool_registry.execute_tool(
+                "search", {"query": query, "max_results": 3}
+            )
+            if search_result.get("success"):
+                output = search_result.get("output", "")
+                if output and len(str(output)) > 20:
+                    logger.info(f"Proactive search returned {len(str(output))} chars")
+                    return str(output)[:2000]  # Cap context size
+        except Exception as e:
+            logger.debug(f"Proactive search skipped: {e}")
+        
+        return ""
 
     async def _run_planning_mode(self, state: OrchestrationState, websocket_send: Optional[Callable]) -> Dict[str, Any]:
         """Runs the planner agent to decompose the task and executes the plan."""

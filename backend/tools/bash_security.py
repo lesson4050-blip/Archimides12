@@ -269,6 +269,30 @@ def validate_dangerous_patterns(command: str, unquoted: str) -> Optional[Securit
     return None
 
 
+# ── Sensitive file read patterns (FIX-6) ──
+
+SENSITIVE_READ_PATTERNS = [
+    (re.compile(r'\b(cat|less|more|head|tail|tac|nl|strings)\s+/etc/(passwd|shadow|sudoers|gshadow|master\.passwd)'),
+     "Reading sensitive system credential file"),
+    (re.compile(r'\b(cat|less|more|head|tail)\s+.*\.(pem|key|p12|pfx|jks|keystore)'),
+     "Reading private key or certificate file"),
+    (re.compile(r'\b(cat|less|more|head|tail)\s+.*/(\.env|\.aws/credentials|\.ssh/id_)'),
+     "Reading secrets/credentials file"),
+]
+
+
+def validate_sensitive_reads(command: str, unquoted: str) -> Optional[SecurityResult]:
+    """Detect commands that read sensitive system or credential files."""
+    for pattern, desc in SENSITIVE_READ_PATTERNS:
+        if pattern.search(unquoted):
+            return SecurityResult(
+                allowed=False,
+                check_id=SecurityCheckID.DANGEROUS_PATTERNS,
+                message=f"Blocked: {desc}"
+            )
+    return None
+
+
 def validate_brace_expansion(unquoted: str) -> Optional[SecurityResult]:
     """Detect dangerous brace expansion patterns."""
     brace_cmd = re.compile(r'\{[^}]*[;|&][^}]*\}')
@@ -434,6 +458,11 @@ def validate_command(command: str) -> SecurityResult:
 
     # Layer 6: Dangerous patterns
     result = validate_dangerous_patterns(command, unquoted)
+    if result:
+        return result
+
+    # Layer 6.5: Sensitive file reads (FIX-6)
+    result = validate_sensitive_reads(command, unquoted)
     if result:
         return result
 

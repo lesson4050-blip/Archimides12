@@ -20,9 +20,24 @@ class ToolInitializer:
         self.tool_registry = tool_registry
         self.session_id = session_id
         self.agent = agent
+        # FIX-4: Registration tracking
+        self._registered: list = []
+        self._failed: list = []
+        self._critical_tools = {"file", "search", "shell", "message"}
+
+    def _try_register(self, name: str, register_fn):
+        """Register a single tool with tracking. Returns True on success."""
+        try:
+            register_fn()
+            self._registered.append(name)
+            return True
+        except Exception as e:
+            self._failed.append((name, str(e)))
+            logger.error(f"Failed to register {name}: {e}")
+            return False
 
     def initialize_all(self) -> None:
-        """Register every tool with individual error isolation."""
+        """Register every tool with individual error isolation and summary report."""
         from backend.sandbox.singleton import sandbox_manager
 
         # --- Core tools ---
@@ -434,7 +449,7 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register OmnimodalIngester: {e}")
 
-        logger.info("ToolInitializer: all tools registered")
+        logger.info("ToolInitializer: explicit registration complete")
 
         # Auto-discover any additional tools
         # Auto-discover additional tools from both directories
@@ -446,4 +461,25 @@ class ToolInitializer:
             except Exception as e:
                 logger.debug(f"Auto-discovery in {path} skipped: {e}")
 
-        logger.info("ToolInitializer: all tools registered")
+        # ── FIX-4: Consolidated Registration Report ──
+        total_attempted = len(self._registered) + len(self._failed)
+        total_active = len(self.tool_registry.tools)
+        
+        report_lines = [
+            f"TOOL REGISTRATION: {len(self._registered)}/{total_attempted} explicit tools OK, "
+            f"{total_active} total active (incl. auto-discovered)"
+        ]
+        
+        if self._failed:
+            failed_names = [f"❌ {name} ({err[:60]})" for name, err in self._failed]
+            report_lines.append(f"FAILED: {', '.join(failed_names)}")
+        
+        # Critical tool check
+        for critical in sorted(self._critical_tools):
+            is_active = critical in self.tool_registry.tools
+            status = "✅ YES" if is_active else "🚨 NO"
+            report_lines.append(f"  CRITICAL [{critical}]: {status}")
+        
+        for line in report_lines:
+            logger.info(f"ToolInitializer: {line}")
+

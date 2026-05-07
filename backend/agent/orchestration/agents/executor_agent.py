@@ -281,9 +281,16 @@ class ExecutorAgent(BaseAgent):
                 import asyncio
                 streaming_task = asyncio.create_task(stream_frames())
 
-            # Get tools and apply exclusion list (Sprint 2.2)
+            # Get tools and apply exclusion list (Sprint 2.2) + dynamic selection (FIX-5)
             all_tools = self.tool_registry.get_all_tool_definitions()
-            active_tools = [t for t in all_tools if t["function"]["name"] not in getattr(state, "excluded_tools", [])]
+            
+            # FIX-5: Dynamic tool selection — reduce from 40+ to ≤12 relevant tools
+            from backend.agent.tool_selector import select_tools
+            active_tools = select_tools(
+                task=current_target,
+                all_tool_definitions=all_tools,
+                excluded_tools=getattr(state, "excluded_tools", []),
+            )
 
             # Auto-detect complexity — simple for tool loops, complex for planning
             _is_planning_step = any(

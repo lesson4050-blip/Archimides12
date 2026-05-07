@@ -94,3 +94,67 @@ class Settings(BaseSettings):
         return self
 
 settings = Settings()
+
+
+# ── FIX-3: Startup Configuration Validation ──
+
+import logging as _logging
+
+_config_logger = _logging.getLogger("backend.config")
+
+
+def validate_config() -> dict:
+    """Validate configuration and log clear warnings for missing/weak settings.
+    
+    Returns a dict with validation results:
+        {"ok": bool, "warnings": list[str], "errors": list[str]}
+    
+    Called at import time — does NOT crash the server, only logs.
+    """
+    warnings = []
+    errors = []
+    
+    # Check LLM keys — at least ONE must be set
+    llm_keys = {
+        "GROQ_API_KEY": settings.GROQ_API_KEY,
+        "GOOGLE_API_KEY": settings.GOOGLE_API_KEY,
+    }
+    active_llm = {k: v for k, v in llm_keys.items() if v}
+    if not active_llm:
+        errors.append(
+            "NO LLM API KEY SET: Set at least one of GROQ_API_KEY or "
+            "GOOGLE_API_KEY in .env. Agent will fail on all requests."
+        )
+    else:
+        _config_logger.info(f"LLM keys active: {', '.join(active_llm.keys())}")
+    
+    # Check search key
+    if not settings.TAVILY_API_KEY:
+        warnings.append(
+            "TAVILY_API_KEY not set — search will fall back to DuckDuckGo "
+            "(lower quality). Set TAVILY_API_KEY in .env for best results."
+        )
+    
+    # Check JWT in production
+    if settings.AUTH_ENABLED and settings.JWT_SECRET_KEY:
+        if settings.JWT_SECRET_KEY == "change-me-in-production":
+            errors.append(
+                "JWT_SECRET_KEY is set to the default placeholder. "
+                "Generate a real key: python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
+    
+    # Log results
+    for w in warnings:
+        _config_logger.warning(f"CONFIG WARNING: {w}")
+    for e in errors:
+        _config_logger.error(f"CONFIG ERROR: {e}")
+    
+    if not warnings and not errors:
+        _config_logger.info("CONFIG OK: All critical settings validated")
+    
+    return {"ok": len(errors) == 0, "warnings": warnings, "errors": errors}
+
+
+# Run validation at import time
+_config_validation = validate_config()
+
