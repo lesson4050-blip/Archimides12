@@ -13,7 +13,7 @@ from backend.agent.error_recovery import (
     ("TimeoutError: deadline exceeded", ErrorType.TIMEOUT),
     ("PermissionError: access denied", ErrorType.PERMISSION),
     ("FileNotFoundError: No such file /tmp/x", ErrorType.NOT_FOUND),
-    ("ModuleNotFoundError: No module named 'flask'", ErrorType.NOT_FOUND),
+    ("ModuleNotFoundError: No module named 'flask'", ErrorType.DEPENDENCY),
     ("ConnectionError: refused", ErrorType.NETWORK),
     ("Missing required field 'name'", ErrorType.TOOL_MISUSE),
     ("RuntimeError: unexpected failure", ErrorType.TOOL_MISUSE),

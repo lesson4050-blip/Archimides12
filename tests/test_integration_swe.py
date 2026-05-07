@@ -79,25 +79,24 @@ async def test_code_editor_view_lines(tmp_path):
 @pytest.mark.asyncio
 async def test_session_store(tmp_path):
     """Test SessionStore save and load."""
-    import os
-    with patch("backend.agent.session_store.SESSION_DIR", tmp_path):
-        from backend.agent.session_store import SessionStore
-        store = SessionStore()
+    from backend.agent.session_store import SessionStore
+    db_path = str(tmp_path / "test_sessions.db")
+    store = SessionStore(db_path=db_path)
 
-        saved = store.save_context(
-            session_id="test_session",
-            history=[{"role": "user", "content": "test"}],
-            task_description="Test task"
-        )
-        assert saved is True
+    saved = store.save_context(
+        session_id="test_session",
+        history=[{"role": "user", "content": "test"}],
+        task_description="Test task"
+    )
+    assert saved is True
 
-        loaded = store.load_context("test_session")
-        assert loaded is not None
-        assert loaded["task_description"] == "Test task"
-        assert len(loaded["history"]) == 1
+    loaded = store.load_context("test_session")
+    assert loaded is not None
+    assert loaded["task_description"] == "Test task"
+    assert len(loaded["history"]) == 1
 
-        store.delete_session("test_session")
-        assert store.load_context("test_session") is None
+    store.delete_session("test_session")
+    assert store.load_context("test_session") is None
 
 
 @pytest.mark.asyncio

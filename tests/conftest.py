@@ -1,16 +1,25 @@
 import os
 import sys
 import asyncio
+import platform
 import pytest
 import sqlite3
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+
 
 def pytest_sessionstart(session):
     """Force environment variables for test isolation before any imports."""
     os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_archemidas.db"
     os.environ["REDIS_URL"] = ""
     os.environ["TESTING"] = "1"
+
+
+# ── Fix Windows IOCP event loop deadlock with aiosqlite ──────────
+# On Windows, the default ProactorEventLoop can deadlock with aiosqlite.
+# SelectorEventLoop is compatible with aiosqlite's threading model.
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @pytest.fixture(scope="session", autouse=True)

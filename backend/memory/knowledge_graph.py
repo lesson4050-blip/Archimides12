@@ -116,7 +116,9 @@ async def query_related(
     Backward-compatible wrapper around query_causal_chains.
     Flattens causal chain paths into a flat list of edges.
     """
-    paths = await query_causal_chains(entity, depth=depth, max_paths=max_results)
+    # DFS needs depth >= 2 to capture at least one edge
+    effective_depth = max(2, depth)
+    paths = await query_causal_chains(entity, depth=effective_depth, max_paths=max_results)
     # Flatten paths into unique edges
     seen = set()
     edges = []
