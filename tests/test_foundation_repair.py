@@ -84,6 +84,51 @@ class TestIsConversational:
         assert self.is_conversational(text) is False, f"Expected False for command: {text!r}"
 
 
+# ── ДИАГНОЗ-1 FIX: classify_task() short-task routing ──────────
+
+class TestClassifyTaskRouting:
+    """Verify classify_task() does NOT silently route short real tasks to 'direct'.
+    
+    The original defect: `if len(text) < 15: return "simple", "direct"`
+    sent ALL short inputs to conversational mode without tools.
+    """
+    
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text,forbidden_strategy", [
+        ("fix the bug", "direct"),
+        ("run tests", "direct"),
+        ("debug this", "direct"),
+        ("deploy now", "direct"),  # no routing rule, but should NOT be "direct" blindly
+        ("create API", "direct"),
+        ("find errors", "direct"),
+        ("исправь баг", "direct"),
+        ("напиши код", "direct"),
+    ])
+    async def test_short_real_tasks_not_direct(self, text, forbidden_strategy):
+        from backend.agent.orchestration.orchestrator import classify_task
+        complexity, strategy = await classify_task(text, router=None)
+        assert strategy != forbidden_strategy, (
+            f"Short task {text!r} was routed to '{strategy}' "
+            f"(complexity={complexity}). Expected NOT 'direct'."
+        )
+    
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text", [
+        "ok",
+        "yes",
+        "hmm",
+        "no",
+    ])
+    async def test_genuinely_trivial_inputs_fallback(self, text):
+        """Genuinely trivial short inputs should fall through to some fallback,
+        but NOT crash."""
+        from backend.agent.orchestration.orchestrator import classify_task
+        complexity, strategy = await classify_task(text, router=None)
+        # Just verify it returns something valid without crashing
+        assert isinstance(complexity, str)
+        assert isinstance(strategy, str)
+
+
 # ── FIX-3: Config validation tests ─────────────────────────────
 
 class TestConfigValidation:

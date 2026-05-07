@@ -148,10 +148,9 @@ async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, s
     """
     text_lower = text.lower().strip()
     
-    # Signal 1: Ultra-short or obvious patterns
-    if len(text_lower) < 15:
-        return "simple", "direct"
-    
+    # Signal 1: Check routing rules first — even for short inputs
+    # Short tasks like "fix the bug" or "run tests" MUST hit routing rules
+    # before falling back to "direct" (conversational without tools).
     for pattern, complexity, strategy in ROUTING_RULES:
         if re.search(pattern, text_lower, re.IGNORECASE):
             return complexity, strategy
