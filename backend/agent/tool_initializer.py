@@ -5,7 +5,7 @@ Handles registration of all agent tools with granular error handling.
 Each tool registration is isolated in its own try/except block.
 """
 import logging
-from typing import Any
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class ToolInitializer:
         self.agent = agent
         self._critical_tools = {"file", "search", "shell", "message"}
 
-    def initialize_all(self) -> None:
+    def initialize_all(self) -> Dict[str, Any]:
         """Register every tool with individual error isolation and summary report."""
         from backend.sandbox.singleton import sandbox_manager
         _pre_count = len(self.tool_registry.tools)
@@ -242,13 +242,7 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register VectorSearchEngine: {e}")
 
-        try:
-            from backend.tools.repo_map import RepoMap
-            self.agent.repo_map = RepoMap(workspace_dir=".")
-            self.tool_registry.register("repo_map", self.agent.repo_map.execute)
-            logger.info("AST Repo Map tool registered")
-        except Exception as e:
-            logger.error(f"Failed to register RepoMap: {e}")
+
 
         try:
             from backend.tools.plan_tool import PlanTool
@@ -464,4 +458,10 @@ class ToolInitializer:
         
         for line in report_lines:
             logger.info(f"ToolInitializer: {line}")
+
+        return {
+            "registered": list(self.tool_registry.tools.keys()),
+            "total": len(self.tool_registry.tools),
+            "missing_critical": missing_critical
+        }
 
