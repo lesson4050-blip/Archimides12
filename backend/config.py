@@ -60,7 +60,6 @@ class Settings(BaseSettings):
     # MCP
     MCP_SERVER_PORT: int = 8002
     MCP_EXTERNAL_SERVERS: Dict[str, Any] = {
-        "google-search": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-google-search"]},
         "memory": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"]}
     }
     

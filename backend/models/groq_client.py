@@ -27,6 +27,79 @@ def _strip_cache_control(messages: list) -> list:
         clean.append(m)
     return clean
 
+def _parse_failed_generation(content: str) -> List[Dict[str, Any]]:
+    """Parse XML-style tool calls from any string content, handling multiple tag formats."""
+    import re
+    import json
+    from backend.utils.json_repair import repair_and_parse
+    from backend.utils.tool_schemas import validate_tool_call
+
+    # Patterns to try:
+    # 1. <function=name>{args}(</function>)?
+    # 2. <name>{args}(</name>)?
+    # We use a combined regex that matches both formats
+    # Pattern explanation: matches <(function=)?NAME>{ARGS}(</(function=)?NAME>)?
+    pattern = re.compile(
+        r'<(?:function=)?(?P<name>[a-zA-Z0-9_-]+)>(?P<args>.*?)(?:</(?:function=)?(?P=name)>|(?=<[a-zA-Z0-9_-]+[=>])|$)', 
+        re.DOTALL
+    )
+    
+    matches = pattern.finditer(content)
+    
+    tool_calls = []
+    # Known tool names to avoid false positives on random XML tags
+    KNOWN_TOOLS = {"search", "shell", "file", "ast_navigator", "fast_linter", "web_read", "browser"}
+    
+    for match in matches:
+        try:
+            name = match.group("name").strip()
+            raw_args = match.group("args").strip()
+            
+            if not raw_args:
+                continue
+
+            # Basic heuristic: if it's not a known tool and doesn't look like JSON, skip it
+            if name not in KNOWN_TOOLS and not (raw_args.startswith('{') or '"' in raw_args):
+                continue
+
+            # Cleanup
+            raw_args = re.sub(r'[;,]\s*$', '', raw_args)
+            normalized_args = raw_args.replace(": True", ": true").replace(": False", ": false").replace(": None", ": null")
+            
+            # Repair and parse
+            parsed_args, _ = repair_and_parse(normalized_args)
+            if not parsed_args or not isinstance(parsed_args, dict):
+                # Try manual cleanup
+                clean_args = re.sub(r'#.*$', '', normalized_args, flags=re.MULTILINE)
+                last_brace = clean_args.rfind('}')
+                if last_brace != -1:
+                    clean_args = clean_args[:last_brace+1]
+                try:
+                    parsed_args = json.loads(clean_args)
+                except:
+                    continue
+            
+            if parsed_args:
+                # Type Coercion
+                for k, v in parsed_args.items():
+                    if k in ["max_results", "num_results", "limit", "count"] and isinstance(v, str):
+                        try:
+                            parsed_args[k] = int(v)
+                        except: pass
+                
+                raw_tc = {"name": name, "params": parsed_args}
+                validated = validate_tool_call(raw_tc)
+                if validated:
+                    tool_calls.append(validated.model_dump())
+                else:
+                    # Even if validation fails, return it (orchestrator might fix it or we use defaults)
+                    tool_calls.append(raw_tc)
+        except Exception as e:
+            logger.debug(f"Failed to parse individual tool call match: {e}")
+            continue
+    
+    return tool_calls
+
 class GroqClient:
     def __init__(self):
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
@@ -40,7 +113,6 @@ class GroqClient:
             try:
                 import json
                 
-                # Transform messages: Groq requires stringified arguments in tool_calls
                 formatted_messages = []
                 for i, msg in enumerate(_strip_cache_control(messages)):
                     new_msg = msg.copy()
@@ -57,7 +129,6 @@ class GroqClient:
                         new_msg["tool_calls"] = new_tool_calls
                     formatted_messages.append(new_msg)
                 
-                # Ensure all tools have 'type': 'function' for Groq
                 if tools:
                     for t in tools:
                         if "type" not in t:
@@ -71,8 +142,6 @@ class GroqClient:
                 
                 message = response.choices[0].message
                 thought = ""
-                # Some models support reasoning_content or similar, Groq Llama 3.3 might not directly, 
-                # but we'll try to extract from text if it's there or just leave empty for now as per unified format.
                 
                 tool_calls = []
                 if message.tool_calls:
@@ -80,7 +149,6 @@ class GroqClient:
                     from backend.utils.json_repair import repair_and_parse
                     for tc in message.tool_calls:
                         raw_args = tc.function.arguments
-                        # Try native parse first, then repair
                         try:
                             parsed_args = json.loads(raw_args)
                         except Exception:
@@ -93,23 +161,12 @@ class GroqClient:
                         validated = validate_tool_call(raw_tc)
                         if validated:
                             tool_calls.append(validated.model_dump())
+                        else:
+                            tool_calls.append(raw_tc)
 
-                # Also check text content for embedded tool calls
-                # (some Groq models put tool calls in text)
                 if not tool_calls and message.content:
-                    from backend.utils.json_repair import repair_and_parse
-                    from backend.utils.tool_schemas import validate_tool_call
-                    parsed, _ = repair_and_parse(message.content)
-                    if parsed and isinstance(parsed, dict):
-                        if "tool_call" in parsed:
-                            validated = validate_tool_call(parsed["tool_call"])
-                            if validated:
-                                tool_calls.append(validated.model_dump())
-                        elif "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
-                            for tc in parsed["tool_calls"]:
-                                validated = validate_tool_call(tc)
-                                if validated:
-                                    tool_calls.append(validated.model_dump())                
+                    tool_calls = _parse_failed_generation(message.content)
+                
                 return {
                     "model_used": "groq",
                     "thought": thought,
@@ -119,8 +176,26 @@ class GroqClient:
                 }
                 
             except Exception as e:
-                # Check for 429
-                if "429" in str(e) or "rate_limit" in str(e).lower():
+                err_str = str(e)
+                if "tool_use_failed" in err_str or "failed_generation" in err_str:
+                    logger.warning(f"Groq tool_use_failed detected. Attempting rescue. Error: {err_str[:200]}...")
+                    try:
+                        tool_calls = _parse_failed_generation(err_str)
+                        if tool_calls:
+                            logger.info(f"Successfully rescued {len(tool_calls)} tool calls from error string")
+                            return {
+                                "model_used": "groq",
+                                "thought": "Rescued from tool_use_failed",
+                                "tool_calls": tool_calls,
+                                "text": "",
+                                "tokens_used": 0
+                            }
+                        else:
+                            logger.warning("Rescue failed: no valid tool calls found in error string.")
+                    except Exception as rescue_err:
+                        logger.error(f"Failed to rescue Groq tool call: {rescue_err}")
+
+                if "429" in err_str or "rate_limit" in err_str.lower():
                     logger.warning(f"Groq Rate Limit hit. Retrying in {backoff}s...")
                     await asyncio.sleep(backoff)
                     retries += 1
@@ -143,7 +218,6 @@ class GroqClient:
         import httpx
         import json
 
-        # We assume self.model is set
         model = self.model
         
         formatted_messages = []
@@ -170,8 +244,6 @@ class GroqClient:
         }
         if tools:
             payload["tools"] = tools
-            # Some Groq versions prefer no tool_choice if it's auto
-            # payload["tool_choice"] = "auto" 
 
         full_text = ""
         tool_call_accumulator = {}
@@ -223,10 +295,8 @@ class GroqClient:
                             continue
         except Exception as e:
             logger.error(f"Groq stream error: {e}")
-            # Fallback to non-streaming
             return await self.generate_with_tools(messages, tools=tools)
 
-        # Parse accumulated tool call
         tool_call = None
         if tool_call_accumulator:
             tc = tool_call_accumulator[0]
