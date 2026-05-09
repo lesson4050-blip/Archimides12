@@ -88,6 +88,7 @@ def select_tools(
     task: str,
     all_tool_definitions: List[Dict[str, Any]],
     excluded_tools: List[str] = None,
+    max_tools: int = MAX_TOOLS
 ) -> List[Dict[str, Any]]:
     """Select relevant tools for a task from all available tool definitions.
     
@@ -132,10 +133,10 @@ def select_tools(
             selected.append(tool_def)
     
     # If we're over the limit, prioritize essential tools first
-    if len(selected) > MAX_TOOLS:
+    if len(selected) > max_tools:
         essential = [t for t in selected if t["function"]["name"] in ESSENTIAL_TOOLS]
         others = [t for t in selected if t["function"]["name"] not in ESSENTIAL_TOOLS]
-        selected = essential + others[: MAX_TOOLS - len(essential)]
+        selected = essential + others[: max_tools - len(essential)]
     
     if matched_profiles:
         logger.info(

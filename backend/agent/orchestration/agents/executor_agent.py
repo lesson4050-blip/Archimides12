@@ -290,7 +290,9 @@ class ExecutorAgent(BaseAgent):
                 task=current_target,
                 all_tool_definitions=all_tools,
                 excluded_tools=getattr(state, "excluded_tools", []),
+                max_tools=6
             )
+            logger.debug(f"Tool selector: {len(all_tools)} → {len(active_tools)} tools for task")
 
             # Auto-detect complexity — simple for tool loops, complex for planning
             _is_planning_step = any(

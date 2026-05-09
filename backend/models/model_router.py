@@ -25,6 +25,7 @@ class ModelRouter:
                    "translate", "quick", "simple", "fast"}
     QUALITY_TASKS = {"think", "plan", "execute", "code", "debug"}
     CREATIVE_TASKS = {"image", "creative", "persona"}
+    _gemini_blocked_until: float = 0.0
 
     def __init__(self):
         self.ollama = OllamaClient()
@@ -154,6 +155,11 @@ class ModelRouter:
 
         errors = []
         for client in order:
+            import time
+            now = time.time()
+            if isinstance(client, GeminiClient) and now < ModelRouter._gemini_blocked_until:
+                errors.append("Gemini blocked (rate limit cooldown)")
+                continue
             try:
                 config = GROQ_RETRY if isinstance(client, GroqClient) else (GEMINI_RETRY if isinstance(client, GeminiClient) else DEFAULT_RETRY)
                 return await with_retry(
@@ -165,6 +171,10 @@ class ModelRouter:
                     operation_name=f"{client.__class__.__name__} generate"
                 )
             except (GroqRateLimit, GeminiRateLimit) as e:
+                if isinstance(client, GeminiClient):
+                    import time
+                    ModelRouter._gemini_blocked_until = time.time() + 3600
+                    logger.warning("Gemini rate limited — blocking for 60 minutes")
                 logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
                 errors.append(str(e))
                 continue
@@ -187,6 +197,11 @@ class ModelRouter:
 
         errors = []
         for client in order:
+            import time
+            now = time.time()
+            if isinstance(client, GeminiClient) and now < ModelRouter._gemini_blocked_until:
+                errors.append("Gemini blocked (rate limit cooldown)")
+                continue
             try:
                 config = GROQ_RETRY if isinstance(client, GroqClient) else (GEMINI_RETRY if isinstance(client, GeminiClient) else DEFAULT_RETRY)
                 if hasattr(client, "generate_stream"):
@@ -209,6 +224,10 @@ class ModelRouter:
                         operation_name=f"{client.__class__.__name__} generate"
                     )
             except (GroqRateLimit, GeminiRateLimit) as e:
+                if isinstance(client, GeminiClient):
+                    import time
+                    ModelRouter._gemini_blocked_until = time.time() + 3600
+                    logger.warning("Gemini rate limited — blocking for 60 minutes")
                 logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
                 errors.append(str(e))
                 continue
