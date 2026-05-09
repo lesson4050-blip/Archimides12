@@ -9,6 +9,24 @@ logger = logging.getLogger(__name__)
 class RateLimitExceeded(Exception):
     pass
 
+def _strip_cache_control(messages: list) -> list:
+    """Remove Anthropic-specific fields that Groq rejects."""
+    clean = []
+    for msg in messages:
+        m = dict(msg)
+        if isinstance(m.get("content"), list):
+            # Content blocks format
+            m["content"] = [
+                {k: v for k, v in block.items() if k != "cache_control"}
+                for block in m["content"]
+            ]
+        elif isinstance(m.get("content"), dict):
+            m["content"] = {k: v for k, v in m["content"].items() if k != "cache_control"}
+        # Also strip top-level cache_control if present
+        m.pop("cache_control", None)
+        clean.append(m)
+    return clean
+
 class GroqClient:
     def __init__(self):
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
@@ -24,11 +42,8 @@ class GroqClient:
                 
                 # Transform messages: Groq requires stringified arguments in tool_calls
                 formatted_messages = []
-                for i, msg in enumerate(messages):
+                for i, msg in enumerate(_strip_cache_control(messages)):
                     new_msg = msg.copy()
-                    # Mark first system message for prefix caching (Groq supports this)
-                    if msg.get("role") == "system" and i == 0:
-                        new_msg["cache_control"] = {"type": "ephemeral"}
                     if "tool_calls" in new_msg and new_msg["tool_calls"]:
                         new_tool_calls = []
                         for tc in new_msg["tool_calls"]:
@@ -132,7 +147,7 @@ class GroqClient:
         model = self.model
         
         formatted_messages = []
-        for msg in messages:
+        for msg in _strip_cache_control(messages):
             new_msg = msg.copy()
             if "tool_calls" in new_msg and new_msg["tool_calls"]:
                 new_tool_calls = []

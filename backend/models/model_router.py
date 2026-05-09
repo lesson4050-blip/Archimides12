@@ -173,7 +173,13 @@ class ModelRouter:
                 errors.append(str(e))
                 continue
                 
-        raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
+        last_error = errors[-1] if errors else "Unknown error"
+        return {
+            "text": "",
+            "error": f"All model providers failed. Last error: {last_error}",
+            "model_used": "none",
+            "all_failed": True
+        }
 
     async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
         complexity = self.classify_complexity(messages, tools)
@@ -211,7 +217,13 @@ class ModelRouter:
                 errors.append(str(e))
                 continue
                 
-        raise AllModelsExhausted(f"All model tiers failed: {', '.join(errors)}")
+        last_error = errors[-1] if errors else "Unknown error"
+        return {
+            "text": "",
+            "error": f"All model providers failed. Last error: {last_error}",
+            "model_used": "none",
+            "all_failed": True
+        }
 
     async def generate_with_image(
         self,
