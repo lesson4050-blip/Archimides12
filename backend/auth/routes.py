@@ -331,8 +331,3 @@ async def generate_api_key(current_user: dict = Depends(get_current_user)):
         message="Save this key securely — it will not be shown again.",
     )
 
-
-async def _is_first_user(db) -> bool:
-    """Check if this is the first user being registered (gets admin role)."""
-    result = await db.execute(select(User).limit(1))
-    return result.scalar_one_or_none() is None

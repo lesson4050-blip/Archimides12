@@ -248,9 +248,9 @@ class TestBashSecurity:
 # ── FIX-4: Tool initializer tracking ────────────────────────────
 
 class TestToolInitializerTracking:
-    """Verify tool initializer has tracking attributes."""
+    """Verify tool initializer has correct tracking attributes and reporting."""
     
-    def test_has_tracking_attributes(self):
+    def test_has_critical_tools_set(self):
         from backend.agent.tool_initializer import ToolInitializer
         
         # Create with mock objects
@@ -261,10 +261,25 @@ class TestToolInitializerTracking:
             pass
         
         init = ToolInitializer(MockRegistry(), "test", MockAgent())
-        assert hasattr(init, "_registered")
-        assert hasattr(init, "_failed")
         assert hasattr(init, "_critical_tools")
-        assert isinstance(init._registered, list)
-        assert isinstance(init._failed, list)
         assert "search" in init._critical_tools
         assert "file" in init._critical_tools
+        assert "shell" in init._critical_tools
+        assert "message" in init._critical_tools
+    
+    def test_no_stale_tracking_attributes(self):
+        """Verify the old dead-code tracking lists were removed."""
+        from backend.agent.tool_initializer import ToolInitializer
+        
+        class MockRegistry:
+            tools = {}
+            def register(self, *a): pass
+        class MockAgent:
+            pass
+        
+        init = ToolInitializer(MockRegistry(), "test", MockAgent())
+        # _registered and _failed were dead code (never populated).
+        # They have been replaced by registry-delta counting in initialize_all().
+        assert not hasattr(init, "_registered"), "_registered should have been removed (dead code)"
+        assert not hasattr(init, "_failed"), "_failed should have been removed (dead code)"
+

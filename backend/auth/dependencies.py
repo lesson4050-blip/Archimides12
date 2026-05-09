@@ -45,6 +45,15 @@ async def get_current_user(
     if jwt_token:
         payload = verify_token(jwt_token)
         if payload:
+            # SECURITY: Reject refresh tokens used as access tokens (token confusion attack)
+            token_type = payload.get("type")
+            if token_type and token_type != "access":
+                logger.warning(f"JWT type mismatch: expected 'access', got '{token_type}' for user {payload.get('user_id')}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Invalid token type: expected 'access', got '{token_type}'",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
             # Check raw-token blacklist
             from backend.auth.token_blacklist import blacklist
             if await blacklist.is_revoked(jwt_token):

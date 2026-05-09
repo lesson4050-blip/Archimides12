@@ -20,25 +20,12 @@ class ToolInitializer:
         self.tool_registry = tool_registry
         self.session_id = session_id
         self.agent = agent
-        # FIX-4: Registration tracking
-        self._registered: list = []
-        self._failed: list = []
         self._critical_tools = {"file", "search", "shell", "message"}
-
-    def _try_register(self, name: str, register_fn):
-        """Register a single tool with tracking. Returns True on success."""
-        try:
-            register_fn()
-            self._registered.append(name)
-            return True
-        except Exception as e:
-            self._failed.append((name, str(e)))
-            logger.error(f"Failed to register {name}: {e}")
-            return False
 
     def initialize_all(self) -> None:
         """Register every tool with individual error isolation and summary report."""
         from backend.sandbox.singleton import sandbox_manager
+        _pre_count = len(self.tool_registry.tools)
 
         # --- Core tools ---
         try:
@@ -438,16 +425,6 @@ class ToolInitializer:
         except Exception as e:
             logger.error(f"Failed to register SemanticSearchEngine: {e}")
 
-        # ── Gen 4: Omnimodal Ingester ──
-        try:
-            from backend.agent.omnimodal_ingester import OmnimodalIngester
-            _omnimodal = OmnimodalIngester(
-                router=getattr(self.agent, 'router', None)
-            )
-            self.agent.register_tool("omnimodal", _omnimodal.execute)
-            logger.info("OmnimodalIngester registered — Gen 4 perception active")
-        except Exception as e:
-            logger.error(f"Failed to register OmnimodalIngester: {e}")
 
         logger.info("ToolInitializer: explicit registration complete")
 
@@ -462,23 +439,28 @@ class ToolInitializer:
                 logger.debug(f"Auto-discovery in {path} skipped: {e}")
 
         # ── FIX-4: Consolidated Registration Report ──
-        total_attempted = len(self._registered) + len(self._failed)
         total_active = len(self.tool_registry.tools)
+        registered_this_session = total_active - _pre_count
         
         report_lines = [
-            f"TOOL REGISTRATION: {len(self._registered)}/{total_attempted} explicit tools OK, "
-            f"{total_active} total active (incl. auto-discovered)"
+            f"TOOL REGISTRATION: {registered_this_session} tools registered this session, "
+            f"{total_active} total active"
         ]
         
-        if self._failed:
-            failed_names = [f"❌ {name} ({err[:60]})" for name, err in self._failed]
-            report_lines.append(f"FAILED: {', '.join(failed_names)}")
-        
         # Critical tool check
+        missing_critical = []
         for critical in sorted(self._critical_tools):
             is_active = critical in self.tool_registry.tools
             status = "✅ YES" if is_active else "🚨 NO"
             report_lines.append(f"  CRITICAL [{critical}]: {status}")
+            if not is_active:
+                missing_critical.append(critical)
+        
+        if missing_critical:
+            report_lines.append(
+                f"🚨 ALERT: {len(missing_critical)} critical tools missing: "
+                f"{', '.join(missing_critical)}"
+            )
         
         for line in report_lines:
             logger.info(f"ToolInitializer: {line}")
