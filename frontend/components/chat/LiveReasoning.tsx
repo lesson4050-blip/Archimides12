@@ -61,9 +61,9 @@ export default function LiveReasoning({ content }: { content: string }) {
                   ref={scrollRef}
                   className="p-4 text-[13.5px] text-gray-300 font-mono leading-relaxed max-h-[300px] overflow-y-auto custom-scrollbar"
                 >
-                  <ReactMarkdown className="prose prose-invert prose-sm max-w-none">
-                    {thinkContent}
-                  </ReactMarkdown>
+                  <div className="prose prose-invert prose-sm max-w-none">
+                    <ReactMarkdown>{thinkContent}</ReactMarkdown>
+                  </div>
                 </div>
               </motion.div>
             )}

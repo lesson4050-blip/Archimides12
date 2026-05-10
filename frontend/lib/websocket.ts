@@ -1,5 +1,5 @@
 export type AgentEvent = {
-  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued" | "confidence" | "suggestions" | "token" | "file_artifact" | "browser_navigate";
+  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued" | "confidence" | "suggestions" | "token" | "file_artifact" | "browser_navigate" | "desktop_frame" | "canvas_presentation";
   content?: string;
   text?: string;
   tool?: string;
@@ -22,6 +22,10 @@ export type AgentEvent = {
   // Browser fields
   title?: string;
   url?: string;
+  // Canvas Presentation fields
+  topic?: string;
+  artifact_path?: string;
+  slide_count?: number;
   // Plan updates
   phases?: any[];
   // Message result attachments
