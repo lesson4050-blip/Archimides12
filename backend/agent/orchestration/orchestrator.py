@@ -744,6 +744,39 @@ class AgentOrchestrator:
                             })
                             state.metadata["critic_verdict"] = "PASS"
                         elif agent_override:
+                            from backend.models.model_router import ModelRouter
+                            from backend.config import settings
+                            import time
+                            
+                            groq_only_mode = (
+                                ModelRouter._gemini_blocked_until > time.time()
+                                and not getattr(settings, 'ANTHROPIC_API_KEY', None)
+                            )
+                            
+                            if strategy == 'swarm_code' and groq_only_mode:
+                                logger.info("Groq-only mode: using direct code generation (no tools)")
+                                result = await self.router.generate(
+                                    messages=[
+                                        {
+                                            "role": "system",
+                                            "content": (
+                                                "You are an expert Python developer. "
+                                                "When asked to write code, output ONLY the code with brief comments. "
+                                                "No tool calls. No explanations before the code. Just write it."
+                                            )
+                                        },
+                                        {"role": "user", "content": current_target}
+                                    ],
+                                    task_hint="code"
+                                )
+                                text = result.get("text", "")
+                                if text and len(text) > 20:
+                                    return {
+                                        'success': True,
+                                        'output': text,
+                                        'error': None,
+                                    }
+
                             # Use swarm with strategy-specific agents
                             swarm_result = await self.swarm.run(
                                 task=current_target,
