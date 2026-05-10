@@ -103,13 +103,10 @@ cp .env.example .env
 # JWT_SECRET_KEY, GROQ_API_KEY, GOOGLE_API_KEY
 ```
 
-### 4. Running the System
-```bash
-# Start the full stack (Backend + Frontend)
-python backend/run.py
-```
-Open [http://localhost:3000](http://localhost:3000) to start.
-The backend runs on [http://localhost:8001](http://localhost:8001).
+## Running locally
+Backend: `uvicorn backend.main:app --host 0.0.0.0 --port 8001`
+Frontend: `cd frontend && npm run dev`
+Open: `http://localhost:3000`
 
 ---
 
