@@ -176,8 +176,16 @@ class ExecutorAgent(BaseAgent):
         tool_call_steps = 0
         max_reasoning = 15
         max_tool = 25
+        
+        MAX_ITERATIONS = 5  # for simple tasks
+        iteration_count = 0
 
         while reasoning_steps < max_reasoning and tool_call_steps < max_tool:
+            iteration_count += 1
+            if iteration_count > MAX_ITERATIONS:
+                logger.error(f"Hard iteration limit {MAX_ITERATIONS} reached. Stopping.")
+                break
+                
             step = reasoning_steps + tool_call_steps
             # Phase 2 Context Compression (Context Overload Protection)
             if hasattr(self.context_manager, "summarize_if_needed"):

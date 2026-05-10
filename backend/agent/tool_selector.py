@@ -1,12 +1,9 @@
 """
 Dynamic Tool Selector — FIX-5.
 
-Reduces tool context sent to the LLM from 40+ tools to a focused set of ≤12,
+Reduces tool context sent to the LLM from 40+ tools to a focused set of <=12,
 based on task classification. This dramatically improves tool-calling accuracy
 on smaller models that get confused by too many tool definitions.
-
-Essential tools (search, shell, file, message) are always included.
-Task-specific tools are selected based on keyword matching.
 """
 
 import re
@@ -15,74 +12,60 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# Tools that are ALWAYS included regardless of task type
-ESSENTIAL_TOOLS = {"search", "shell", "file", "message"}
-
-# Task profiles: pattern → set of relevant tool names
+# Task profiles mapping directly to tools list
 TOOL_PROFILES = {
-    "research": {
-        "pattern": re.compile(
-            r"(research|search|find|analyze|compare|summarize|report|news|"
-            r"исследуй|найди|проанализируй|сравни|новости|отчёт)",
-            re.IGNORECASE
-        ),
-        "tools": {"web_read", "parallel_search", "vector_search", "document"},
-    },
-    "coding": {
-        "pattern": re.compile(
-            r"(write|create|implement|code|function|class|api|debug|fix|refactor|test|"
-            r"напиши|создай|код|функци|класс|исправь|тест|рефактор)",
-            re.IGNORECASE
-        ),
-        "tools": {
-            "python_repl", "fast_linter", "code_edit", "grep", "glob",
-            "repo_map", "git", "patch", "ast_navigator", "swe_rag",
-        },
-    },
-    "file_ops": {
-        "pattern": re.compile(
-            r"(file|read|write|edit|save|create file|delete|rename|directory|folder|"
-            r"файл|прочитай|запиши|создай файл|удали|папк)",
-            re.IGNORECASE
-        ),
-        "tools": {"grep", "glob", "code_edit", "git", "patch"},
-    },
-    "presentation": {
-        "pattern": re.compile(
-            r"(present|slide|deck|pitch|визуал|презентац|слайд)",
-            re.IGNORECASE
-        ),
-        "tools": {"canvas", "vision", "image_gen"},
-    },
-    "media": {
-        "pattern": re.compile(
-            r"(image|video|audio|photo|picture|screenshot|render|"
-            r"изображени|видео|аудио|фото|скриншот)",
-            re.IGNORECASE
-        ),
-        "tools": {"image_gen", "video", "audio", "audio_synth", "vision", "media", "omnimodal"},
-    },
-    "devops": {
-        "pattern": re.compile(
-            r"(deploy|docker|container|server|monitor|log|infra|ci|cd|"
-            r"деплой|контейнер|сервер|монитор|лог)",
-            re.IGNORECASE
-        ),
-        "tools": {"deploy", "monitor", "infra", "log_analyzer", "expose"},
-    },
-    "browsing": {
-        "pattern": re.compile(
-            r"(browse|website|url|page|scrape|crawl|navigate|"
-            r"сайт|страниц|браузер|скрапинг)",
-            re.IGNORECASE
-        ),
-        "tools": {"browser", "vision_browser", "web_read"},
-    },
+    "research": ["search", "web_read"],
+    "conversation": ["search", "web_read"],
+    "default": ["search", "shell", "file", "web_read"],
+    "coding": ["python_repl", "fast_linter", "code_edit", "grep", "glob", "repo_map", "git", "patch", "ast_navigator", "swe_rag", "shell", "file", "search"],
+    "file_ops": ["grep", "glob", "code_edit", "git", "patch", "shell", "file"],
+    "presentation": ["canvas_engine", "vision", "image_gen"],
+    "media": ["image_gen", "video", "audio", "audio_synth", "vision", "media", "omnimodal"],
+    "devops": ["deploy", "monitor", "infra", "log_analyzer", "expose", "shell", "file"],
+    "browsing": ["browser", "vision_browser", "web_read"]
 }
 
-# Maximum tools to send to LLM (including essential)
-MAX_TOOLS = 12
+TASK_CLASSIFIERS = {
+    "research": re.compile(
+        r'\b(найди|поищи|search|find|news|новости|latest|what is|who is|расскажи|покажи)\b',
+        re.IGNORECASE
+    ),
+    "conversation": re.compile(
+        r"^(привет|здравствуй|хай|hi|hello|hey|добрый\s+(день|вечер|утро)|как\s+дела|помо(щь|ги))[\s!.?]*$",
+        re.IGNORECASE
+    ),
+    "coding": re.compile(
+        r"(write|create|implement|code|function|class|api|debug|fix|refactor|test|"
+        r"напиши|создай|код|функци|класс|исправь|тест|рефактор)",
+        re.IGNORECASE
+    ),
+    "file_ops": re.compile(
+        r"(file|read|write|edit|save|create file|delete|rename|directory|folder|"
+        r"файл|прочитай|запиши|создай файл|удали|папк)",
+        re.IGNORECASE
+    ),
+    "presentation": re.compile(
+        r"(present|slide|deck|pitch|визуал|презентац|слайд)",
+        re.IGNORECASE
+    ),
+    "media": re.compile(
+        r"(image|video|audio|photo|picture|screenshot|render|"
+        r"изображени|видео|аудио|фото|скриншот)",
+        re.IGNORECASE
+    ),
+    "devops": re.compile(
+        r"(deploy|docker|container|server|monitor|log|infra|ci|cd|"
+        r"деплой|контейнер|сервер|монитор|лог)",
+        re.IGNORECASE
+    ),
+    "browsing": re.compile(
+        r"(browse|website|url|page|scrape|crawl|navigate|"
+        r"сайт|страниц|браузер|скрапинг)",
+        re.IGNORECASE
+    )
+}
 
+MAX_TOOLS = 12
 
 def select_tools(
     task: str,
@@ -98,32 +81,22 @@ def select_tools(
         excluded_tools: Tool names to exclude (e.g. from loop detection).
     
     Returns:
-        Filtered list of tool definitions (max MAX_TOOLS).
+        Filtered list of tool definitions.
     """
     if not task or not all_tool_definitions:
         return all_tool_definitions
     
     excluded = set(excluded_tools or [])
     
-    # Build the set of desired tool names
-    desired = set(ESSENTIAL_TOOLS)
-    
-    # Match task against profiles
-    matched_profiles = []
-    for profile_name, profile in TOOL_PROFILES.items():
-        if profile["pattern"].search(task):
-            desired.update(profile["tools"])
-            matched_profiles.append(profile_name)
-    
-    # If no profile matched, include top coding tools as default
-    if not matched_profiles:
-        desired.update(TOOL_PROFILES["coding"]["tools"])
-        matched_profiles.append("coding (default)")
-    
-    # Remove excluded tools
+    matched_profile = "default"
+    for profile_name, pattern in TASK_CLASSIFIERS.items():
+        if pattern.search(task):
+            matched_profile = profile_name
+            break
+            
+    desired = set(TOOL_PROFILES.get(matched_profile, TOOL_PROFILES["default"]))
     desired -= excluded
     
-    # Filter definitions
     selected = []
     for tool_def in all_tool_definitions:
         name = tool_def.get("function", {}).get("name", "")
@@ -132,16 +105,8 @@ def select_tools(
         if name in desired:
             selected.append(tool_def)
     
-    # If we're over the limit, prioritize essential tools first
     if len(selected) > max_tools:
-        essential = [t for t in selected if t["function"]["name"] in ESSENTIAL_TOOLS]
-        others = [t for t in selected if t["function"]["name"] not in ESSENTIAL_TOOLS]
-        selected = essential + others[: max_tools - len(essential)]
+        selected = selected[:max_tools]
     
-    if matched_profiles:
-        logger.info(
-            f"ToolSelector: {len(selected)}/{len(all_tool_definitions)} tools "
-            f"for profiles: {', '.join(matched_profiles)}"
-        )
-    
+    logger.info(f"ToolSelector: {len(selected)} tools for profile: {matched_profile}")
     return selected

@@ -146,6 +146,14 @@ async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, s
     Signal 2: Heuristic-based scoring
     Signal 3: LLM classification (slow but accurate fallback)
     """
+    SEARCH_DIRECT = re.compile(
+        r'\b(найди|поищи|найти|расскажи|новости|news|latest|what is|who is|'
+        r'search for|find|look up|покажи|что такое)\b',
+        re.IGNORECASE
+    )
+    if SEARCH_DIRECT.search(text) and not any(w in text.lower() for w in ['код', 'code', 'fix', 'bug', 'implement']):
+        return "simple", "direct"
+
     text_lower = text.lower().strip()
     
     # Signal 1: Check routing rules first — even for short inputs
