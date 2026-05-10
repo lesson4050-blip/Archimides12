@@ -153,6 +153,20 @@ class ModelRouter:
         complexity = self.classify_complexity(messages, tools)
         order = await self._get_order(task_hint, tools or [], complexity)
 
+        import time
+        if task_hint == 'code':
+            coding_model = getattr(settings, 'OLLAMA_CODING_MODEL', 'qwen2.5-coder:7b-instruct')
+            try:
+                from backend.models.ollama_client import OllamaClient
+                ollama_coder = OllamaClient(model=coding_model)
+                result = await ollama_coder.generate_with_tools(messages, tools=tools)
+                if result.get('text') or result.get('tool_calls'):
+                    result['model_used'] = f'ollama/{coding_model}'
+                    logger.info(f'Coding task routed to local Ollama: {coding_model}')
+                    return result
+            except Exception as e:
+                logger.warning(f'Ollama coding fallback failed: {e}. Falling through to cloud.')
+
         errors = []
         for client in order:
             import time

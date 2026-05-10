@@ -20,9 +20,9 @@ OLLAMA_TIMEOUT_MAP = {
 }
 
 class OllamaClient:
-    def __init__(self):
+    def __init__(self, model: Optional[str] = None):
         # We will instantiate client dynamically in _get_client based on model to use OLLAMA_TIMEOUT_MAP
-        self.model = settings.OLLAMA_MODEL
+        self.model = model or settings.OLLAMA_MODEL
 
     def _get_client(self, model_name: str) -> ollama.AsyncClient:
         timeout = OLLAMA_TIMEOUT_MAP.get(model_name, OLLAMA_TIMEOUT_MAP["default"])

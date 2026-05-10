@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:14b"
+    OLLAMA_CODING_MODEL: str = "qwen2.5-coder:7b-instruct"
     
     TAVILY_API_KEY: str = ""
     EXA_API_KEY: str = ""

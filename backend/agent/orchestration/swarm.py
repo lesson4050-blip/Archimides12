@@ -179,7 +179,8 @@ class MicroAgentSwarm:
         context: str = "",
         session_id: str = "default",
         websocket_send: Optional[Callable] = None,
-        max_tool_steps: int = 8
+        max_tool_steps: int = 8,
+        task_hint: str = "think"
     ) -> str:
         """
         Run a micro-agent with tool access.
@@ -219,7 +220,7 @@ class MicroAgentSwarm:
                 response = await self.router.generate(
                     messages=messages, 
                     tools=agent_tools,
-                    task_hint="think"
+                    task_hint=task_hint
                 )
             except Exception as e:
                 logger.error(f"MicroAgent {agent.role} generate failed: {e}")
@@ -407,7 +408,8 @@ class MicroAgentSwarm:
                 system_prompt=template["system_prompt"]
             )
             return await self._run_agent_with_tools(
-                agent, task, session_id=session_id, websocket_send=websocket_send
+                agent, task, session_id=session_id, websocket_send=websocket_send,
+                task_hint="code" if role == "coder" else task_hint
             )
 
         # Multi-agent debate with tools
@@ -435,7 +437,8 @@ class MicroAgentSwarm:
         # Phase 1: Primary agent works first (with tools)
         primary = agents[0]
         primary_result = await self._run_agent_with_tools(
-            primary, task, session_id=session_id, websocket_send=websocket_send
+            primary, task, session_id=session_id, websocket_send=websocket_send,
+            task_hint="code" if primary.role == "coder" else "think"
         )
 
         # Phase 2: Other agents review/augment in parallel (with tools)
@@ -455,7 +458,8 @@ class MicroAgentSwarm:
                     reviewer, task,
                     context=context,
                     session_id=session_id,
-                    websocket_send=websocket_send
+                    websocket_send=websocket_send,
+                    task_hint="code" if reviewer.role == "coder" else "think"
                 )
             )
 
