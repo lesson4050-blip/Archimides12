@@ -74,6 +74,7 @@ def create_api_key() -> str:
     """Generate a secure 64-character hex API key."""
     return secrets.token_hex(32)
 
+import bcrypt
 import hashlib
 
 def hash_api_key(api_key: str) -> str:
@@ -89,21 +90,17 @@ def verify_api_key(raw_key: str, hashed_key: str) -> bool:
     )
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt via passlib."""
-    from passlib.context import CryptContext
-    return _get_pwd_context().hash(password)
+    """Hash password using bcrypt with SHA-256 pre-hash (handles passwords > 72 bytes)."""
+    # SHA-256 pre-hash prevents bcrypt 72-byte truncation vulnerability
+    password_bytes = hashlib.sha256(password.encode('utf-8')).digest()
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash."""
-    return _get_pwd_context().verify(plain_password, hashed_password)
-
-
-_pwd_context = None
-
-def _get_pwd_context():
-    global _pwd_context
-    if _pwd_context is None:
-        from passlib.context import CryptContext
-        _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return _pwd_context
+    """Verify password against bcrypt hash. Constant-time comparison."""
+    password_bytes = hashlib.sha256(plain_password.encode('utf-8')).digest()
+    try:
+        return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
+    except Exception:
+        return False
