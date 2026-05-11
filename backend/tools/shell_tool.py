@@ -7,8 +7,35 @@ bash sessions that maintain state (cd, env vars) between calls.
 import asyncio
 import os
 import re
+import sys
+import shutil
+from pathlib import Path
 import logging
 from typing import Dict, Any, Optional
+
+def _get_shell_executable() -> tuple[str, list]:
+    """Returns (shell_path, base_args) for the current OS."""
+    if sys.platform == "win32":
+        # Try Git bash first (runs on Windows host, so has access to python.exe)
+        git_bash_paths = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ]
+        for p in git_bash_paths:
+            if Path(p).exists():
+                return p, []
+                
+        # Fallback to WSL bash
+        wsl = shutil.which("wsl")
+        if wsl:
+            return wsl, []
+        
+        # Fall back to cmd.exe
+        return "cmd.exe", ["/Q", "/K"]
+    
+    # Linux/Mac — use bash or sh
+    bash = shutil.which("bash") or "/bin/bash"
+    return bash, []
 
 from backend.sandbox.executor import SandboxExecutor
 from backend.agent.predictive_guard import PredictiveGuard
@@ -29,11 +56,15 @@ class PersistentShellSession:
         self.session_id = session_id
         self._process: Optional[asyncio.subprocess.Process] = None
         self._lock = asyncio.Lock()
+        self._is_cmd = False
 
     async def _ensure_started(self):
         if self._process is None or self._process.returncode is not None:
+            shell_exec, shell_args = _get_shell_executable()
+            self._is_cmd = shell_exec.lower().endswith("cmd.exe")
             self._process = await asyncio.create_subprocess_exec(
-                "/bin/bash",
+                shell_exec,
+                *shell_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -44,7 +75,10 @@ class PersistentShellSession:
         async with self._lock:
             await self._ensure_started()
             sentinel = f"__END_{id(command)}__"
-            full_cmd = f"{command}\necho '{sentinel}'\n"
+            if self._is_cmd:
+                full_cmd = f"{command}\r\necho {sentinel}\r\n"
+            else:
+                full_cmd = f"{command}\necho '{sentinel}'\n"
             self._process.stdin.write(full_cmd.encode())
             await self._process.stdin.drain()
             output_lines = []
