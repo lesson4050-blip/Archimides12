@@ -21,7 +21,7 @@ Through recent production hardening, Archimedes features:
   - Multi-layer sandbox path validation (`BLOCKED_PREFIXES`) and realpath-based traversal protection.
   - Symbolic link escape prevention in `FileTool`.
 - **Cognitive Reliability**: 
-  - **Ollama-first Routing**: Privacy-preserving local execution by default with smart model fallback.
+  - **Smart Model Routing**: Gemini (cloud) → Ollama/Qwen (local coding fallback) → Groq
   - **Hydra Swarm v2**: Hierarchical multi-agent pipeline (Scout → Warrior → Sentinel) with automated synthesis.
   - **MCTS Exploration**: Monte Carlo Tree Search for complex planning under uncertainty.
 - **GOD MODE (v3.0)**:
