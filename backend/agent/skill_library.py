@@ -135,8 +135,10 @@ class SkillLibrary:
         best_score = 0.0
 
         for sig_key, meta in self._index.items():
-            label = meta.get("label", "")
-            label_words = self._tokenize(label)
+            # Compare against stored task text, not just label
+            # Load task from index meta if available, else fall back to label
+            candidate_text = meta.get('task', '') or meta.get('label', '')
+            label_words = self._tokenize(candidate_text)
 
             if not label_words:
                 continue
@@ -222,6 +224,7 @@ class SkillLibrary:
 
         # Update index
         self._index[sig] = {
+            "task": task,
             "label": skill_data["label"],
             "quality": quality_score,
             "created": skill_data["created_at"],
