@@ -13,29 +13,7 @@ from pathlib import Path
 import logging
 from typing import Dict, Any, Optional
 
-def _get_shell_executable() -> tuple[str, list]:
-    """Returns (shell_path, base_args) for the current OS."""
-    if sys.platform == "win32":
-        # Try Git bash first (runs on Windows host, so has access to python.exe)
-        git_bash_paths = [
-            r"C:\Program Files\Git\bin\bash.exe",
-            r"C:\Program Files (x86)\Git\bin\bash.exe",
-        ]
-        for p in git_bash_paths:
-            if Path(p).exists():
-                return p, []
-                
-        # Fallback to WSL bash
-        wsl = shutil.which("wsl")
-        if wsl:
-            return wsl, []
-        
-        # Fall back to cmd.exe
-        return "cmd.exe", ["/Q", "/K"]
-    
-    # Linux/Mac — use bash or sh
-    bash = shutil.which("bash") or "/bin/bash"
-    return bash, []
+
 
 from backend.sandbox.executor import SandboxExecutor
 from backend.agent.predictive_guard import PredictiveGuard
@@ -60,11 +38,33 @@ class PersistentShellSession:
 
     async def _ensure_started(self):
         if self._process is None or self._process.returncode is not None:
-            shell_exec, shell_args = _get_shell_executable()
-            self._is_cmd = shell_exec.lower().endswith("cmd.exe")
+            import sys, shutil
+            from pathlib import Path
+            
+            shell_exec = "/bin/bash"
+            self._is_cmd = False
+            
+            if sys.platform == "win32":
+                # Try Git Bash first
+                git_bash_paths = [
+                    r"C:\Program Files\Git\bin\bash.exe",
+                    r"C:\Program Files (x86)\Git\bin\bash.exe",
+                ]
+                found = None
+                for p in git_bash_paths:
+                    if Path(p).exists():
+                        found = p
+                        break
+                
+                if found:
+                    shell_exec = found
+                else:
+                    # Fall back to cmd.exe
+                    shell_exec = "cmd.exe"
+                    self._is_cmd = True
+            
             self._process = await asyncio.create_subprocess_exec(
                 shell_exec,
-                *shell_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -75,7 +75,7 @@ class PersistentShellSession:
         async with self._lock:
             await self._ensure_started()
             sentinel = f"__END_{id(command)}__"
-            if self._is_cmd:
+            if getattr(self, '_is_cmd', False):
                 full_cmd = f"{command}\r\necho {sentinel}\r\n"
             else:
                 full_cmd = f"{command}\necho '{sentinel}'\n"
