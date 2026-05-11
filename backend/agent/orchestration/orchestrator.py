@@ -278,7 +278,7 @@ class AgentOrchestrator:
         from backend.models.cascading_router import CascadingRouter
         from backend.security.sandbox_hardening import SecurityGate
 
-        self.event_bus = EventBus()
+        self.event_bus = EventBus.get_instance(session_id)
         self.handoff = HandoffProtocol()
         self.security_gate = SecurityGate()
         self.cascade = CascadingRouter(router)
@@ -486,10 +486,10 @@ class AgentOrchestrator:
     async def _run_conversational(self, state: OrchestrationState, websocket_send: Optional[Callable] = None) -> Dict[str, Any]:
         """Direct LLM response for simple conversational messages — no tools, no critic.
         
-        FIX-2: Now includes proactive search for information-seeking questions
-        that reach this path (e.g. via classify_task → "direct").
+        FIX-3: Now uses CoT for complex reasoning tasks that arrive via this path.
         """
         logger.info(f"[{state.session_id}] Orchestrator: conversational shortcut")
+        from backend.agent.intelligence.cot_engine import inject_cot, extract_cot_answer
         
         system_prompt = (
             "You are Archimedes, a professional AI assistant. "
@@ -498,8 +498,7 @@ class AgentOrchestrator:
             "If conversation history is provided, use it to answer personal questions."
         )
         
-        # FIX-2: Proactive search for information questions
-        # Skip search for personal memory recall (e.g. "what is my name?")
+        # Proactive search for information questions
         if not _MEMORY_RECALL.search(state.task_description):
             search_context = await self._maybe_search_for_context(state.task_description)
             if search_context:
@@ -512,7 +511,7 @@ class AgentOrchestrator:
             {"role": "system", "content": system_prompt},
         ]
         
-        # Include prior conversation turns from context_manager for multi-turn memory
+        # Include prior conversation turns
         try:
             prior = self.context_manager.get_messages()
             for msg in prior:
@@ -522,21 +521,53 @@ class AgentOrchestrator:
             pass
         
         messages.append({"role": "user", "content": state.task_description})
+
+        # FIX-3: Detect if reasoning is needed
+        task_lower = state.task_description.lower()
+        needs_reasoning = any(w in task_lower for w in [
+            'why', 'explain', 'analyze', 'compare', 'difference',
+            'почему', 'объясни', 'сравни', 'проанализируй', 'разница'
+        ])
         
         try:
-            if websocket_send:
-                async def _on_token(token):
-                    await websocket_send({"type": "token", "content": token})
+            if needs_reasoning:
+                await self.event_bus.emit_thought("Analyzing request with deep reasoning...", agent="orchestrator")
+                messages = inject_cot(messages, task=state.task_description)
                 
-                response = await self.cascade.generate_stream(
-                    messages=messages, 
-                    task_hint="quick",
-                    on_token=_on_token
-                )
+                if websocket_send:
+                    async def _on_token(token):
+                        await websocket_send({"type": "token", "content": token})
+                    
+                    response = await self.cascade.generate_stream(
+                        messages=messages, 
+                        task_hint="think",
+                        on_token=_on_token
+                    )
+                else:
+                    response = await self.cascade.generate(messages=messages, task_hint="think")
+                
+                raw_text = response.get("text", "")
+                cot_data = extract_cot_answer(raw_text)
+                result_text = cot_data["answer"]
+                
+                # Emit the thinking process if we have it
+                if cot_data["thinking"]:
+                    await self.event_bus.emit_thought(cot_data["thinking"], agent="reasoner")
             else:
-                response = await self.cascade.generate(messages=messages, task_hint="quick")
-            
-            result_text = response.get("text", "Привет! Чем могу помочь?")
+                if websocket_send:
+                    async def _on_token(token):
+                        await websocket_send({"type": "token", "content": token})
+                    
+                    response = await self.cascade.generate_stream(
+                        messages=messages, 
+                        task_hint="quick",
+                        on_token=_on_token
+                    )
+                else:
+                    response = await self.cascade.generate(messages=messages, task_hint="quick")
+                
+                result_text = response.get("text", "Привет! Чем могу помочь?")
+
             state.results.append({"step": 0, "output": result_text})
             return await self._get_final_response(state, websocket_send)
         except Exception as e:

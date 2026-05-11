@@ -195,17 +195,28 @@ class ConnectionManager:
             async def streaming_sender(event):
                 await self.send_event(session_id, event)
 
+            # --- EventBus Integration: subscribe to session-wide events ---
+            from backend.agent.orchestration.event_bus import EventBus
+            bus = EventBus.get_instance(session_id)
+            bus.subscribe(streaming_sender)
+
+            async def run_and_cleanup():
+                try:
+                    await agent.process_task(
+                        task, 
+                        websocket_send=streaming_sender, 
+                        mode=mode_req, 
+                        task_hint=task_hint,
+                        stream=True
+                    )
+                finally:
+                    bus.unsubscribe(streaming_sender)
+
             # Extra execution parameters (mode: fast/planning)
             mode_req = data.get("mode", "planning")
             task_hint = data.get("task_hint", "default")
             
-            safe_create_task(agent.process_task(
-                task, 
-                websocket_send=streaming_sender, 
-                mode=mode_req, 
-                task_hint=task_hint,
-                stream=True  # Enable streaming
-            ))
+            safe_create_task(run_and_cleanup())
         else:
             logger.warning(f"No agent found for {session_id}")
 

@@ -34,11 +34,11 @@ class EventType(str, Enum):
     THOUGHT = "thought"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    PLAN = "plan"
+    PLAN = "plan_update"
     PLAN_STEP = "plan_step"
     PROGRESS = "progress"
     TOKEN = "token"
-    ERROR = "error"
+    ERROR = "agent_error"
     WARNING = "warning"
     CHECKPOINT = "checkpoint"
     SECURITY = "security"
@@ -89,6 +89,15 @@ class EventBus:
         await bus.emit_progress(step=3, total=5, description="Running tests")
     """
 
+    _instances: Dict[str, 'EventBus'] = {}
+    
+    @classmethod
+    def get_instance(cls, session_id: str) -> 'EventBus':
+        """Get or create a singleton EventBus for a specific session."""
+        if session_id not in cls._instances:
+            cls._instances[session_id] = cls(session_id)
+        return cls._instances[session_id]
+
     def __init__(self, session_id: str = "default"):
         self.session_id = session_id
         self._consumers: List[Callable] = []
@@ -102,9 +111,17 @@ class EventBus:
         if callback and callback not in self._consumers:
             self._consumers.append(callback)
 
+    def subscribe(self, callback: Callable) -> None:
+        """Alias for add_consumer."""
+        self.add_consumer(callback)
+
     def remove_consumer(self, callback: Callable) -> None:
         """Unregister a consumer."""
         self._consumers = [c for c in self._consumers if c is not callback]
+
+    def unsubscribe(self, callback: Callable) -> None:
+        """Alias for remove_consumer."""
+        self.remove_consumer(callback)
 
     def set_filter(self, event_types: Set[EventType]) -> None:
         """Only emit events of these types. Empty set = all events."""
