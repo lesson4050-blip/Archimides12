@@ -231,27 +231,37 @@ NEVER mix tool JSON with explanation text.
 
                 # Fallback: parse from text content
                 if tool_call is None and text.strip():
+                    # 1. Try standard JSON tool_call format
                     parsed, err = repair_and_parse(text.strip())
                     if parsed and isinstance(parsed, dict):
                         if "tool_call" in parsed:
-                            validated = validate_tool_call(
-                                parsed["tool_call"]
-                            )
+                            validated = validate_tool_call(parsed["tool_call"])
                             if validated:
                                 tool_call = validated.model_dump()
                                 text = ""
-                        elif "name" in parsed and (
-                            "params" in parsed or "arguments" in parsed
-                        ):
+                        elif "name" in parsed and ("params" in parsed or "arguments" in parsed):
                             raw_tc = {
                                 "name": parsed["name"],
-                                "params": parsed.get("params")
-                                or parsed.get("arguments", {})
+                                "params": parsed.get("params") or parsed.get("arguments", {})
                             }
                             validated = validate_tool_call(raw_tc)
                             if validated:
                                 tool_call = validated.model_dump()
                                 text = ""
+                    
+                    # 2. Try XML-style format: /function name>params</function>
+                    if tool_call is None:
+                        import re
+                        xml_match = re.search(r"/function\s+(\w+)\s*>(.*?)</function>", text, re.DOTALL)
+                        if xml_match:
+                            t_name = xml_match.group(1)
+                            t_args_str = xml_match.group(2)
+                            t_args, _ = repair_and_parse(t_args_str)
+                            if isinstance(t_args, dict):
+                                validated = validate_tool_call({"name": t_name, "params": t_args})
+                                if validated:
+                                    tool_call = validated.model_dump()
+                                    text = ""
 
                 # Fuzzy match tool name if needed
                 if tool_call and available_names:

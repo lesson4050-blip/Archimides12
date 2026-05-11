@@ -163,7 +163,7 @@ async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, s
     """
     SEARCH_DIRECT = re.compile(
         r'\b(найди|поищи|найти|расскажи|новости|news|latest|what is|who is|'
-        r'search for|find|look up|покажи|что такое)\b',
+        r'search for|find|look up|покажи|что такое|почему|разница|explain|why)\b',
         re.IGNORECASE
     )
     if SEARCH_DIRECT.search(text) and not any(w in text.lower() for w in ['код', 'code', 'fix', 'bug', 'implement']):
@@ -696,7 +696,7 @@ class AgentOrchestrator:
                 state.reset_for_subtask()
                 
                 # Circuit Breaker: hard cap to prevent infinite loops
-                _MAIN_LOOP_LIMIT = 15     # Main executor+critic iterations
+                _MAIN_LOOP_LIMIT = 8      # Reduced from 15 to prevent long stuck loops
                 _RESCUE_LOOP_LIMIT = 8    # Rescue pass gets its own budget
                 _main_count = 0
                 _rescue_count = 0
