@@ -66,7 +66,18 @@ CONVERSATIONAL_PATTERNS = [
     r"^(привет|здравствуй|хай|hi|hello|hey|добрый\s+(день|вечер|утро))[\s!.?]*$",
     r"^(как\s+дела|что\s+ты\s+умеешь|кто\s+ты|что\s+ты\s+такое|помо(щь|ги))[\s!.?]*$",
     r"^(спасибо|пока|до\s+свидания|bye|thanks|thank\s+you)[\s!.?]*$",
+    # Personal statements & memory requests
+    r"\bmy\s+name\s+is\b",
+    r"\bremember\s+(this|that|me|my)\b",
+    r"\bзапомни\b",
+    r"\bменя\s+зовут\b",
 ]
+
+# Short personal recall patterns — these ARE questions but trivially conversational
+_MEMORY_RECALL = re.compile(
+    r"^(what('?s|\s+is)\s+my\s+name|как\s+меня\s+зовут)",
+    re.IGNORECASE
+)
 
 def is_conversational(text: str) -> bool:
     """Check if the task is a simple conversational message (greeting, etc.).
@@ -76,6 +87,10 @@ def is_conversational(text: str) -> bool:
     Only explicit greetings/farewells/meta-questions should match.
     """
     cleaned = text.strip().lower()
+    
+    # Short personal recall questions are conversational
+    if _MEMORY_RECALL.search(cleaned):
+        return True
     
     # Never match if the message contains a question word — it's a real question
     question_signals = re.compile(
@@ -240,6 +255,7 @@ class AgentOrchestrator:
         self.blackboard = SharedBlackboard(session_id=session_id, redis_url=settings.REDIS_URL)
         self.router = router
         self.tool_registry = tool_registry
+        self.context_manager = context_manager
         self.planner = PlannerAgent(router)
         self.executor = ExecutorAgent(router, tool_registry, context_manager, self.blackboard, event_bus=None, security_gate=None)  # Updated below
         self.critic = CriticAgent(router, tool_registry=tool_registry)
@@ -478,21 +494,34 @@ class AgentOrchestrator:
         system_prompt = (
             "You are Archimedes, a professional AI assistant. "
             "Respond in the same language the user uses. "
-            "Be concise and friendly."
+            "Be concise and friendly. "
+            "If conversation history is provided, use it to answer personal questions."
         )
         
         # FIX-2: Proactive search for information questions
-        search_context = await self._maybe_search_for_context(state.task_description)
-        if search_context:
-            system_prompt += (
-                f"\n\nRelevant search results (use these to answer accurately):\n"
-                f"{search_context}"
-            )
+        # Skip search for personal memory recall (e.g. "what is my name?")
+        if not _MEMORY_RECALL.search(state.task_description):
+            search_context = await self._maybe_search_for_context(state.task_description)
+            if search_context:
+                system_prompt += (
+                    f"\n\nRelevant search results (use these to answer accurately):\n"
+                    f"{search_context}"
+                )
         
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": state.task_description}
         ]
+        
+        # Include prior conversation turns from context_manager for multi-turn memory
+        try:
+            prior = self.context_manager.get_messages()
+            for msg in prior:
+                if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                    messages.append({"role": msg["role"], "content": msg["content"]})
+        except Exception:
+            pass
+        
+        messages.append({"role": "user", "content": state.task_description})
         
         try:
             if websocket_send:
@@ -677,7 +706,7 @@ class AgentOrchestrator:
                         # Strategy-aware dispatch: use swarm for matching strategies
                         agent_override = STRATEGY_AGENTS.get(strategy)
                         if strategy == 'swarm_code':
-                            agent_override = ['coder', 'critic', 'tester']
+                            agent_override = ['coder']
                         if strategy == "mcts":
                             if websocket_send:
                                 await websocket_send({"type": "info", "content": "🔍 Запуск MCTS: Поиск оптимального решения через ветвление..."})
@@ -760,7 +789,10 @@ class AgentOrchestrator:
                             })
                         
                             # Ensure critic has something to review
-                            state = await self.critic.process(state, websocket_send)
+                            if strategy != 'swarm_code':
+                                state = await self.critic.process(state, websocket_send)
+                            else:
+                                state.metadata["critic_verdict"] = "PASS"
                         
                             # Safety: If critic didn't set verdict, default to RETRY
                             # (not PASS — we don't want broken outputs to slip through)

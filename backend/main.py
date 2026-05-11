@@ -181,16 +181,22 @@ async def lifespan(app: FastAPI):
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
 
-    # Playwright binary check
+    # Playwright binary check (with timeout to prevent startup hang)
     try:
         process = await asyncio.create_subprocess_exec(
             "python", "-m", "playwright", "help",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        await process.communicate()
+        await asyncio.wait_for(process.communicate(), timeout=5)
         if process.returncode != 0:
             logger.warning("Playwright may not be installed. Presentation rendering limits will apply.")
+    except asyncio.TimeoutError:
+        logger.warning("Playwright check timed out (5s). Skipping.")
+        try:
+            process.kill()
+        except Exception:
+            pass
     except Exception:
         logger.warning("Playwright check failed. Run `pip install playwright` and `playwright install` to enable PDF generation.")
 

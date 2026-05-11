@@ -391,6 +391,8 @@ class SandboxManager:
                     logger.info(f"Cleaning up stale container: {c.name}")
                     try:
                         c.remove(force=True)
+                    except docker.errors.NotFound:
+                        pass
                     except Exception as e:
                         logger.warning(f"Failed to remove stale container {c.name}: {e}")
         except Exception as e:

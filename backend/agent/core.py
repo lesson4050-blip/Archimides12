@@ -287,6 +287,11 @@ class ArchimedesCosmoAgent:
                 raise Exception(orch_result.get("error", "Orchestrator failed"))
                 
             final_output = orch_result.get("output", "Task completed.")
+            
+            # Save conversation turns for multi-turn memory
+            self.context_manager.add_message("user", task_description)
+            self.context_manager.add_message("assistant", str(final_output) if final_output else "")
+            
             if websocket_send and final_output:
                 await websocket_send({"type": "message_result", "content": str(final_output)})
                 

@@ -413,7 +413,7 @@ Ensure the JSON array is the ONLY output.
             if steps and isinstance(steps, list):
                 # Fake a score since it's theoretically derived
                 quality = 0.85
-                self.save_skill(task_description, steps, quality)
+                self.store_skill(task_description, steps, label=None, quality_score=quality)
                 logger.info(f"Synthesized new skill from web for: {task_description[:50]}")
                 return True
         except Exception as e:

@@ -2,6 +2,7 @@ import os
 import logging
 import io
 import tarfile
+import posixpath
 import asyncio
 from typing import Dict, Any, TYPE_CHECKING
 
@@ -18,10 +19,10 @@ class SandboxFilesystem:
     WORKSPACE_ROOT = "/home/ubuntu/workspace"
 
     def _safe_path(self, path: str) -> str:
-        """Enforce path boundaries within the workspace."""
-        base = os.path.normpath(self.WORKSPACE_ROOT)
+        """Enforce path boundaries within the workspace using POSIX rules."""
+        base = posixpath.normpath(self.WORKSPACE_ROOT)
         # Handle absolute paths by stripping leading slash
-        target = os.path.normpath(os.path.join(base, path.lstrip("/")))
+        target = posixpath.normpath(posixpath.join(base, path.lstrip("/")))
         
         if not target.startswith(base):
             raise ValueError(f"Path traversal attempt blocked: {path}")
@@ -87,7 +88,7 @@ class SandboxFilesystem:
                 
             tar_stream.seek(0)
             
-            dirname = os.path.dirname(safe_path)
+            dirname = posixpath.dirname(safe_path)
             loop = asyncio.get_running_loop()
             if dirname:
                 await loop.run_in_executor(None, lambda: container.exec_run(f"mkdir -p {dirname}", user="ubuntu"))
