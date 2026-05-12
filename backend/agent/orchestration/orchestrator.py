@@ -352,7 +352,7 @@ class AgentOrchestrator:
             logger.error(f"[{session_id}] Task timed out after {TIMEOUT}s")
             if websocket_send:
                 await websocket_send({
-                    "type": "error",
+                    "type": "agent_error",
                     "content": f"⏱️ Agent timed out after {TIMEOUT//60} minutes."
                 })
             return {"success": False, "error": "timeout",
@@ -706,12 +706,15 @@ class AgentOrchestrator:
                 
                 async with agent_span("executor.subtask", state.session_id, subtask_index=i, target=current_target[:50]):
                     while True:
+                        # FIX-1: Read strategy from state each iteration (prevents NameError)
+                        strategy = state.metadata.get("strategy", "swarm_code")
+                        
                         if not self._check_budget(state.session_id):
                             from backend.metrics import agent_circuit_breaker_total
                             agent_circuit_breaker_total.inc()
                             if websocket_send:
                                 await websocket_send({
-                                    "type": "error",
+                                    "type": "agent_error",
                                     "content": "⚠️ Session budget limit reached. Task stopped to prevent runaway costs."
                                 })
                             break
@@ -729,7 +732,7 @@ class AgentOrchestrator:
                                 logger.warning(f"[{state.session_id}] Main circuit breaker tripped! >{_MAIN_LOOP_LIMIT} iterations.")
                                 if websocket_send:
                                     await websocket_send({
-                                        "type": "error",
+                                        "type": "agent_error",
                                         "content": "⚠️ Maximum execution steps reached. The task might be too complex or the agent is stuck."
                                     })
                                 break
