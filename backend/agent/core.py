@@ -147,6 +147,9 @@ class ArchimedesCosmoAgent:
         from backend.agent.tool_initializer import ToolInitializer
         ToolInitializer(self.tool_registry, self.session_id, self).initialize_all()
 
+        from backend.agent.subconscious import SubconsciousEngine
+        self.subconscious = SubconsciousEngine(self.router, self.tool_registry)
+
         for msg in self.history:
             self.context_manager.add_message(msg["role"], msg.get("content", ""))
         logger.info(f"OK: Initialized {self.name} (ID: {self.agent_id})")
@@ -304,6 +307,36 @@ class ArchimedesCosmoAgent:
                 metadata={"mode": mode.value, "plan": orch_result.get("plan")}
             )
             
+            # Record to flywheel for continuous learning
+            try:
+                from backend.agent.flywheel import flywheel
+                flywheel.record_session(
+                    session_id=self.session_id or "default",
+                    task=task_description,
+                    result={
+                        "success": getattr(result, 'status', None) == TaskStatus.COMPLETED,
+                        "strategy": getattr(result, 'metadata', {}).get('strategy', 'unknown'),
+                        "output": str(getattr(result, 'output', ''))[:500],
+                        "error": getattr(result, 'error', None),
+                    },
+                    history=self.context_manager.get_messages()[-10:] if hasattr(self, 'context_manager') else []
+                )
+            except Exception as e:
+                logger.debug(f"Flywheel record failed (non-critical): {e}")
+
+            # Trigger subconscious predictive analysis in background
+            try:
+                output_text = str(getattr(result, 'output', ''))
+                if output_text and len(output_text) > 50:
+                    asyncio.create_task(
+                        self.subconscious.trigger_predictive_analysis(
+                            current_thought=task_description[:200],
+                            session_id=self.session_id or "default"
+                        )
+                    )
+            except Exception as e:
+                logger.debug(f"Subconscious trigger failed (non-critical): {e}")
+
             # Record performance metrics
             from backend.utils.metrics import metrics
             from backend.utils.task import safe_create_task
