@@ -76,7 +76,16 @@ async def run_evaluation(args):
     
     for i, instance in enumerate(instances):
         print(f"[{i+1}/{len(instances)}] {instance['instance_id']}...")
-        result = await adapter.run_instance(instance, timeout=args.timeout)
+        from backend.benchmarks.swe_bench_adapter import SWEBenchTask
+        task = SWEBenchTask(
+            instance_id=instance['instance_id'],
+            repo=instance['repo'],
+            base_commit=instance['base_commit'],
+            problem_statement=instance['problem_statement'],
+            test_patch=instance.get('test_patch', ''),
+            hints_text=instance.get('hints_text', ''),
+        )
+        result = await adapter.run_task(task, timeout=args.timeout)
         results.append(result)
         
         status = "✅ PASS" if result["success"] else "❌ FAIL"
