@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     await page.setViewport({ width: 1280, height: 800 });
     
     page.on('console', msg => console.log('BROWSER:', msg.text()));
-    page.on('pageerror', err => console.error('BROWSER ERROR:', err.message));
+    page.on('pageerror', (err: Error) => console.error('BROWSER ERROR:', err.message));
 
     const port = process.env.PORT || "3005";
     const engineUrl = process.env.NEXT_PUBLIC_FAST_API || "http://127.0.0.1:5051";

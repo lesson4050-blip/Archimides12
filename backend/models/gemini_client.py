@@ -28,7 +28,15 @@ class GeminiClient:
                 new_schema[k] = [self._clean_schema(i) if isinstance(i, dict) else i for i in v]
         return new_schema
 
-    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
+    async def generate_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 8192,
+        task_hint: str = "default",
+        **kwargs
+    ) -> Dict[str, Any]:
         # Prepare content from messages
         contents = []
         for msg in messages:
@@ -98,6 +106,8 @@ class GeminiClient:
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     tools=genai_tools,
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
                     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
                 )
             )
@@ -185,6 +195,8 @@ class GeminiClient:
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         on_token: Optional[Callable[[str], Any]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 8192,
         task_hint: str = "default",
         **kwargs
     ) -> Dict[str, Any]:
@@ -224,6 +236,8 @@ class GeminiClient:
                     config=types.GenerateContentConfig(
                         system_instruction=system_instruction,
                         tools=genai_tools,
+                        temperature=temperature,
+                        max_output_tokens=max_tokens,
                         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
                     )
                 )
