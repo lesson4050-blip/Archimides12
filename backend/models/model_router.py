@@ -149,7 +149,14 @@ class ModelRouter:
             
         return available
 
-    async def generate(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default") -> Dict[str, Any]:
+    async def generate(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        task_hint: str = "default",
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Dict[str, Any]:
         complexity = self.classify_complexity(messages, tools)
         order = await self._get_order(task_hint, tools or [], complexity)
 
@@ -181,6 +188,8 @@ class ModelRouter:
                     messages=messages,
                     tools=tools,
                     task_hint=task_hint,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                     config=config,
                     operation_name=f"{client.__class__.__name__} generate"
                 )
@@ -205,7 +214,15 @@ class ModelRouter:
             "all_failed": True
         }
 
-    async def generate_stream(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", on_token=None) -> Dict[str, Any]:
+    async def generate_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        task_hint: str = "default",
+        on_token=None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Dict[str, Any]:
         complexity = self.classify_complexity(messages, tools)
         order = await self._get_order(task_hint, tools or [], complexity)
 
@@ -225,6 +242,8 @@ class ModelRouter:
                         tools=tools,
                         on_token=on_token,
                         task_hint=task_hint,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
                         config=config,
                         operation_name=f"{client.__class__.__name__} generate_stream"
                     )
@@ -234,6 +253,8 @@ class ModelRouter:
                         messages=messages,
                         tools=tools,
                         task_hint=task_hint,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
                         config=config,
                         operation_name=f"{client.__class__.__name__} generate"
                     )

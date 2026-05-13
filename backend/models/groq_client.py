@@ -105,7 +105,15 @@ class GroqClient:
         self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
         self.model = settings.GROQ_MODEL
 
-    async def generate_with_tools(self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None, task_hint: str = "default", **kwargs) -> Dict[str, Any]:
+    async def generate_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        task_hint: str = "default",
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        **kwargs
+    ) -> Dict[str, Any]:
         retries = 0
         backoff = 2
         
@@ -137,7 +145,9 @@ class GroqClient:
                 response = await self.client.chat.completions.create(
                     model=self.model,
                     messages=formatted_messages,
-                    tools=tools
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                 )
                 
                 message = response.choices[0].message

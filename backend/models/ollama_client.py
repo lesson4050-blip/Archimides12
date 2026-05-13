@@ -96,7 +96,9 @@ NEVER mix tool JSON with explanation text.
     async def _call_model(
         self,
         messages: List[Dict],
-        tools: Optional[List[Dict]] = None
+        tools: Optional[List[Dict]] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 4096
     ) -> Any:
         chat_kwargs = {
             "model": self._select_model(self._current_task_hint) if hasattr(self, '_current_task_hint') else self.model,
@@ -105,8 +107,8 @@ NEVER mix tool JSON with explanation text.
                 "num_ctx": min(
                     settings.AGENT_MAX_CONTEXT_TOKENS, 32768
                 ),
-                "num_predict": 8192,
-                "temperature": 0.1,
+                "num_predict": max_tokens,
+                "temperature": temperature,
                 "num_gpu": 999,
                 "num_thread": 8,
                 "keep_alive": "10m",
@@ -136,7 +138,10 @@ NEVER mix tool JSON with explanation text.
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         force_json_schema: Optional[Dict] = None,
-        task_hint: str = "default"
+        task_hint: str = "default",
+        temperature: float = 0.1,
+        max_tokens: int = 4096,
+        **kwargs
     ) -> Dict[str, Any]:
         self._current_task_hint = task_hint
 
@@ -177,8 +182,8 @@ NEVER mix tool JSON with explanation text.
                             "num_ctx": min(
                                 settings.AGENT_MAX_CONTEXT_TOKENS, 16384
                             ),
-                            "num_predict": 4096,
-                            "temperature": 0.1,
+                            "num_predict": max_tokens,
+                            "temperature": temperature,
                             "num_gpu": 999,
                             "num_thread": 8,
                             "keep_alive": "10m",
@@ -188,7 +193,7 @@ NEVER mix tool JSON with explanation text.
                     client = self._get_client(chat_kwargs["model"])
                     response = await client.chat(**chat_kwargs)
                 else:
-                    response = await self._call_model(messages, tools)
+                    response = await self._call_model(messages, tools, temperature=temperature, max_tokens=max_tokens)
 
                 content = response.message.content or ""
 
@@ -313,10 +318,10 @@ NEVER mix tool JSON with explanation text.
             f"{last_error}"
         )
 
-    async def generate_stream(self, messages, tools=None, on_token=None, task_hint="default", **kwargs):
+    async def generate_stream(self, messages, tools=None, on_token=None, task_hint="default", temperature: float = 0.7, max_tokens: int = 4096, **kwargs):
         if tools:
             # Can't stream with tools reliably — use non-stream
-            return await self.generate_with_tools(messages, tools, task_hint=task_hint)
+            return await self.generate_with_tools(messages, tools, task_hint=task_hint, temperature=temperature, max_tokens=max_tokens)
 
         # True streaming for non-tool responses
         messages = [msg.copy() for msg in messages]
@@ -328,8 +333,8 @@ NEVER mix tool JSON with explanation text.
                 stream=True,
                 options={
                     "num_ctx": min(settings.AGENT_MAX_CONTEXT_TOKENS, 32768),
-                    "num_predict": 8192,
-                    "temperature": 0.7,
+                    "num_predict": max_tokens,
+                    "temperature": temperature,
                     "num_gpu": 999,
                     "keep_alive": "10m",
                 }
