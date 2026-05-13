@@ -117,7 +117,7 @@ const MarketSizeSlideLayout: React.FC<MarketSizeSlideProps> = ({
             {stats.map((stat, idx) => (
               <div 
                 key={idx} 
-                ref={(el) => (statsRef.current[idx] = el)}
+                ref={(el) => { statsRef.current[idx] = el; }}
                 className="flex flex-col gap-3 group"
               >
                 <div className="flex items-center gap-2">

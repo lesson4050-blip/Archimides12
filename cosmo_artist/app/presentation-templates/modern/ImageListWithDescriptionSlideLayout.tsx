@@ -136,7 +136,7 @@ const ImageListWithDescriptionSlideLayout: React.FC<ImageListWithDescriptionSlid
           {products.slice(0, 4).map((prod, idx) => (
             <div
               key={idx}
-              ref={(el) => (cardsRef.current[idx] = el)}
+              ref={(el) => { cardsRef.current[idx] = el; }}
               className="obsidian-card rounded-[2rem] overflow-hidden flex flex-col group"
             >
               {/* Image Section */}

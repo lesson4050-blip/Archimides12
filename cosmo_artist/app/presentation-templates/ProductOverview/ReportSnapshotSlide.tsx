@@ -282,7 +282,7 @@ const ReportSnapshotSlide = ({ data }: { data: Partial<SchemaType> }) => {
     taglineBody,
     sideImage,
     chartStyle,
-    chartTitle,
+    charttitle,
     miniBars,
     donutData,
     groupedBars,
@@ -386,7 +386,7 @@ const ReportSnapshotSlide = ({ data }: { data: Partial<SchemaType> }) => {
                   className="mt-[14px] text-[32px] font-normal leading-[1.1] text-[#15342D]"
                   style={{ color: "var(--primary-color,#15342D)" }}
                 >
-                  {chartTitle}
+                  {charttitle}
                 </p>
 
 

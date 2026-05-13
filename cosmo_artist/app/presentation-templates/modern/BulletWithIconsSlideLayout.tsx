@@ -127,7 +127,7 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
            {problemCategories.map((category, idx) => (
              <div
                key={idx}
-               ref={(el) => (itemsRef.current[idx] = el)}
+               ref={(el) => { itemsRef.current[idx] = el; }}
                className="obsidian-card rounded-3xl p-8 flex items-center gap-8 group hover:translate-x-4 transition-all duration-700"
              >
                 <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-accent-primary transition-colors duration-500">

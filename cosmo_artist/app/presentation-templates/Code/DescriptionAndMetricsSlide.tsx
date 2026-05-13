@@ -69,7 +69,7 @@ const CodeSlide10MetricsSplit = ({ data }: { data: Partial<SchemaType> }) => {
         <h2 className="text-[64px] font-medium tracking-[-0.03em]" style={{ color: "var(--background-text,#f2f4ff)" }}>{data.title}</h2>
         <div className="relative z-10 flex min-h-[520px] gap-10">
           <div className="w-1/2">
-            <h3 className="mt-[28px] text-[24px] font-medium" style={{ color: "var(--background-text,#f1f4ff)" }}>{data.explanationTitle}</h3>
+            <h3 className="mt-[28px] text-[24px] font-medium" style={{ color: "var(--background-text,#f1f4ff)" }}>{data.explanationtitle}</h3>
             <p className="mt-[16px] text-[22px] leading-[145%]" style={{ color: "var(--background-text,#d2d9ff)" }}>{data.explanation}</p>
           </div>
 

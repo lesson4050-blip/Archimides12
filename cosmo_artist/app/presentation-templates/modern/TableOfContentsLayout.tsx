@@ -114,7 +114,7 @@ const TableOfContentsLayout: React.FC<TableOfContentsLayoutProps> = ({
           {items.map((item, idx) => (
             <div
               key={idx}
-              ref={(el) => (itemsRef.current[idx] = el)}
+              ref={(el) => { itemsRef.current[idx] = el; }}
               className="group flex gap-8 items-start hover:translate-x-4 transition-transform duration-700"
             >
               <div className="flex flex-col items-center">

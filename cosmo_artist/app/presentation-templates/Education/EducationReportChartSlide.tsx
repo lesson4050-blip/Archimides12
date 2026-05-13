@@ -164,7 +164,7 @@ const EducationReportChartSlide = ({ data }: { data: Partial<SchemaType> }) => {
 
           <div className="px-[42px] h-full flex flex-col justify-center" style={{ backgroundColor: "var(--card-color,#eceaf0)" }}>
             <h3 className="text-center  text-[24px] font-semibold leading-none" style={{ color: "var(--background-text,#33313A)" }}>
-              {slideData.chartTitle}
+              {slideData.charttitle}
             </h3>
             <p className="mt-1 text-center pb-6 text-[18px] leading-none" style={{ color: "var(--background-text,#4D4B55)" }}>
               {slideData.dateRange}

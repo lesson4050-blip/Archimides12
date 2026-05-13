@@ -66,7 +66,9 @@ async def run_evaluation(args):
     )
     await asyncio.sleep(2)  # Allow async init to complete
     
-    adapter = SWEBenchAdapter(agent)
+    from backend.sandbox.manager import SandboxManager
+    sandbox = SandboxManager()
+    adapter = SWEBenchAdapter(agent, sandbox)
     
     # Run evaluation
     results = []
