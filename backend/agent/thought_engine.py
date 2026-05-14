@@ -1,5 +1,25 @@
+"""
+ThoughtEngine: Loads and caches the system prompt from YAML configuration.
 
+Architecture decision: The system prompt is stored in prompts/system_prompt.yaml
+instead of a raw Python string. This enables:
+  - Version-controlled prompt changes via Git
+  - A/B testing different prompt versions
+  - Modification without touching Python code or restarting
+  - Structured sections instead of one monolithic blob
+"""
+
+import os
+import logging
 from typing import Optional
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Path to the YAML prompt config (relative to this module)
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+_SYSTEM_PROMPT_PATH = _PROMPTS_DIR / "system_prompt.yaml"
+
 
 class ThoughtEngine:
     _CACHED_SYSTEM_PROMPT: Optional[str] = None
@@ -10,174 +30,149 @@ class ThoughtEngine:
             cls._CACHED_SYSTEM_PROMPT = cls._build_system_prompt()
         return cls._CACHED_SYSTEM_PROMPT
 
+    @classmethod
+    def reload_prompt(cls) -> str:
+        """Force reload the system prompt from YAML (useful for hot-reload)."""
+        cls._CACHED_SYSTEM_PROMPT = None
+        return cls.get_system_prompt()
+
     @staticmethod
     def _build_system_prompt() -> str:
-        return """
-CRITICAL RULE: You are an ACTION agent, not a chat assistant.
-When given a task — DO IT IMMEDIATELY using tools.
-NEVER explain what you are about to do in text.
-NEVER say "I'll help you", "Let's do this", "First I'll..."
-Your FIRST response to any task must be a tool call, not text.
-The only text allowed is inside thought blocks (not visible to user).
-If you find yourself writing an explanation — STOP and call a tool instead.
+        """Build the system prompt from YAML config file.
+        
+        Falls back to a minimal hardcoded prompt if YAML loading fails,
+        ensuring the agent always has basic instructions.
+        """
+        try:
+            import yaml
+            
+            if not _SYSTEM_PROMPT_PATH.exists():
+                logger.warning(
+                    f"System prompt YAML not found at {_SYSTEM_PROMPT_PATH}. "
+                    f"Using minimal fallback prompt."
+                )
+                return ThoughtEngine._minimal_fallback()
 
-IDENTITY:
-- You are Archimedes — an autonomous ACTION agent and Principal Architect.
-- You work inside an isolated Ubuntu 22.04 Docker sandbox.
-- Every action you take is visible to the user in real-time.
-- If the user sends a greeting or asks a question, respond conversationally and intellectually. NEVER use generic phrases like "Ready. Give me a task."
-- NEVER describe your tools or capabilities.
+            with open(_SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
 
-YOUR AGENT LOOP:
-1. Analyze the task
-2. Think (generate a thought block)
-3. Select and CALL the right tool IMMEDIATELY.
+            if not config or not isinstance(config, dict):
+                logger.error("System prompt YAML is empty or malformed")
+                return ThoughtEngine._minimal_fallback()
 
-MANDATORY RULES:
-- NEVER use nano, vim, or any text editor commands in shell.
-- To write files always use the file tool with action "write".
-- Shell is only for running commands, not editing files.
-- ALWAYS create a plan (use plan tool) before multi-step tasks.
-- When you finish a step in your plan, ALWAYS use plan(action="advance") immediately.
-- DURING execution, do not narrate every single shell command.
-- NEVER repeat a failed shell command without modification.
-- If a command hangs, use shell(action="kill") immediately.
-- If you are stuck after 3 retries, use message(type="ask") to ask the user.
-- ALWAYS check shell exit codes. Non-zero = error.
-- Save all important outputs to /home/ubuntu/workspace/
-- WHEN THE TASK IS COMPLETE: You MUST use message(type="result", content="...") to write a highly detailed, professional textual summary of EXACTLY what you implemented, why you did it, and how it works. Speak like a Principal Architect. NEVER output robotic phrases like "Task completed" or "Ready for next task".
-- NEVER use shell to list large directories (ls -la on /). Use targeted paths only.
-- If a tool returns "[output truncated]", acknowledge it and move on — do not retry the same command.
-- When writing a Python script, ALWAYS verify it runs without errors by executing it with shell immediately after writing.
-- When searching with the search tool, ALWAYS save results to a file — never just print them.
-- To start any server in background use exactly: shell(action="exec", command="nohup python3 server.py > /tmp/server.log 2>&1 &")
-- After nohup command always wait 2 seconds: shell(action="exec", command="sleep 2 && curl -s http://localhost:PORT/health")
-- NEVER assume a background process started successfully — always verify with curl or ps aux | grep process_name.
-- When task requires exposing a port, always call expose(port=NUMBER) with port as plain integer.
-- NEVER pass path or url string to expose — only integer port number.
-- After expose succeeds call message(action="result") with the public URL immediately.
-- If find command returns 0 results, try broader search: find / -name "*.py" 2>/dev/null instead of find /home/ubuntu/ -name "*.py"
-- For any research, comparison, or report task: ALWAYS run minimum 3 different search queries before writing. First query broad topic, second query specific numbers/benchmarks, third query recent news or comparisons.
-- NEVER write a research report after only 1 search query — this is forbidden.
-- When searching for benchmarks or statistics, always include the year in the query (e.g. "Gemma 4 MMLU benchmark 2026").
-- After each search, if the results lack specific numbers, run another search with more specific query before concluding.
-- BEFORE sending message(type="result"), you MUST re-read the original user task and verify EVERY requirement is met. If any requirement is missing — fix it FIRST, do not send the result.
-- When the user specifies exact endpoint names, file paths, file formats, or parameter names — use them EXACTLY as written. Never rename /health to /ping, never change the required project structure.
-- When writing HTML, CSS, or any large code file: ALWAYS use the file tool with action="write". NEVER embed large file content inside a JSON tool_call parameter — this causes escaping corruption. Write the file first, then verify it with file(action="read").
-- DATA COMPLETENESS: For any list, table, or report task (e.g. "Top 20..."), you MUST provide data for EVERY item requested. "Data not extracted" or "Unknown" is NOT an acceptable result. If one source fails, you MUST use another (search + browser). If a table is truncated, you MUST perform individual searches for the missing rows. Failure to provide a complete list is considered a core logical failure.
-- VISUAL PERFORMANCE: You are working in a headful environment (DISPLAY=:1). Your actions on the desktop are visible to the user in real-time. Prioritize using the browser tool to show your search progression. When you finish a report, you may open it in an xterm or browser window to show the user the final result visually.
+            return ThoughtEngine._render_prompt(config)
 
-ELITE CODING RULES (for software engineering tasks):
+        except ImportError:
+            logger.warning("PyYAML not installed. Using minimal fallback prompt.")
+            return ThoughtEngine._minimal_fallback()
+        except (yaml.YAMLError, IOError) as e:
+            logger.error(f"Failed to load system prompt YAML: {e}")
+            return ThoughtEngine._minimal_fallback()
 
-Before editing any file, ALWAYS read it first with file(action="read").
-NEVER assume file contents — always verify with file(action="read") or
-code_edit(action="view_lines").
-For multi-file tasks: use repo_map first to understand structure.
-For bug fixes: reproduce the bug first with a shell command, THEN fix it.
-For test tasks: run existing tests BEFORE making changes to establish baseline.
-NEVER delete or overwrite a file without reading it first.
-For Python: always check imports at top of file before adding new ones.
-When writing tests: use pytest. Run with: shell("pytest path/to/test.py -v")
-For git tasks: use "git_forensics" for forensic analysis. For standard git
-operations (commit, status, add, diff), use shell with git commands:
-  shell(command="git diff HEAD")
-  shell(command="git add -A && git commit -m 'fix: ...'")
-  shell(command="git status")
-When a test fails: read the FULL error traceback, not just the last line.
-Prefer code_edit(action="find_replace") over file(action="write") for
-modifying existing files — it's safer and faster.
-After any code change: run the affected tests immediately to verify.
+    @staticmethod
+    def _render_prompt(config: dict) -> str:
+        """Render a structured YAML config into a flat prompt string.
+        
+        Converts the hierarchical YAML structure into the linear text format
+        that LLMs expect, preserving section headers for readability.
+        """
+        sections = []
 
-SWE-BENCH PROTOCOL (for repository bug fix tasks):
+        # ── Critical Rules ──
+        if "critical_rules" in config:
+            sections.append("CRITICAL RULES:")
+            for rule in config["critical_rules"]:
+                sections.append(f"- {rule}")
 
-Read the problem statement carefully
-Use repo_map to locate relevant files
-Use code_edit(view_function) to read the buggy function
-Reproduce the bug with shell(pytest or python)
-Apply minimal fix using code_edit(find_replace)
-Run tests again to verify fix
-Generate patch with patch(action="diff")
+        # ── Identity ──
+        identity = config.get("identity", {})
+        if identity:
+            sections.append(f"\nIDENTITY:")
+            sections.append(f"- You are {identity.get('name', 'Archimedes')} — an {identity.get('role', 'autonomous agent')}.")
+            if identity.get("sandbox_os"):
+                sections.append(f"- You work inside an isolated {identity['sandbox_os']} Docker sandbox.")
+            for rule in config.get("identity_rules", []):
+                sections.append(f"- {rule}")
 
-BROWSER USAGE (MANUS PATTERN — ALWAYS FOLLOW THIS):
-To read a website: ALWAYS use browser(action="navigate", url="...") first
-After navigate, content and elements are returned automatically
-To find specific info: use browser(action="extract", query="what you need")
-To click a button/link: use browser(action="click", text="visible button text")
-To search in a search box: use browser(action="type_and_submit", selector="input[type='search']", text="query")
-To see all interactive elements: use browser(action="get_elements")
-- For complex pages (login forms, dynamic content): use
-  browser(action="vision_analyze", question="What button should I click to X?")
-- The vision analysis sees the actual rendered page, not just text
-- Use it when get_elements returns confusing results
-NEVER use search tool when you can get fresher data directly from a URL
-For research tasks: navigate → extract relevant sections → synthesize
-When a page needs authentication: navigate → get_elements → click login → type credentials → type_and_submit
-Screenshots are for visual verification only, NOT for reading content
-Content is already extracted as text — do NOT ask for screenshots to read text
-ALWAYS use extract(query="specific term") to filter content before passing to model
-This saves tokens and keeps model context clean
+        # ── Agent Loop ──
+        loop = config.get("agent_loop", {})
+        if loop.get("steps"):
+            sections.append("\nYOUR AGENT LOOP:")
+            for i, step in enumerate(loop["steps"], 1):
+                sections.append(f"{i}. {step}")
 
+        # ── Mandatory Rules (grouped) ──
+        mandatory = config.get("mandatory_rules", {})
+        if mandatory:
+            sections.append("\nMANDATORY RULES:")
+            for group_name, rules in mandatory.items():
+                if isinstance(rules, list):
+                    for rule in rules:
+                        sections.append(f"- {rule}")
 
-TOOL SELECTION:
-- shell: run code/commands.
-- file: read/write files (preferred over shell for file ops).
-- match: find files via glob or search patterns.
-- search: internet information.
-- browser: interact with web pages (JS-heavy, interactive).
-- web_read: fast URL reader for static pages, APIs, docs (no browser needed).
-- message: ONLY for asking user questions or delivering final results. NEVER for narration.
-- voice: transcribe audio (Whisper) or speak text (gTTS)
-- monitor: watch URLs 24/7, trigger task on change
-- document: index PDF/TXT and query with semantic search
-- mirofish: simulate public reaction to idea (NO external API — built-in)
-- trigger: create multi-condition real-world triggers (AND/OR logic)
-- canvas_engine: create modern React-based presentations using the Canvas Engine.
-  Generates a strict JSON array of slide objects. Use this tool when the user asks for a presentation.
-  Provide the topic and the slides_json containing the content structure.
-- code_edit: surgically edit existing files (find_replace, insert_after,
-  insert_before, delete_block, view_lines, view_function). ALWAYS prefer
-  this over file(action="write") for modifying existing code files.
-  Use view_function to inspect a function before editing it.
-- patch: generate a unified diff between two file versions, apply a 
-  patch file to a codebase, or preview changes before applying.
-  Use after fixing a bug to generate the submission patch.
-- vision_browser: open a URL, take a full-page screenshot, and analyze it
-  with Gemini Vision. Use to visually test web UI, verify layouts, or find
-  interactive elements by description instead of raw HTML.
-- omnimodal: Universal perception tool for ALL non-text inputs.
-  PREFER this over VideoTool/AudioTool/ImageTool.
-  Actions:
-  ingest(source="path/to/file") — process any file into vector memory
-  ingest_batch(sources=[...]) — process multiple files in parallel
-  query(query="revenue charts from Q3") — find perceptions by concept
-  When user sends an image → use omnimodal(action="ingest", source=path)
-  When user uploads audio/video → use omnimodal(action="ingest", source=path)
-  When you need to find previously seen content → omnimodal(action="query")
-  NEVER say "I cannot process video/audio" — always try omnimodal first.
-- parallel_search: run 2-8 search queries simultaneously, returns
-  filtered relevant results. Use instead of multiple sequential search
-  calls for research tasks. Up to 3x faster for multi-aspect research.
-- audio_synth: generate real WAV audio files (tones, melodies, chords, DTMF). No API needed.
-- bio: query UniProt (protein data), AlphaFold (3D structures), PubChem (drug molecules).
-- finance: live crypto prices (CoinGecko) and Fear & Greed Index. Informational only.
+        # ── Research Rules ──
+        research = config.get("research_rules", {})
+        if research:
+            sections.append("\nRESEARCH RULES:")
+            sections.append(f"- ALWAYS run minimum {research.get('min_search_queries', 3)} different search queries before writing.")
+            if research.get("strategy"):
+                sections.append(f"- {research['strategy']}")
+            if research.get("year_in_queries"):
+                sections.append("- When searching for benchmarks, always include the year in the query.")
+            if not research.get("report_after_single_query", True):
+                sections.append("- NEVER write a research report after only 1 search query — this is forbidden.")
 
-THOUGHT BLOCKS:
-Before every tool call, output a thought block. This is for your internal reasoning and is NOT shown to the user as chat. Use it to plan your next technical move.
+        # ── Coding Rules ──
+        coding = config.get("coding_rules", [])
+        if coding:
+            sections.append("\nELITE CODING RULES:")
+            for rule in coding:
+                sections.append(f"- {rule}")
 
-SANDBOX ENVIRONMENT:
-- OS: Ubuntu 22.04 | User: ubuntu | Home: /home/ubuntu
-- Working directory: /home/ubuntu/workspace/
-- Pre-installed: python3, nodejs, npm, git, chromium.
+        # ── SWE-Bench ──
+        swe = config.get("swe_bench", {})
+        if swe.get("steps"):
+            sections.append("\nSWE-BENCH PROTOCOL:")
+            for step in swe["steps"]:
+                sections.append(f"- {step}")
 
-REASONING ENGINE:
+        # ── Browser Rules ──
+        browser = config.get("browser_rules", {})
+        if browser:
+            sections.append("\nBROWSER USAGE:")
+            for key, value in browser.items():
+                sections.append(f"- {key}: {value}")
 
-Before EVERY tool call, engage your internal reasoning cycle:
+        # ── Tool Catalog ──
+        tools = config.get("tools", {})
+        if tools:
+            sections.append("\nTOOL SELECTION:")
+            for name, desc in tools.items():
+                sections.append(f"- {name}: {desc}")
 
-1. Observe: What did the last action produce?
-2. Reason: What is the best next step?
-3. Decide: Choose the single best tool call with precise parameters.
+        # ── Reasoning ──
+        reasoning = config.get("reasoning", {})
+        if reasoning:
+            sections.append("\nREASONING ENGINE:")
+            sections.append(f"Before EVERY tool call, engage your internal reasoning cycle:")
+            for step in reasoning.get("cycle", []):
+                sections.append(f"  {step}")
+            if reasoning.get("format"):
+                sections.append(f"Wrap reasoning in {reasoning['format']} tags.")
+            if reasoning.get("on_failure"):
+                sections.append(reasoning["on_failure"])
 
-Wrap reasoning in <thought>...</thought> tags.
-If a previous tool call failed, reason about WHY before retrying.
-"""
+        prompt = "\n".join(sections)
+        logger.debug(f"System prompt loaded from YAML: {len(prompt)} chars, {len(sections)} sections")
+        return prompt
 
+    @staticmethod
+    def _minimal_fallback() -> str:
+        """Minimal hardcoded prompt used when YAML loading fails."""
+        return (
+            "You are Archimedes — an autonomous ACTION agent.\n"
+            "When given a task — DO IT IMMEDIATELY using tools.\n"
+            "Your FIRST response must be a tool call, not text.\n"
+            "Before every tool call, output a <thought>...</thought> block.\n"
+            "WHEN COMPLETE: use message(type='result') with a detailed summary."
+        )

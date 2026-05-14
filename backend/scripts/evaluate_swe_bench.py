@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from datasets import load_dataset
+from backend.agent.factory import AgentFactory
 from backend.agent.core import ArchimedesCosmoAgent
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -67,7 +68,8 @@ async def main():
     
     # Initialize the agent
     # We use the CodeAct architecture
-    agent = ArchimedesCosmoAgent()
+    from backend.agent.factory import AgentFactory
+    agent = AgentFactory.create()
     
     results = []
     

@@ -254,17 +254,21 @@ class ErrorRecovery:
 
     # ─── Git Checkpointing ────────────────────────────────────────
 
-    def create_checkpoint(self, session_id: str, label: str = "") -> Optional[str]:
+    async def create_checkpoint(self, session_id: str, label: str = "") -> Optional[str]:
         """
         Create a git checkpoint before risky operations.
         Returns the commit SHA or None if git isn't available.
+        
+        NOTE: All subprocess calls run via asyncio.to_thread() to avoid
+        blocking the event loop (previously froze all WebSocket connections).
         """
         if not self.workspace_dir or not os.path.isdir(self.workspace_dir):
             return None
 
         try:
             # Check if workspace is a git repo
-            check = subprocess.run(
+            check = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "rev-parse", "--is-inside-work-tree"],
                 cwd=self.workspace_dir,
                 capture_output=True, text=True, timeout=5
@@ -273,7 +277,8 @@ class ErrorRecovery:
                 return None
 
             # Stage all changes
-            subprocess.run(
+            await asyncio.to_thread(
+                subprocess.run,
                 ["git", "add", "-A"],
                 cwd=self.workspace_dir,
                 capture_output=True, timeout=10
@@ -281,7 +286,8 @@ class ErrorRecovery:
 
             # Commit checkpoint
             msg = f"{self.CHECKPOINT_PREFIX}: {label or session_id} @ {datetime.datetime.now(datetime.timezone.utc).isoformat()}"
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "commit", "-m", msg, "--allow-empty"],
                 cwd=self.workspace_dir,
                 capture_output=True, text=True, timeout=10
@@ -289,7 +295,8 @@ class ErrorRecovery:
 
             if result.returncode == 0:
                 # Get the SHA
-                sha_result = subprocess.run(
+                sha_result = await asyncio.to_thread(
+                    subprocess.run,
                     ["git", "rev-parse", "HEAD"],
                     cwd=self.workspace_dir,
                     capture_output=True, text=True, timeout=5
@@ -300,12 +307,16 @@ class ErrorRecovery:
                 logger.info(f"[ErrorRecovery] Checkpoint created: {sha[:8]} ({label})")
                 return sha
 
+        except subprocess.TimeoutExpired as e:
+            logger.warning(f"[ErrorRecovery] Checkpoint timed out: {e}")
+        except FileNotFoundError:
+            logger.debug("[ErrorRecovery] git not found on PATH")
         except Exception as e:
-            logger.warning(f"[ErrorRecovery] Checkpoint failed: {e}")
+            logger.warning(f"[ErrorRecovery] Checkpoint failed ({type(e).__name__}): {e}")
 
         return None
 
-    def rollback_to_checkpoint(self, session_id: str) -> bool:
+    async def rollback_to_checkpoint(self, session_id: str) -> bool:
         """
         Rollback workspace to the last checkpoint for this session.
         Returns True if rollback succeeded.
@@ -316,7 +327,8 @@ class ErrorRecovery:
             return False
 
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "reset", "--hard", sha],
                 cwd=self.workspace_dir,
                 capture_output=True, text=True, timeout=10
@@ -329,8 +341,14 @@ class ErrorRecovery:
                 logger.error(f"[ErrorRecovery] Rollback failed: {result.stderr}")
                 return False
 
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"[ErrorRecovery] Rollback timed out: {e}")
+            return False
+        except FileNotFoundError:
+            logger.error("[ErrorRecovery] git not found on PATH")
+            return False
         except Exception as e:
-            logger.error(f"[ErrorRecovery] Rollback exception: {e}")
+            logger.error(f"[ErrorRecovery] Rollback exception ({type(e).__name__}): {e}")
             return False
 
     # ─── Diagnostics ──────────────────────────────────────────────

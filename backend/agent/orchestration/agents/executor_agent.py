@@ -253,9 +253,8 @@ class ExecutorAgent(BaseAgent):
             try:
                 from backend.sandbox.singleton import sandbox_manager
                 sandbox_manager.touch_session(state.session_id)
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+            except (AttributeError, RuntimeError) as e:
+                logger.debug(f"Sandbox touch skipped: {e}")
 
             # Section 2B: Support streaming mode with Intelligence Router
             use_stream = getattr(state, 'stream', False)
@@ -719,9 +718,10 @@ class ExecutorAgent(BaseAgent):
                                     "type": "suggestions",
                                     "items": suggestions[:3]
                                 })
+                    except (ValueError, KeyError) as e:
+                        logger.debug(f"Suggestion generation failed: {e}")
                     except Exception as e:
-                        import logging
-                        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")  # Non-critical
+                        logger.warning(f"Suggestion generation unexpected error ({type(e).__name__}): {e}")
 
                 return state
         

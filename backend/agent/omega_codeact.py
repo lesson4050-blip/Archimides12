@@ -164,10 +164,11 @@ class OmegaCodeAct:
         except Exception as e:
             return TestResult(errors=1, error_messages=[str(e)]), str(e)
     
-    def _git_stash(self, cwd: str) -> bool:
+    async def _git_stash(self, cwd: str) -> bool:
         """Создать git stash checkpoint."""
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "stash", "-m", "archimedes-omega-checkpoint"],
                 cwd=cwd, capture_output=True, text=True, timeout=10
             )
@@ -175,10 +176,11 @@ class OmegaCodeAct:
         except Exception:
             return False
     
-    def _git_stash_pop(self, cwd: str) -> bool:
+    async def _git_stash_pop(self, cwd: str) -> bool:
         """Восстановить из git stash."""
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "stash", "pop"],
                 cwd=cwd, capture_output=True, text=True, timeout=10
             )
@@ -186,11 +188,12 @@ class OmegaCodeAct:
         except Exception:
             return False
     
-    def _get_unified_diff(self, cwd: str) -> str:
+    async def _get_unified_diff(self, cwd: str) -> str:
         """Получить unified diff всех изменений."""
         try:
-            subprocess.run(["git", "add", "-N", "."], cwd=cwd, capture_output=True, timeout=5)
-            result = subprocess.run(
+            await asyncio.to_thread(subprocess.run, ["git", "add", "-N", "."], cwd=cwd, capture_output=True, timeout=5)
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "diff", "HEAD"],
                 cwd=cwd, capture_output=True, text=True, timeout=10
             )
@@ -198,12 +201,13 @@ class OmegaCodeAct:
         except Exception:
             return "(diff unavailable)"
 
-    def _get_format_patch(self, cwd: str) -> str:
+    async def _get_format_patch(self, cwd: str) -> str:
         """Генерация git format-patch для финальной сдачи SWE-bench."""
         try:
             # SWE-bench submission requires a unified diff patch.
-            subprocess.run(["git", "add", "-N", "."], cwd=cwd, capture_output=True, timeout=5)
-            result = subprocess.run(
+            await asyncio.to_thread(subprocess.run, ["git", "add", "-N", "."], cwd=cwd, capture_output=True, timeout=5)
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "diff", "HEAD"],
                 cwd=cwd, capture_output=True, text=True, timeout=10
             )
@@ -211,7 +215,10 @@ class OmegaCodeAct:
         except Exception as e:
             return f"(format-patch unavailable: {e})"
     
-    def _get_repo_map(self, cwd: str, max_files: int = 60) -> str:
+    async def _get_repo_map(self, cwd: str, max_files: int = 60) -> str:
+        return await asyncio.to_thread(self._get_repo_map_sync, cwd, max_files)
+
+    def _get_repo_map_sync(self, cwd: str, max_files: int = 60) -> str:
         """Static AST-based analysis to generate a structural map of the repository."""
         import ast
         import os
@@ -775,7 +782,8 @@ class OmegaCodeAct:
                 
                 # Track modified files via git diff
                 try:
-                    diff_result = subprocess.run(
+                    diff_result = await asyncio.to_thread(
+                        subprocess.run,
                         ["git", "diff", "--name-only"],
                         cwd=cwd, capture_output=True, text=True, timeout=5
                     )
@@ -783,9 +791,8 @@ class OmegaCodeAct:
                         fname = fname.strip()
                         if fname and fname not in state.modified_files:
                             state.modified_files.append(fname)
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+                except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+                    logging.getLogger(__name__).debug(f"Git diff tracking skipped: {e}")
                 state.all_outputs.append(exec_result)
                 
                 if websocket_send:

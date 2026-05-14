@@ -103,52 +103,47 @@ class ArchimedesCosmoAgent:
         max_retries (int): Maximum number of retries for failed tool calls.
     """
 
-    def __init__(self, name: str = "ArchimedesCosmo", session_id: Optional[str] = None, max_retries: int = 3):
+    def __init__(self, 
+                 router: 'ModelRouter',
+                 tool_registry: 'ToolRegistry',
+                 context_manager: 'ContextManager',
+                 vector_store: 'VectorStore',
+                 orchestrator: 'AgentOrchestrator',
+                 mcp_client: 'ArchimedesMCPClient',
+                 connector_bridge: 'ConnectorMCPBridge',
+                 subconscious: 'SubconsciousEngine',
+                 name: str = "ArchimedesCosmo", 
+                 session_id: Optional[str] = None, 
+                 max_retries: int = 3):
         self.agent_id: str = str(uuid.uuid4())
         self.session_id: Optional[str] = session_id
         self.name: str = name
         self.max_retries: int = max_retries
         self.state: AgentState = AgentState.IDLE
         self.tasks: Dict[str, TaskPlan] = {}
+        
         from collections import deque
         self.results: Dict[str, ExecutionResult] = {}
         self.execution_history: deque = deque(maxlen=500)
         self.memory: List[Dict[str, Any]] = []
         self.context: Dict[str, Any] = {}
         self.error_handlers: Dict[str, Callable] = {}
-        self.router: ModelRouter = ModelRouter()
+        
+        # Injected Dependencies
+        self.router = router
+        self.tool_registry = tool_registry
+        self.context_manager = context_manager
+        self.vector_store = vector_store
+        self.orchestrator = orchestrator
+        self.mcp_client = mcp_client
+        self.connector_bridge = connector_bridge
+        self.subconscious = subconscious
+        
         self.system_prompt: str = ThoughtEngine.get_system_prompt()
         self.history: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
-
-        from backend.memory.context_manager import ContextManager
-        from backend.memory.vector_store import VectorStore
-        self.context_manager: ContextManager = ContextManager(max_tokens=getattr(settings, 'AGENT_MAX_CONTEXT_TOKENS', 32768))
-        self.vector_store: VectorStore = VectorStore(user_id=session_id or "default")
-
-        # FIX 7: tool_registry is single source of truth; self.tools is a property
-        self.tool_registry: ToolRegistry = ToolRegistry()
-        self.orchestrator: AgentOrchestrator = AgentOrchestrator(
-            router=self.router, 
-            tool_registry=self.tool_registry, 
-            context_manager=self.context_manager,
-            session_id=self.session_id or "default"
-        )
-
-        from backend.mcp_hub.client import ArchimedesMCPClient
-        self.mcp_client: ArchimedesMCPClient = ArchimedesMCPClient(getattr(settings, "MCP_EXTERNAL_SERVERS", {}))
-        self.orchestrator._mcp_client_ref = self.mcp_client
-        
-        from backend.connectors.mcp_bridge import ConnectorMCPBridge
-        self.connector_bridge: ConnectorMCPBridge = ConnectorMCPBridge(self.tool_registry, self.session_id or "default")
         
         from backend.agent.tool_definition_cache import ToolDefinitionCache
         self._tool_def_cache: ToolDefinitionCache = ToolDefinitionCache(self)
-        
-        from backend.agent.tool_initializer import ToolInitializer
-        ToolInitializer(self.tool_registry, self.session_id, self).initialize_all()
-
-        from backend.agent.subconscious import SubconsciousEngine
-        self.subconscious = SubconsciousEngine(self.router, self.tool_registry)
 
         for msg in self.history:
             self.context_manager.add_message(msg["role"], msg.get("content", ""))
@@ -273,9 +268,10 @@ class ArchimedesCosmoAgent:
                     task_description=task_description,
                     metadata={"mode": mode.value}
                 )
+            except (ImportError, IOError) as e:
+                logger.warning(f"Context checkpoint unavailable: {e}")
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+                logger.warning(f"Context checkpoint failed ({type(e).__name__}): {e}")
             
             orch_result = await self.orchestrator.run_task(
                 task_description=task_description, 
@@ -326,9 +322,10 @@ class ArchimedesCosmoAgent:
 
             # Trigger subconscious predictive analysis in background
             try:
+                from backend.utils.task import safe_create_task
                 output_text = str(getattr(result, 'output', ''))
                 if output_text and len(output_text) > 50:
-                    asyncio.create_task(
+                    safe_create_task(
                         self.subconscious.trigger_predictive_analysis(
                             current_thought=task_description[:200],
                             session_id=self.session_id or "default"

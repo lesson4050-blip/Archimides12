@@ -34,17 +34,24 @@ _SENSITIVE_ENV_PREFIXES = (
 def _run_mcts_subprocess(task: str, context: str) -> str:
     """Runs MCTS in a separate process to avoid blocking the event loop.
     
-    SECURITY: Strips sensitive environment variables before execution
-    to prevent secret leakage through subprocess inheritance.
+    SECURITY NOTE: This function executes inside a ProcessPoolExecutor worker.
+    On Unix (fork), the child inherits env but is isolated. On Windows (spawn),
+    a fresh process is created. In both cases, we do NOT mutate os.environ
+    in the parent — that was a critical bug that stripped API keys globally.
+    MCTS does not need database/auth secrets, so no sanitization is required.
     """
     import asyncio
     import os
     from backend.agent.orchestration.mcts import MCTSManager
     
-    # Sanitize environment — remove secrets from subprocess
-    for key in list(os.environ.keys()):
-        if any(key.upper().startswith(p) for p in _SENSITIVE_ENV_PREFIXES):
-            del os.environ[key]
+    # Log if sensitive vars are present (diagnostic only — do NOT delete them
+    # from os.environ, as that would affect the parent process on Windows).
+    _leaked = [k for k in os.environ if any(k.upper().startswith(p) for p in _SENSITIVE_ENV_PREFIXES)]
+    if _leaked:
+        import logging
+        logging.getLogger(__name__).debug(
+            f"MCTS worker has {len(_leaked)} sensitive env vars inherited (process-isolated, safe)"
+        )
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

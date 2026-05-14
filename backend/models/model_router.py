@@ -2,7 +2,7 @@ import asyncio
 import time
 import httpx
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from backend.models.groq_client import GroqClient, RateLimitExceeded as GroqRateLimit
 from backend.models.gemini_client import GeminiClient, RateLimitExceeded as GeminiRateLimit
 from backend.models.ollama_client import OllamaClient
@@ -25,9 +25,12 @@ class ModelRouter:
                    "translate", "quick", "simple", "fast"}
     QUALITY_TASKS = {"think", "plan", "execute", "code", "debug"}
     CREATIVE_TASKS = {"image", "creative", "persona"}
-    _gemini_blocked_until: float = 0.0
 
     def __init__(self):
+        # Instance-level Gemini cooldown (was class-level — one session's rate limit
+        # would block ALL sessions for 60 minutes, which is catastrophic).
+        self._gemini_blocked_until: float = 0.0
+
         self.ollama = OllamaClient()
         self._ollama_healthy = True
         self._last_health_check = 0
@@ -149,54 +152,42 @@ class ModelRouter:
             
         return available
 
-    async def generate(
+    def _get_retry_config(self, client) -> RetryConfig:
+        """Get the appropriate retry config for a given client."""
+        if isinstance(client, GroqClient):
+            return GROQ_RETRY
+        if isinstance(client, GeminiClient):
+            return GEMINI_RETRY
+        return DEFAULT_RETRY
+
+    async def _try_providers(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-        task_hint: str = "default",
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        order: list,
+        call_fn: Callable,
+        operation_label: str = "generate",
     ) -> Dict[str, Any]:
-        complexity = self.classify_complexity(messages, tools)
-        order = await self._get_order(task_hint, tools or [], complexity)
-
-        import time
-        if task_hint == 'code':
-            coding_model = getattr(settings, 'OLLAMA_CODING_MODEL', 'qwen2.5-coder:7b-instruct')
-            try:
-                from backend.models.ollama_client import OllamaClient
-                ollama_coder = OllamaClient(model=coding_model)
-                result = await ollama_coder.generate_with_tools(messages, tools=tools)
-                if result.get('text') or result.get('tool_calls'):
-                    result['model_used'] = f'ollama/{coding_model}'
-                    logger.info(f'Coding task routed to local Ollama: {coding_model}')
-                    return result
-            except Exception as e:
-                logger.warning(f'Ollama coding fallback failed: {e}. Falling through to cloud.')
-
+        """Shared provider fallback loop used by both generate() and generate_stream().
+        
+        Args:
+            order: Ordered list of client instances to try.
+            call_fn: Async callable(client, config) -> result for each provider.
+            operation_label: Label for logging ("generate" or "generate_stream").
+        
+        Returns:
+            The first successful result, or a failure dict if all providers fail.
+        """
         errors = []
         for client in order:
-            import time
             now = time.time()
-            if isinstance(client, GeminiClient) and now < ModelRouter._gemini_blocked_until:
+            if isinstance(client, GeminiClient) and now < self._gemini_blocked_until:
                 errors.append("Gemini blocked (rate limit cooldown)")
                 continue
             try:
-                config = GROQ_RETRY if isinstance(client, GroqClient) else (GEMINI_RETRY if isinstance(client, GeminiClient) else DEFAULT_RETRY)
-                return await with_retry(
-                    client.generate_with_tools,
-                    messages=messages,
-                    tools=tools,
-                    task_hint=task_hint,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    config=config,
-                    operation_name=f"{client.__class__.__name__} generate"
-                )
+                config = self._get_retry_config(client)
+                return await call_fn(client, config)
             except (GroqRateLimit, GeminiRateLimit) as e:
                 if isinstance(client, GeminiClient):
-                    import time
-                    ModelRouter._gemini_blocked_until = time.time() + 3600
+                    self._gemini_blocked_until = time.time() + 3600
                     logger.warning("Gemini rate limited — blocking for 60 minutes")
                 logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
                 errors.append(str(e))
@@ -213,6 +204,43 @@ class ModelRouter:
             "model_used": "none",
             "all_failed": True
         }
+
+    async def generate(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        task_hint: str = "default",
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        complexity = self.classify_complexity(messages, tools)
+        order = await self._get_order(task_hint, tools or [], complexity)
+
+        if task_hint == 'code':
+            coding_model = getattr(settings, 'OLLAMA_CODING_MODEL', 'qwen2.5-coder:7b-instruct')
+            try:
+                ollama_coder = OllamaClient(model=coding_model)
+                result = await ollama_coder.generate_with_tools(messages, tools=tools)
+                if result.get('text') or result.get('tool_calls'):
+                    result['model_used'] = f'ollama/{coding_model}'
+                    logger.info(f'Coding task routed to local Ollama: {coding_model}')
+                    return result
+            except Exception as e:
+                logger.warning(f'Ollama coding fallback failed: {e}. Falling through to cloud.')
+
+        async def _call(client, config):
+            return await with_retry(
+                client.generate_with_tools,
+                messages=messages,
+                tools=tools,
+                task_hint=task_hint,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                config=config,
+                operation_name=f"{client.__class__.__name__} generate"
+            )
+
+        return await self._try_providers(order, _call, "generate")
 
     async def generate_stream(
         self,
@@ -226,58 +254,32 @@ class ModelRouter:
         complexity = self.classify_complexity(messages, tools)
         order = await self._get_order(task_hint, tools or [], complexity)
 
-        errors = []
-        for client in order:
-            import time
-            now = time.time()
-            if isinstance(client, GeminiClient) and now < ModelRouter._gemini_blocked_until:
-                errors.append("Gemini blocked (rate limit cooldown)")
-                continue
-            try:
-                config = GROQ_RETRY if isinstance(client, GroqClient) else (GEMINI_RETRY if isinstance(client, GeminiClient) else DEFAULT_RETRY)
-                if hasattr(client, "generate_stream"):
-                    return await with_retry(
-                        client.generate_stream,
-                        messages=messages,
-                        tools=tools,
-                        on_token=on_token,
-                        task_hint=task_hint,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        config=config,
-                        operation_name=f"{client.__class__.__name__} generate_stream"
-                    )
-                else:
-                    return await with_retry(
-                        client.generate_with_tools,
-                        messages=messages,
-                        tools=tools,
-                        task_hint=task_hint,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        config=config,
-                        operation_name=f"{client.__class__.__name__} generate"
-                    )
-            except (GroqRateLimit, GeminiRateLimit) as e:
-                if isinstance(client, GeminiClient):
-                    import time
-                    ModelRouter._gemini_blocked_until = time.time() + 3600
-                    logger.warning("Gemini rate limited — blocking for 60 minutes")
-                logger.warning(f"Model tier {client.__class__.__name__} failed with rate limit. Trying next...")
-                errors.append(str(e))
-                continue
-            except Exception as e:
-                logger.error(f"Model tier {client.__class__.__name__} failed with error: {e}")
-                errors.append(str(e))
-                continue
-                
-        last_error = errors[-1] if errors else "Unknown error"
-        return {
-            "text": "",
-            "error": f"All model providers failed. Last error: {last_error}",
-            "model_used": "none",
-            "all_failed": True
-        }
+        async def _call(client, config):
+            if hasattr(client, "generate_stream"):
+                return await with_retry(
+                    client.generate_stream,
+                    messages=messages,
+                    tools=tools,
+                    on_token=on_token,
+                    task_hint=task_hint,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    config=config,
+                    operation_name=f"{client.__class__.__name__} generate_stream"
+                )
+            else:
+                return await with_retry(
+                    client.generate_with_tools,
+                    messages=messages,
+                    tools=tools,
+                    task_hint=task_hint,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    config=config,
+                    operation_name=f"{client.__class__.__name__} generate"
+                )
+
+        return await self._try_providers(order, _call, "generate_stream")
 
     async def generate_with_image(
         self,
@@ -297,3 +299,4 @@ def get_model_router() -> ModelRouter:
     if _router_instance is None:
         _router_instance = ModelRouter()
     return _router_instance
+

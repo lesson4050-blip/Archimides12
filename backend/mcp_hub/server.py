@@ -39,7 +39,7 @@ class ArchimedesMCPServer:
 
 if __name__ == "__main__":
     # For testing standalone
-    from backend.agent.core import ArchimedesCosmoAgent
-    agent = ArchimedesCosmoAgent()
+    from backend.agent.factory import AgentFactory
+    agent = AgentFactory.create()
     server = ArchimedesMCPServer(agent.tool_registry)
     server.run()

@@ -1,429 +1,145 @@
 """
-Tool Initializer — extracted from core.py god object.
-
-Handles registration of all agent tools with granular error handling.
-Each tool registration is isolated in its own try/except block.
+Tool Initializer — Declarative Tool Registry
+Replaces the 468-line God Object initialization script.
 """
 import logging
+import os
+import importlib
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
+# Declarative tool registry.
+# Format: { "name": "...", "module": "...", "class": "...", "kwargs": {"arg_name": "dep_name"} }
+# If kwargs is present, it maps the tool's __init__ argument name to a string representing the dependency.
+TOOL_CONFIG = [
+    {"name": "file", "module": "backend.tools.file_tool", "class": "FileTool", "kwargs": {"filesystem": "filesystem"}},
+    {"name": "search", "module": "backend.tools.search_tool", "class": "SearchTool"},
+    {"name": "shell", "module": "backend.tools.shell_tool", "class": "ShellTool", "kwargs": {"executor": "executor"}},
+    {"name": "browser", "module": "backend.agent.tools.browser_tool", "class": "BrowserTool", "kwargs": {"sandbox_manager": "sandbox_manager"}},
+    {"name": "web_read", "module": "backend.tools.web_tool", "class": "WebTool"},
+    {"name": "mcts_snapshot", "module": "backend.tools.mcts_snapshot_tool", "class": "MCTSSnapshotTool", "kwargs": {"filesystem": "filesystem"}},
+    {"name": "vision_critic", "module": "backend.tools.vision_critic_tool", "class": "VisionCriticTool", "kwargs": {"router": "router"}},
+    {"name": "pdf", "module": "backend.agent.tools.pdf_tool", "class": "PDFTool"},
+    {"name": "image_gen", "module": "backend.agent.tools.image_gen_tool", "class": "ImageGenTool"},
+    {"name": "github", "module": "backend.agent.tools.github_tool", "class": "GithubTool"},
+    {"name": "email", "module": "backend.agent.tools.email_tool", "class": "EmailTool"},
+    {"name": "vision_browser", "module": "backend.tools.vision_browser_tool", "class": "VisionBrowserTool", "kwargs": {"router": "router"}},
+    {"name": "canvas", "module": "backend.agent.tools.canvas_engine", "class": "CanvasEngine", "kwargs": {"router": "router"}},
+    {"name": "omnimodal", "module": "backend.agent.omnimodal_ingester", "class": "OmnimodalIngester", "kwargs": {"router": "router"}},
+    {"name": "computer", "module": "backend.agent.tools.desktop_tool", "class": "DesktopTool"},
+    {"name": "mutate_test", "module": "backend.agent.tools.mutation_tool", "class": "MutationTool"},
+    {"name": "swe_rag", "module": "backend.agent.tools.swe_rag_tool", "class": "SWERagTool"},
+    {"name": "video", "module": "backend.agent.tools.utility_tools", "class": "VideoTool"},
+    {"name": "audio", "module": "backend.agent.tools.utility_tools", "class": "AudioTool"},
+    {"name": "sheets", "module": "backend.agent.tools.utility_tools", "class": "SheetsTool"},
+    {"name": "schedule", "module": "backend.tools.schedule_tool", "class": "ScheduleTool"},
+    {"name": "trigger", "module": "backend.tools.trigger_tool", "class": "TriggerTool"},
+    {"name": "voice", "module": "backend.tools.voice_tool", "class": "VoiceTool"},
+    {"name": "monitor", "module": "backend.tools.monitor_tool", "class": "MonitorTool"},
+    {"name": "document", "module": "backend.tools.document_tool", "class": "DocumentTool"},
+    {"name": "mirofish", "module": "backend.tools.mirofish_tool", "class": "MiroFishTool"},
+    {"name": "ast_navigator", "module": "backend.tools.ast_tool", "class": "ASTTool"},
+    {"name": "infra", "module": "backend.agent.tools.infra_tool", "class": "InfraTool"},
+    {"name": "log_analyzer", "module": "backend.tools.log_analyzer_tool", "class": "LogAnalyzerTool"},
+    {"name": "vector_search", "module": "backend.tools.vector_search", "class": "VectorSearchEngine", "kwargs": {"workspace_dir": "workspace_dir"}},
+    {"name": "expose", "module": "backend.tools.expose_tool", "class": "ExposeTool", "kwargs": {"executor": "executor"}},
+    {"name": "mcp_connect", "module": "backend.tools.mcp_tool", "class": "MCPTool", "kwargs": {"mcp_client": "mcp_client", "sync_callback": "sync_callback"}},
+    {"name": "media", "module": "backend.tools.media_tool", "class": "MediaTool"},
+    {"name": "repo_map", "module": "backend.tools.repo_map_tool", "class": "RepoMapTool"},
+    {"name": "fast_linter", "module": "backend.tools.linter_tool", "class": "LinterTool"},
+    {"name": "git_forensics", "module": "backend.tools.git_forensics_tool", "class": "GitForensicsTool"},
+    {"name": "git", "module": "backend.tools.git_tool", "class": "GitTool"},
+    {"name": "python_repl", "module": "backend.tools.repl_tool", "class": "ReplTool"},
+    {"name": "deploy", "module": "backend.tools.deploy_tool", "class": "DeployTool"},
+    {"name": "patch", "module": "backend.tools.patch_tool", "class": "PatchTool"},
+    {"name": "vision", "module": "backend.tools.vision_tool", "class": "VisionTool"},
+    {"name": "code_edit", "module": "backend.tools.code_editor_tool", "class": "CodeEditorTool"},
+    {"name": "parallel_search", "module": "backend.tools.parallel_search_tool", "class": "ParallelSearchTool"},
+    {"name": "audio_synth", "module": "backend.tools.audio_synth_tool", "class": "AudioSynthTool"},
+    {"name": "bio", "module": "backend.tools.bio_tool", "class": "BioTool"},
+    {"name": "finance", "module": "backend.tools.finance_tool", "class": "FinanceTool"},
+    {"name": "notebook", "module": "backend.tools.notebook_tool", "class": "NotebookTool"},
+    {"name": "grep", "module": "backend.tools.grep_tool", "class": "GrepTool"},
+    {"name": "glob", "module": "backend.tools.glob_tool", "class": "GlobTool"},
+    {"name": "semantic_search", "module": "backend.tools.semantic_search", "class": "SemanticSearchEngine", "kwargs": {"root_dir": "workspace_dir"}},
+]
 
 class ToolInitializer:
     """
-    Registers all available tools for the Archimedes agent.
-    Extracted from ArchimedesCosmoAgent._init_extended_tools().
+    Registers all available tools dynamically based on TOOL_CONFIG.
     """
-
     def __init__(self, tool_registry, session_id: str, agent: Any):
         self.tool_registry = tool_registry
         self.session_id = session_id
         self.agent = agent
         self._critical_tools = {"file", "search", "shell", "message"}
 
-    def initialize_all(self) -> Dict[str, Any]:
-        """Register every tool with individual error isolation and summary report."""
+    def _build_dependencies(self) -> Dict[str, Any]:
+        """Gather all possible dependencies a tool might need."""
         from backend.sandbox.singleton import sandbox_manager
+        
+        deps = {
+            "sandbox_manager": sandbox_manager,
+            "filesystem": sandbox_manager.filesystem,
+            "executor": sandbox_manager.executor,
+            "router": getattr(self.agent, "router", None),
+            "mcp_client": getattr(self.agent, "mcp_client", None),
+            "sync_callback": getattr(self.agent, "sync_mcp_tools", None),
+            "workspace_dir": os.environ.get("WORKSPACE_DIR", "/home/ubuntu/workspace"),
+        }
+        return deps
+
+    def initialize_all(self) -> Dict[str, Any]:
         _pre_count = len(self.tool_registry.tools)
+        deps = self._build_dependencies()
 
-        # --- Core tools ---
-        try:
-            from backend.tools.file_tool import FileTool
-            self.agent.file_tool = FileTool(sandbox_manager.filesystem)
-            self.agent.register_tool("file", self.agent.file_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register FileTool: {e}")
-
-        try:
-            from backend.tools.search_tool import SearchTool
-            self.agent.search_tool = SearchTool()
-            self.agent.register_tool("search", self.agent.search_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register SearchTool: {e}")
-
-        try:
-            from backend.tools.shell_tool import ShellTool
-            self.agent.shell_tool = ShellTool(sandbox_manager.executor)
-            self.agent.register_tool("shell", self.agent.shell_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register ShellTool: {e}")
-
-        try:
-            from backend.agent.tools.browser_tool import BrowserTool
-            self.agent.browser_tool = BrowserTool(sandbox_manager)
-            self.agent.register_tool("browser", self.agent.browser_tool.execute)
-            logger.info("BrowserTool (Gen 4) registered — socket-level control active")
-        except Exception as e:
-            logger.error(f"Failed to register BrowserTool: {e}")
-
-        try:
-            from backend.tools.web_tool import WebTool
-            self.agent.web_tool = WebTool()
-            self.agent.register_tool("web_read", self.agent.web_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register WebTool: {e}")
-
-        # --- Dominance tools (MCTS & Vision Critic) ---
-        try:
-            from backend.tools.mcts_snapshot_tool import MCTSSnapshotTool
-            self.agent.mcts_snapshot_tool = MCTSSnapshotTool(sandbox_manager.filesystem)
-            self.agent.register_tool("mcts_snapshot", self.agent.mcts_snapshot_tool.execute)
-            logger.info("MCTSSnapshotTool registered — Devin-level MCTS rollback active")
-        except Exception as e:
-            logger.error(f"Failed to register MCTSSnapshotTool: {e}")
-
-        try:
-            from backend.tools.vision_critic_tool import VisionCriticTool
-            self.agent.vision_critic_tool = VisionCriticTool(router=getattr(self.agent, 'router', None))
-            self.agent.register_tool("vision_critic", self.agent.vision_critic_tool.execute)
-            logger.info("VisionCriticTool registered — Manus-level visual grounding active")
-        except Exception as e:
-            logger.error(f"Failed to register VisionCriticTool: {e}")
-
-        # --- Extended tools ---
-        try:
-            from backend.agent.tools.pdf_tool import PDFTool
-            self.agent.pdf_tool = PDFTool()
-            self.agent.register_tool("pdf", self.agent.pdf_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register PDFTool: {e}")
-
-        try:
-            from backend.agent.tools.image_gen_tool import ImageGenTool
-            self.agent.image_gen_tool = ImageGenTool()
-            self.agent.register_tool("image_gen", self.agent.image_gen_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register ImageGenTool: {e}")
-
-        try:
-            from backend.agent.tools.github_tool import GithubTool
-            self.agent.github_tool = GithubTool()
-            self.agent.register_tool("github", self.agent.github_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register GithubTool: {e}")
-
-        try:
-            from backend.agent.tools.email_tool import EmailTool
-            self.agent.email_tool = EmailTool()
-            self.agent.register_tool("email", self.agent.email_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register EmailTool: {e}")
-
-        try:
-            from backend.tools.vision_browser_tool import VisionBrowserTool
-            self.agent.vision_browser_tool = VisionBrowserTool(router=getattr(self.agent, 'router', None))
-            self.agent.register_tool("vision_browser", self.agent.vision_browser_tool.execute)
-            logger.info("VisionBrowserTool registered — browser with AI vision active")
-        except Exception as e:
-            logger.error(f"Failed to register VisionBrowserTool: {e}")
-
-        try:
-            from backend.agent.tools.canvas_engine import CanvasEngine
-            self.agent.canvas_engine_tool = CanvasEngine(router=getattr(self.agent, 'router', None))
-            self.agent.register_tool("canvas", self.agent.canvas_engine_tool.execute)
-            logger.info("CanvasEngine registered — Kimi-level presentations active")
-        except Exception as e:
-            logger.error(f"Failed to register CanvasEngine: {e}")
-
-        try:
-            from backend.agent.omnimodal_ingester import OmnimodalIngester
-            self.agent.omnimodal_ingester = OmnimodalIngester(router=getattr(self.agent, 'router', None))
-            self.agent.register_tool("omnimodal", self.agent.omnimodal_ingester.execute)
-            logger.info("OmnimodalIngester registered — Gen 4 true omnimodality active")
-        except Exception as e:
-            logger.error(f"Failed to register OmnimodalIngester: {e}")
-
-        try:
-            from backend.agent.tools.desktop_tool import DesktopTool
-            self.agent.desktop_tool = DesktopTool()
-            self.agent.register_tool("computer", self.agent.desktop_tool.execute)
-            logger.info("DesktopTool registered — Anthropic Computer Use API active")
-        except Exception as e:
-            logger.error(f"Failed to register DesktopTool: {e}")
-
-        try:
-            from backend.agent.tools.mutation_tool import MutationTool
-            self.agent.mutation_tool = MutationTool()
-            self.agent.register_tool("mutate_test", self.agent.mutation_tool.execute)
-            logger.info("MutationTool registered — Self-Healing TDD active")
-        except Exception as e:
-            logger.error(f"Failed to register MutationTool: {e}")
-
-        try:
-            from backend.agent.tools.swe_rag_tool import SWERagTool
-            self.agent.swe_rag_tool = SWERagTool()
-            self.agent.register_tool("swe_rag", self.agent.swe_rag_tool.execute)
-            logger.info("SWERagTool registered — Global RAG active")
-        except Exception as e:
-            logger.error(f"Failed to register SWERagTool: {e}")
-
-        try:
-            from backend.agent.tools.utility_tools import VideoTool, AudioTool, SheetsTool
-            self.agent.video_tool = VideoTool()
-            self.agent.register_tool("video", self.agent.video_tool.execute)
-            self.agent.audio_tool = AudioTool()
-            self.agent.register_tool("audio", self.agent.audio_tool.execute)
-            self.agent.sheets_tool = SheetsTool()
-            self.agent.register_tool("sheets", self.agent.sheets_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register utility tools (Video/Audio/Sheets): {e}")
-
-        try:
-            from backend.tools.schedule_tool import ScheduleTool
-            self.agent.schedule_tool = ScheduleTool()
-            self.agent.register_tool("schedule", self.agent.schedule_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register ScheduleTool: {e}")
-
-        try:
-            from backend.tools.trigger_tool import TriggerTool
-            self.agent.trigger_tool = TriggerTool()
-            self.agent.register_tool("trigger", self.agent.trigger_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register TriggerTool: {e}")
-
-        try:
-            from backend.tools.voice_tool import VoiceTool
-            self.agent.voice_tool = VoiceTool()
-            self.agent.register_tool("voice", self.agent.voice_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register VoiceTool: {e}")
-
-        try:
-            from backend.tools.monitor_tool import MonitorTool
-            self.agent.monitor_tool = MonitorTool()
-            self.agent.register_tool("monitor", self.agent.monitor_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register MonitorTool: {e}")
-
-        try:
-            from backend.tools.document_tool import DocumentTool
-            self.agent.document_tool = DocumentTool()
-            self.agent.register_tool("document", self.agent.document_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register DocumentTool: {e}")
-
-        try:
-            from backend.tools.mirofish_tool import MiroFishTool
-            self.agent.mirofish_tool = MiroFishTool()
-            self.agent.register_tool("mirofish", self.agent.mirofish_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register MiroFishTool: {e}")
-
-        try:
-            from backend.tools.ast_tool import ASTTool
-            self.agent.ast_tool = ASTTool()
-            self.tool_registry.register("ast_navigator", self.agent.ast_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register ASTTool: {e}")
-
-        try:
-            from backend.agent.tools.infra_tool import InfraTool
-            self.agent.infra_tool = InfraTool()
-            self.tool_registry.register("infra", self.agent.infra_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register InfraTool: {e}")
-
-        try:
-            from backend.tools.log_analyzer_tool import LogAnalyzerTool
-            self.agent.log_analyzer = LogAnalyzerTool()
-            self.tool_registry.register("log_analyzer", self.agent.log_analyzer.execute)
-        except Exception as e:
-            logger.error(f"Failed to register LogAnalyzerTool: {e}")
-
-
-        # --- Intelligence tools (Phase 2 + 5) ---
-        try:
-            from backend.tools.vector_search import VectorSearchEngine
-            self.agent.vector_search = VectorSearchEngine(workspace_dir=".")
-            self.tool_registry.register("vector_search", self.agent.vector_search.execute)
-            logger.info("ChromaDB Vector Search tool registered")
-        except Exception as e:
-            logger.error(f"Failed to register VectorSearchEngine: {e}")
-
-
-
+        # 1. Register specialized inline tools (that don't fit the generic pattern)
         try:
             from backend.tools.plan_tool import PlanTool
             from backend.agent.planner import PlanManager
             self.agent.plan_manager = PlanManager(session_id=self.session_id or "default")
             self.agent.plan_tool = PlanTool(plan_manager=self.agent.plan_manager)
-            self.agent.register_tool("plan", self.agent.plan_tool.execute)
+            self.tool_registry.register("plan", self.agent.plan_tool.execute)
         except Exception as e:
             logger.error(f"Failed to register PlanTool: {e}")
 
         try:
-            from backend.tools.expose_tool import ExposeTool
-            self.agent.expose_tool = ExposeTool(sandbox_manager.executor)
-            self.agent.register_tool("expose", self.agent.expose_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register ExposeTool: {e}")
-
-        try:
-            from backend.tools.mcp_tool import MCPTool
-            self.agent.mcp_tool = MCPTool(self.agent.mcp_client, sync_callback=self.agent.sync_mcp_tools)
-            self.agent.register_tool("mcp_connect", self.agent.mcp_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register MCPTool: {e}")
-
-        try:
-            from backend.tools.media_tool import MediaTool
-            self.agent.media_tool = MediaTool()
-            self.agent.register_tool("media", self.agent.media_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register MediaTool: {e}")
-
-        try:
-            from backend.tools.repo_map_tool import RepoMapTool
-            self.agent.repo_map_tool = RepoMapTool()
-            self.tool_registry.register("repo_map", self.agent.repo_map_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register RepoMapTool: {e}")
-
-        try:
-            from backend.tools.linter_tool import LinterTool
-            self.agent.linter_tool = LinterTool()
-            self.tool_registry.register("fast_linter", self.agent.linter_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register LinterTool: {e}")
-
-        try:
-            from backend.tools.git_forensics_tool import GitForensicsTool
-            self.agent.git_forensics_tool = GitForensicsTool()
-            self.tool_registry.register("git_forensics", self.agent.git_forensics_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register GitForensicsTool: {e}")
-
-        try:
-            from backend.tools.git_tool import GitTool
-            self.agent.git_tool_instance = GitTool()
-            self.agent.register_tool("git", self.agent.git_tool_instance.execute)
-            logger.info("GitTool registered")
-        except Exception as e:
-            logger.error(f"Failed to register GitTool: {e}")
-
-        try:
-            from backend.tools.repl_tool import ReplTool
-            self.agent.repl_tool = ReplTool()
-            self.tool_registry.register("python_repl", self.agent.repl_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register ReplTool: {e}")
-
-        try:
-            from backend.tools.deploy_tool import DeployTool
-            self.agent.deploy_tool = DeployTool()
-            self.tool_registry.register("deploy", self.agent.deploy_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register DeployTool: {e}")
-
-        # Dummy message handler
-        try:
             async def _dummy_message(**kwargs):
                 return {"success": True, "output": "Message generated."}
-            self.agent.register_tool("message", _dummy_message)
+            self.tool_registry.register("message", _dummy_message)
         except Exception as e:
             logger.error(f"Failed to register message handler: {e}")
 
-        try:
-            from backend.tools.patch_tool import PatchTool
-            self.agent.patch_tool = PatchTool()
-            self.agent.register_tool("patch", self.agent.patch_tool.execute)
-        except Exception as e:
-            logger.error(f"Failed to register PatchTool: {e}")
+        # 2. Declarative Registration
+        for config in TOOL_CONFIG:
+            tool_name = config["name"]
+            try:
+                module = importlib.import_module(config["module"])
+                tool_class = getattr(module, config["class"])
+                
+                # Resolve kwargs
+                init_kwargs = {}
+                for kwarg_name, dep_name in config.get("kwargs", {}).items():
+                    init_kwargs[kwarg_name] = deps.get(dep_name)
+                    
+                tool_instance = tool_class(**init_kwargs)
+                
+                # Register tool logic
+                if hasattr(self.agent, "register_tool"):
+                    self.agent.register_tool(tool_name, tool_instance.execute)
+                else:
+                    self.tool_registry.register(tool_name, tool_instance.execute)
+                    
+                # Save to agent namespace for backwards compatibility
+                setattr(self.agent, f"{tool_name}_tool", tool_instance)
 
-        try:
-            from backend.tools.vision_tool import VisionTool
-            self.agent.vision_tool = VisionTool()
-            self.agent.register_tool("vision", self.agent.vision_tool.execute)
-            logger.info("VisionTool registered")
-        except Exception as e:
-            logger.error(f"Failed to register VisionTool: {e}")
-
-        try:
-            from backend.tools.code_editor_tool import CodeEditorTool
-            self.agent.code_editor_tool = CodeEditorTool()
-            self.agent.register_tool("code_edit", self.agent.code_editor_tool.execute)
-            logger.info("CodeEditorTool registered")
-        except Exception as e:
-            logger.error(f"Failed to register CodeEditorTool: {e}")
-
-        try:
-            from backend.tools.parallel_search_tool import ParallelSearchTool
-            self.agent.parallel_search_tool = ParallelSearchTool()
-            self.agent.register_tool(
-                "parallel_search",
-                self.agent.parallel_search_tool.execute
-            )
-            logger.info("ParallelSearchTool registered")
-        except Exception as e:
-            logger.error(f"Failed to register ParallelSearchTool: {e}")
-
-        # ── Domain expansion tools ──
-        try:
-            from backend.tools.audio_synth_tool import AudioSynthTool
-            self.agent.audio_synth_tool = AudioSynthTool()
-            self.agent.register_tool("audio_synth", self.agent.audio_synth_tool.execute)
-            logger.info("AudioSynthTool registered (WAV synthesis)")
-        except Exception as e:
-            logger.error(f"Failed to register AudioSynthTool: {e}")
-
-        try:
-            from backend.tools.bio_tool import BioTool
-            self.agent.bio_tool = BioTool()
-            self.agent.register_tool("bio", self.agent.bio_tool.execute)
-            logger.info("BioTool registered (UniProt, AlphaFold, PubChem)")
-        except Exception as e:
-            logger.error(f"Failed to register BioTool: {e}")
-
-        try:
-            from backend.tools.finance_tool import FinanceTool
-            self.agent.finance_tool_instance = FinanceTool()
-            self.agent.register_tool("finance", self.agent.finance_tool_instance.execute)
-            logger.info("FinanceTool registered (CoinGecko, Fear&Greed)")
-        except Exception as e:
-            logger.error(f"Failed to register FinanceTool: {e}")
-
-        # ── GOD MODE expansion tools ──
-        try:
-            from backend.tools.notebook_tool import NotebookTool
-            self.agent.notebook_tool = NotebookTool()
-            self.agent.register_tool("notebook", self.agent.notebook_tool.execute)
-            logger.info("NotebookTool registered")
-        except Exception as e:
-            logger.warning(f"NotebookTool unavailable: {e}")
-
-        try:
-            from backend.tools.grep_tool import GrepTool
-            self.agent.grep_tool = GrepTool()
-            self.agent.register_tool("grep", self.agent.grep_tool.execute)
-            logger.info("GrepTool registered")
-        except Exception as e:
-            logger.warning(f"GrepTool unavailable: {e}")
-
-        try:
-            from backend.tools.glob_tool import GlobTool
-            self.agent.glob_tool_instance = GlobTool()
-            self.agent.register_tool("glob", self.agent.glob_tool_instance.execute)
-            logger.info("GlobTool registered")
-        except Exception as e:
-            logger.warning(f"GlobTool unavailable: {e}")
-
-        try:
-            from backend.tools.semantic_search import SemanticSearchEngine
-            import os
-            root = os.environ.get("WORKSPACE_DIR", "/home/ubuntu/workspace")
-            self.agent.semantic_engine = SemanticSearchEngine(root)
-            self.agent.register_tool("semantic_search", self.agent.semantic_engine.execute)
-            logger.info("SemanticSearchEngine registered")
-        except Exception as e:
-            logger.error(f"Failed to register SemanticSearchEngine: {e}")
-
+            except Exception as e:
+                logger.debug(f"Tool '{tool_name}' unavailable: {e}")
 
         logger.info("ToolInitializer: explicit registration complete")
 
-        # Auto-discover any additional tools
-        # Auto-discover additional tools from both directories
+        # 3. Auto-discover additional tools
         for path in ["backend/tools", "backend/agent/tools"]:
             try:
                 new_count = self.tool_registry.auto_discover_tools(path)
@@ -432,7 +148,7 @@ class ToolInitializer:
             except Exception as e:
                 logger.debug(f"Auto-discovery in {path} skipped: {e}")
 
-        # ── FIX-4: Consolidated Registration Report ──
+        # 4. Consolidated Registration Report
         total_active = len(self.tool_registry.tools)
         registered_this_session = total_active - _pre_count
         
@@ -441,7 +157,6 @@ class ToolInitializer:
             f"{total_active} total active"
         ]
         
-        # Critical tool check
         missing_critical = []
         for critical in sorted(self._critical_tools):
             is_active = critical in self.tool_registry.tools
@@ -464,4 +179,3 @@ class ToolInitializer:
             "total": len(self.tool_registry.tools),
             "missing_critical": missing_critical
         }
-

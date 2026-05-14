@@ -16,9 +16,8 @@ def _load() -> Dict:
         try:
             with open(CONNECTORS_FILE) as f:
                 return json.load(f)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Failed to load connectors file: {e}")
     return {"apps": {}, "api_keys": {}, "mcp_servers": {}}
 
 

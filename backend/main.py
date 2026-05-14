@@ -321,9 +321,12 @@ async def api_health():
         async with AsyncSessionLocal() as db:
             await db.execute(text("SELECT 1"))
         db_ok = True
+    except (ConnectionRefusedError, OSError) as e:
+        logger.warning(f"Health check: database connection refused: {e}")
+    except ImportError as e:
+        logger.warning(f"Health check: database module not available: {e}")
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        logger.warning(f"Health check: database query failed ({type(e).__name__}): {e}")
 
     # Check Ollama
     ollama_ok = False
@@ -332,9 +335,12 @@ async def api_health():
         client = ollama.AsyncClient(host=settings.OLLAMA_BASE_URL)
         await client.list()
         ollama_ok = True
+    except (ConnectionRefusedError, OSError, TimeoutError) as e:
+        logger.warning(f"Health check: Ollama unreachable at {settings.OLLAMA_BASE_URL}: {e}")
+    except ImportError:
+        logger.warning("Health check: ollama package not installed")
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        logger.warning(f"Health check: Ollama check failed ({type(e).__name__}): {e}")
 
     # Check Memory Bank
     memory_ok = False
@@ -342,9 +348,10 @@ async def api_health():
         from backend.memory.memory_bank import get_relevant_facts
         facts = await get_relevant_facts(limit=1)
         memory_ok = True
+    except ImportError as e:
+        logger.warning(f"Health check: memory_bank module unavailable: {e}")
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        logger.warning(f"Health check: memory bank failed ({type(e).__name__}): {e}")
 
     return {
         "status": "healthy" if db_ok else "degraded",

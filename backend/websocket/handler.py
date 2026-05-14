@@ -1,6 +1,7 @@
 from backend.utils.task import safe_create_task
 import logging
 import asyncio
+import time
 from typing import Dict, List, Any
 from fastapi import WebSocket
 from backend.agent.core import ArchimedesCosmoAgent
@@ -9,6 +10,10 @@ from backend.sandbox.singleton import sandbox_manager
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Memory safety constants
+MAX_BUFFER_SIZE = 200  # Max offline events buffered per session
+AGENT_STALE_TIMEOUT = 7200  # 2 hours — clean up abandoned agents
 
 
 class ConnectionManager:
@@ -21,6 +26,8 @@ class ConnectionManager:
         self.active_connections: Dict[str, WebSocket] = {}
         self.agent_loops: Dict[str, ArchimedesCosmoAgent] = {}
         self.buffers: Dict[str, List[Dict[str, Any]]] = {}
+        self._rate_buckets: Dict[str, list] = {}
+        self._agent_last_active: Dict[str, float] = {}  # session_id -> timestamp
 
     async def connect(self, websocket: WebSocket, session_id: str):
         await websocket.accept()
@@ -47,9 +54,8 @@ class ConnectionManager:
             for event in self.buffers[session_id]:
                 try:
                     await websocket.send_json(event)
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+                except (ConnectionError, RuntimeError) as e:
+                    logger.warning(f"Failed to flush buffered event to {session_id}: {e}")
             self.buffers[session_id].clear()
             del self.buffers[session_id]
 
@@ -71,10 +77,12 @@ class ConnectionManager:
             await websocket.send_json({"type": "agent_error", "message": "Failed to create sandbox container."})
 
         if session_id not in self.agent_loops:
-            agent = ArchimedesCosmoAgent(name="Archimedes COSMO", session_id=session_id)
+            from backend.agent.factory import AgentFactory
+            agent = AgentFactory.create(name="Archimedes COSMO", session_id=session_id)
             await agent.initialize()
             self.agent_loops[session_id] = agent
 
+        self._agent_last_active[session_id] = time.time()
         logger.info(f"WebSocket connected for session: {session_id}")
 
     async def disconnect(self, session_id: str):
@@ -84,12 +92,17 @@ class ConnectionManager:
         if session_id in self.buffers:
             del self.buffers[session_id]
 
-        # Do NOT destroy container immediately on disconnect for reconnect resilience.
-        # It will be reaped by SandboxManager's reaper task after inactivity timeout.
-        
-        # We also DON'T clean up agent loop here so it can continue working in the background.
+        # Clean up rate limit buckets for this session
+        self._rate_buckets.pop(session_id, None)
 
-        logger.info(f"WebSocket disconnected for session: {session_id}. Keeping agent and container alive.")
+        # Mark last active time — agent will be reaped by cleanup_stale_agents()
+        # after AGENT_STALE_TIMEOUT if client doesn't reconnect.
+        self._agent_last_active[session_id] = time.time()
+
+        # Proactively reap old agents to prevent memory growth
+        self._cleanup_stale_agents()
+
+        logger.info(f"WebSocket disconnected for session: {session_id}. Agent kept alive for {AGENT_STALE_TIMEOUT}s.")
 
     async def send_event(self, session_id: str, event: Dict[str, Any]):
         if session_id in self.active_connections:
@@ -104,15 +117,34 @@ class ConnectionManager:
     def _buffer_event(self, session_id: str, event: Dict[str, Any]):
         if session_id not in self.buffers:
             self.buffers[session_id] = []
+        if len(self.buffers[session_id]) >= MAX_BUFFER_SIZE:
+            # Drop oldest events to prevent unbounded memory growth
+            self.buffers[session_id] = self.buffers[session_id][-MAX_BUFFER_SIZE // 2:]
+            logger.warning(f"Buffer overflow for {session_id}: trimmed to {len(self.buffers[session_id])} events")
         self.buffers[session_id].append(event)
+
+    def _cleanup_stale_agents(self):
+        """Remove agent loops for sessions that have been inactive beyond AGENT_STALE_TIMEOUT.
+        
+        Called on every disconnect to prevent unbounded memory growth.
+        Only reaps sessions that are NOT currently connected.
+        """
+        now = time.time()
+        stale_sessions = []
+        for sid, last_active in list(self._agent_last_active.items()):
+            if sid not in self.active_connections and (now - last_active) > AGENT_STALE_TIMEOUT:
+                stale_sessions.append(sid)
+        
+        for sid in stale_sessions:
+            self.agent_loops.pop(sid, None)
+            self._agent_last_active.pop(sid, None)
+            self._rate_buckets.pop(sid, None)
+            logger.info(f"Reaped stale agent for session {sid} (inactive {AGENT_STALE_TIMEOUT}s)")
 
     async def handle_message(self, session_id: str, message: str):
         """
         Main entry point for user messages via WebSocket.
         """
-        import time
-        if not hasattr(self, '_rate_buckets'):
-            self._rate_buckets: Dict[str, list] = {}
         now = time.time()
         bucket = [t for t in self._rate_buckets.get(session_id, [])
                   if now - t < 60]
@@ -124,6 +156,7 @@ class ConnectionManager:
             return
         bucket.append(now)
         self._rate_buckets[session_id] = bucket
+        self._agent_last_active[session_id] = now  # Track activity for stale reaping
 
         # Touch session on every message to reset inactivity timer
         sandbox_manager.touch_session(session_id)
