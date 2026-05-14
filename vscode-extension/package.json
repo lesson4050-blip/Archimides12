@@ -52,12 +52,12 @@
       "properties": {
         "archimedes.serverUrl": {
           "type": "string",
-          "default": "http://localhost:8000",
+          "default": "http://localhost:8001",
           "description": "Archimedes backend URL"
         },
         "archimedes.wsUrl": {
           "type": "string",
-          "default": "ws://localhost:8000/ws",
+          "default": "ws://localhost:8001/ws",
           "description": "WebSocket URL"
         }
       }

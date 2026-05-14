@@ -5,7 +5,7 @@ exports.deactivate = deactivate;
 const vscode = require("vscode");
 const node_fetch_1 = require("node-fetch");
 const ARCHIMEDES_URL = () => vscode.workspace.getConfiguration('archimedes').get('serverUrl')
-    || 'http://localhost:8000';
+    || 'http://localhost:8001';
 let chatPanel;
 function activate(context) {
     // Command: Open Chat Panel
