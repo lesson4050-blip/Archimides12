@@ -262,7 +262,8 @@ class ArchimedesCosmoAgent:
             # Save periodic context checkpoint
             try:
                 from backend.agent.session_store import get_session_store
-                get_session_store().save_context(
+                await asyncio.to_thread(
+                    get_session_store().save_context,
                     session_id=self.session_id or "default",
                     history=self.context_manager.get_messages()[:10],
                     task_description=task_description,
