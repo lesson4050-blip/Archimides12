@@ -39,9 +39,8 @@ class ToolDefinitionCache:
                         defn = obj.get_definition()
                         if "function" in defn:
                             definitions.append(defn)
-                    except Exception as e:
-                        import logging
-                        logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+                    except (TypeError, AttributeError, ValueError) as e:
+                        logging.getLogger(__name__).warning(f"Tool definition introspection error: {e}")
 
             # Manual message tool definition
             definitions.append({

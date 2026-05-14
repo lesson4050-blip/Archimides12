@@ -54,9 +54,8 @@ class DocumentTool:
                         read_result = await fs.read_file(session_id, path)
                         if read_result.get("success"):
                             text = read_result.get("content", "")
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+                except (IOError, ValueError, KeyError) as e:
+                    logging.getLogger(__name__).warning(f"Document parsing error: {e}")
                 
                 # Fallback: PDF extraction via PyMuPDF
                 if not text and path.lower().endswith(".pdf"):
@@ -77,9 +76,8 @@ class DocumentTool:
                             doc.close()
                             try:
                                 os.remove(temp_filename)
-                            except Exception as e:
-                                import logging
-                                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+                            except (IOError, ValueError, KeyError) as e:
+                                logging.getLogger(__name__).warning(f"Document parsing error: {e}")
                     except ImportError:
                         return {"success": False, "error": "PyMuPDF not installed for PDF parsing"}
                 

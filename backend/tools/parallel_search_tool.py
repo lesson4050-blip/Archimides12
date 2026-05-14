@@ -99,9 +99,8 @@ class ParallelSearchTool:
             )
             if result.get("success"):
                 return result.get("output", "")[:1000]
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (TimeoutError, KeyError, ValueError) as e:
+            logging.getLogger(__name__).warning(f"Parallel search task error: {e}")
         
         try:
             # Fallback: web search via requests

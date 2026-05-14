@@ -495,9 +495,8 @@ class ErrorRecovery:
             from backend.utils.json_repair import repair_and_parse
             result, _ = repair_and_parse(candidate)
             return result
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (IOError, ValueError, KeyError) as e:
+            logging.getLogger(__name__).warning(f"Error recovery state error: {e}")
 
         return None
 

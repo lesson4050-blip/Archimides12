@@ -23,9 +23,8 @@ class PersistentShell:
         if self._socket and hasattr(self._socket, '_sock'):
             try:
                 self._socket._sock.close()
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+            except (TimeoutError, OSError, ValueError) as e:
+                logging.getLogger(__name__).warning(f"Sandbox execution error: {e}")
         self._socket = None
 
     async def start(self):

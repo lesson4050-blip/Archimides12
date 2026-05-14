@@ -190,9 +190,8 @@ class VectorSearchEngine:
                 all_ids = collection.get()["ids"]
                 if all_ids:
                     collection.delete(ids=all_ids)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (IOError, ValueError, KeyError) as e:
+            logging.getLogger(__name__).warning(f"Vector search index error: {e}")
 
         ids = []
         documents = []

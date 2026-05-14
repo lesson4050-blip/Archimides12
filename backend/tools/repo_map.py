@@ -109,9 +109,8 @@ class RepoMap:
             info.size_bytes = stat.st_size
             with open(filepath, 'r', errors='replace') as f:
                 info.line_count = sum(1 for _ in f)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (IOError, UnicodeDecodeError, SyntaxError) as e:
+            logging.getLogger(__name__).warning(f"Repo map file parsing error: {e}")
         return info
 
     def scan(self) -> Dict[str, FileInfo]:

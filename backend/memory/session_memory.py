@@ -220,9 +220,8 @@ class SessionMemory:
                 timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
                 self._save_to_db("", timestamp)
                 logger.info(f"Migrated session {self.session_id} from file to SQLite")
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (IOError, ValueError, OSError) as e:
+            logging.getLogger(__name__).warning(f"Session memory IO error: {e}")
 
     # ── Static query methods ─────────────────────────────────────
 

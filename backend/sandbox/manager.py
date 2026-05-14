@@ -678,14 +678,12 @@ class SandboxManager:
             
         try:
             await loop.run_in_executor(None, lambda: container.stop(timeout=10))
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (RuntimeError, IOError, OSError) as e:
+            logging.getLogger(__name__).warning(f"Sandbox manager operational error: {e}")
         try:
             await loop.run_in_executor(None, lambda: container.remove(force=True))
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (RuntimeError, IOError, OSError) as e:
+            logging.getLogger(__name__).warning(f"Sandbox manager operational error: {e}")
             
         # Clean up isolated network
         network_name = f"archimedes-net-{session_id}"

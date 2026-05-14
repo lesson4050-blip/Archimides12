@@ -319,9 +319,8 @@ class MediaTool:
         try:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Blind exception caught: {e}")
+        except (IOError, ValueError, FileNotFoundError) as e:
+            logging.getLogger(__name__).warning(f"Media processing error: {e}")
 
     def _load_metadata(self, filename: str) -> Optional[dict]:
         """Load metadata for a media file."""
