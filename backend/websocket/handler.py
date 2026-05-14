@@ -79,7 +79,6 @@ class ConnectionManager:
         if session_id not in self.agent_loops:
             from backend.agent.factory import AgentFactory
             agent = AgentFactory.create(name="Archimedes COSMO", session_id=session_id)
-            await agent.initialize()
             self.agent_loops[session_id] = agent
 
         self._agent_last_active[session_id] = time.time()
