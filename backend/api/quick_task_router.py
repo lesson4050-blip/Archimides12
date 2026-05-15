@@ -54,14 +54,17 @@ class QuickTaskResponse(BaseModel):
 
 # ── Endpoint ─────────────────────────────────────────────────────
 
+from fastapi import Request as FastAPIRequest
+
 @router.post("/quick-task", response_model=QuickTaskResponse)
-async def quick_task(req: QuickTaskRequest):
+async def quick_task(req: QuickTaskRequest, request: FastAPIRequest):
     """
     Lightweight single-shot task execution for VS Code extension.
     No session, no memory, just fast answer.
     """
     # Rate limiting
-    if not _check_rate_limit():
+    client_ip = request.client.host if request.client else "default"
+    if not _check_rate_limit(client_ip):
         raise HTTPException(
             status_code=429,
             detail="Rate limit exceeded. Max 30 requests/minute."

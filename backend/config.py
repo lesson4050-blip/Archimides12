@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.1-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:14b"
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     BRAVE_API_KEY: str = ""
     
     # Image Generation
-    IMAGE_CRITIQUE_MODEL: str = "gemini-3.1-flash"
+    IMAGE_CRITIQUE_MODEL: str = "gemini-2.5-flash"
     
     # Sandbox
     SANDBOX_IMAGE: str = "archimedes-sandbox:latest"
@@ -70,8 +70,8 @@ class Settings(BaseSettings):
     NANGO_BASE_URL: str = "http://localhost:3003"
     
     # Frontend/WebSocket
-    NEXT_PUBLIC_WS_URL: str = "ws://localhost:8000/ws"
-    NEXT_PUBLIC_API_URL: str = "http://localhost:8000"
+    NEXT_PUBLIC_WS_URL: str = "ws://localhost:8001/ws"
+    NEXT_PUBLIC_API_URL: str = "http://localhost:8001"
 
     model_config = SettingsConfigDict(env_file=str(_env_path), env_file_encoding="utf-8", extra="ignore")
 
@@ -79,18 +79,28 @@ class Settings(BaseSettings):
     def validate_and_isolate(self) -> "Settings":
         import os
         is_testing = "pytest" in os.environ.get("PYTEST_CURRENT_TEST", "") or os.environ.get("TESTING") == "1"
+        
         if is_testing:
-            # Force SQLite and disable Redis during tests
             self.DATABASE_URL = self.DATABASE_URL_SQLITE
             self.REDIS_URL = ""
-            
+        else:
+            # Auto-fallback: if DATABASE_URL points to postgres but
+            # no POSTGRES env override is set, switch to SQLite
+            is_postgres = "postgresql" in self.DATABASE_URL or "asyncpg" in self.DATABASE_URL
+            has_pg_override = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_HOST")
+            if is_postgres and not has_pg_override:
+                import logging
+                logging.getLogger("backend.config").warning(
+                    "DATABASE_URL points to PostgreSQL but no DATABASE_URL env var set. "
+                    "Falling back to SQLite for local development."
+                )
+                self.DATABASE_URL = self.DATABASE_URL_SQLITE
+        
         if self.AUTH_ENABLED:
             if not self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32:
-                # During tests, we might want to allow short keys if not specifically testing security
                 if not is_testing:
                     raise ValueError(
-                        "SECURITY: JWT_SECRET_KEY must be at least 32 chars when "
-                        "AUTH_ENABLED=True."
+                        "SECURITY: JWT_SECRET_KEY must be at least 32 chars when AUTH_ENABLED=True."
                     )
         return self
 

@@ -104,14 +104,40 @@ class PersistentShellSession:
 
 
 # Module-level session registry
+import time
 _persistent_sessions: Dict[str, PersistentShellSession] = {}
-
+_session_last_used: Dict[str, float] = {}
+_SESSION_TTL = 3600  # 1 hour
 
 def get_persistent_session(session_id: str) -> PersistentShellSession:
     """Get or create a persistent shell session for the given session ID."""
+    # Cleanup stale sessions first
+    _cleanup_stale_sessions()
+    
     if session_id not in _persistent_sessions:
         _persistent_sessions[session_id] = PersistentShellSession(session_id)
+    _session_last_used[session_id] = time.time()
     return _persistent_sessions[session_id]
+
+def _cleanup_stale_sessions():
+    """Remove sessions inactive for more than TTL seconds."""
+    now = time.time()
+    stale = [
+        sid for sid, last in list(_session_last_used.items())
+        if now - last > _SESSION_TTL
+    ]
+    for sid in stale:
+        session = _persistent_sessions.pop(sid, None)
+        _session_last_used.pop(sid, None)
+        if session:
+            # Schedule async close without blocking
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(session.close())
+            except Exception:
+                pass
 
 
 async def close_session(session_id: str):

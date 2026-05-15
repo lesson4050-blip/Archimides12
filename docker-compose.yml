@@ -46,8 +46,9 @@ services:
       dockerfile: Dockerfile
     container_name: archimedes-backend
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
+      - PORT=8001
       - OLLAMA_BASE_URL=http://ollama:11434
       - DATABASE_URL=postgresql+asyncpg://archimedes:archimedes@postgres:5432/archimedes
       - AUTH_ENABLED=True

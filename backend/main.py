@@ -266,18 +266,34 @@ async def add_metrics(request: Request, call_next):
 @app.get("/metrics")
 async def metrics(request: Request):
     token = os.environ.get("METRICS_BEARER_TOKEN", "")
-    if token:
+    is_dev = os.environ.get("ENVIRONMENT", "production").lower() == "development"
+    
+    if not is_dev:
+        # In production: always require token
+        from fastapi import Response
+        if not token:
+            return Response(status_code=403, content="METRICS_BEARER_TOKEN not configured")
         auth = request.headers.get("Authorization", "")
         if auth != f"Bearer {token}":
-            from fastapi import Response
             return Response(status_code=401)
+    elif token:
+        # In dev: only check if token is set
+        from fastapi import Response
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {token}":
+            return Response(status_code=401)
+    
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     from fastapi import Response
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 ALLOWED_ORIGINS = os.environ.get(
     "CORS_ORIGINS",
     "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000"
+    if os.environ.get("ENVIRONMENT", "production").lower() == "development"
+    else ""
 ).split(",")
+ALLOWED_ORIGINS = [o for o in ALLOWED_ORIGINS if o.strip()]
 
 # CORS
 app.add_middleware(
