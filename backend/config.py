@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     
     # Database — PostgreSQL (production) or SQLite (dev fallback)
     DATABASE_URL: str = "postgresql+asyncpg://archimedes:archimedes@localhost:5432/archimedes"
-    DATABASE_URL_SQLITE: str = "sqlite+aiosqlite:///./archemidas.db"
+    DATABASE_URL_SQLITE: str = "sqlite+aiosqlite:///./archimedes.db"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     
