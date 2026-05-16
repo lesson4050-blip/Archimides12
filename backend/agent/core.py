@@ -274,8 +274,35 @@ class ArchimedesCosmoAgent:
             except Exception as e:
                 logger.warning(f"Context checkpoint failed ({type(e).__name__}): {e}")
             
+            # Inject persistent memory context
+            memory_context = ""
+            try:
+                from backend.memory.memory_router import MemoryRouter
+                if not hasattr(self, '_memory_router'):
+                    self._memory_router = MemoryRouter(
+                        user_id=getattr(self, 'user_id', 'default'),
+                        session_id=self.session_id
+                    )
+                memory_context = await asyncio.wait_for(
+                    self._memory_router.get_context_string(task_description, max_tokens=1500),
+                    timeout=3.0
+                )
+            except Exception as e:
+                logger.debug(f"Memory context fetch failed (non-critical): {e}")
+          
+            # Prepend memory to task if we have relevant context
+            enriched_task = task_description
+            if memory_context:
+                enriched_task = (
+                    f"[MEMORY CONTEXT - use this to personalize your response]\n"
+                    f"{memory_context}\n"
+                    f"[END MEMORY CONTEXT]\n\n"
+                    f"CURRENT TASK: {task_description}"
+                )
+                logger.info(f"Memory injected: ~{len(memory_context.split())} tokens")
+
             orch_result = await self.orchestrator.run_task(
-                task_description=task_description, 
+                task_description=enriched_task, 
                 mode=mode,
                 session_id=self.session_id or "default", 
                 websocket_send=websocket_send,
@@ -303,6 +330,26 @@ class ArchimedesCosmoAgent:
                 duration=asyncio.get_running_loop().time() - start_time,
                 metadata={"mode": mode.value, "plan": orch_result.get("plan")}
             )
+            
+            # Store successful task in episodic memory
+            if result.status == TaskStatus.COMPLETED and memory_context is not None:
+                try:
+                    output_text = str(getattr(result, 'output', ''))[:1000]
+                    await asyncio.wait_for(
+                        self._memory_router.store(
+                            task=task_description,
+                            result=output_text,
+                            memory_type="episodic",
+                            metadata={
+                                "strategy": getattr(result, 'metadata', {}).get('strategy', 'unknown'),
+                                "duration": getattr(result, 'duration', 0),
+                            }
+                        ),
+                        timeout=5.0
+                    )
+                    logger.info("Task experience stored in episodic memory")
+                except Exception as e:
+                    logger.debug(f"Memory store failed (non-critical): {e}")
             
             # Record to flywheel for continuous learning
             try:
@@ -345,6 +392,21 @@ class ArchimedesCosmoAgent:
                 duration_s=result.duration,
                 mode=mode.value,
             ))
+            
+            # Extract user preferences from this conversation
+            try:
+                from backend.memory.preference_extractor import PreferenceExtractor
+                from backend.memory.vector_store import VectorStore
+                vs = VectorStore(user_id=getattr(self, 'user_id', 'default'))
+                extractor = PreferenceExtractor(vs)
+                prefs = await asyncio.wait_for(
+                    extractor.extract_and_store(self.context_manager.get_messages()[-10:]),
+                    timeout=3.0
+                )
+                if prefs:
+                    logger.info(f"Stored {len(prefs)} user preferences")
+            except Exception as e:
+                logger.debug(f"Preference extraction failed (non-critical): {e}")
             
             # Session lifecycle management should handle deletions, not task completion.
                 
