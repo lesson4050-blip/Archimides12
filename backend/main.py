@@ -411,6 +411,11 @@ async def kv_cache_stats():
     from backend.agent.monitoring.kv_cache_monitor import kv_cache_monitor
     return kv_cache_monitor.get_stats()
 
+@app.get("/api/metrics/economy")
+async def economy_stats():
+    from backend.agent.economy.agent_economy import agent_economy
+    return agent_economy.get_global_stats()
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

@@ -13,6 +13,7 @@ import uuid
 from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 from backend.models.model_router import ModelRouter
+from backend.agent.economy.agent_economy import agent_economy, AgentEconomy
 
 logger = logging.getLogger(__name__)
 
@@ -127,33 +128,44 @@ class MicroAgentSwarm:
         self.router = router
         self.tool_registry = tool_registry
         self._agents: Dict[str, MicroAgent] = {}
+        self.economy = agent_economy
 
     def set_tool_registry(self, tool_registry):
         """Allow late binding of tool registry (set after init)."""
         self.tool_registry = tool_registry
 
-    def _select_agents_for_task(self, task: str, task_hint: str) -> List[str]:
-        """Select which micro-agents to spawn based on task type."""
+    def _select_agents_for_task(self, task: str, task_hint: str, task_id: str = "default") -> List[str]:
+        """Economy-aware agent selection."""
         task_lower = task.lower()
-
-        if task_hint == "execute" or any(
-            kw in task_lower for kw in
-            ["code", "script", "function", "implement", "write", "код", "напиши"]
-        ):
-            return ["coder", "critic", "tester"]
-
-        if task_hint == "search" or any(
-            kw in task_lower for kw in
-            ["research", "find", "compare", "analyze", "исследуй", "найди"]
-        ):
-            return ["researcher", "fact_checker"]
-
-        if any(kw in task_lower for kw in
-               ["design", "architecture", "system", "архитектура", "дизайн"]):
-            return ["architect", "coder", "critic"]
-
-        # Default: single executor
-        return ["coder"]
+        
+        # Determine complexity
+        is_complex = any(kw in task_lower for kw in
+            ["architecture", "design", "system", "optimize", "refactor",
+             "архитектура", "дизайн", "оптимизируй"])
+        is_research = any(kw in task_lower for kw in
+            ["research", "find", "compare", "analyze", "найди", "исследуй"])
+        is_code = any(kw in task_lower for kw in
+            ["code", "script", "function", "implement", "write", "fix", "debug", "код", "напиши"])
+        
+        complexity = "complex" if is_complex else "standard"
+        budget = self.economy.allocate_budget(task_id, complexity)
+        
+        selected = []
+        
+        if is_complex:
+            # Use economy bidding for complex tasks
+            for subtask in [task, f"review {task}", f"optimize {task}"]:
+                role = self.economy.select_agent(subtask, budget.remaining)
+                if role and role not in selected:
+                    selected.append(role)
+        elif is_research:
+            selected = ["researcher", "fact_checker"]
+        elif is_code:
+            selected = ["coder", "critic", "tester"]
+        else:
+            selected = ["coder"]
+        
+        return selected or ["coder"]
 
     def _get_tools_for_agent(self, role: str) -> List[Dict[str, Any]]:
         """Get tool definitions available to a specific agent role."""
@@ -394,7 +406,7 @@ class MicroAgentSwarm:
         """
         agent_roles = (
             agent_roles_override
-            or self._select_agents_for_task(task, task_hint)
+            or self._select_agents_for_task(task, task_hint, task_id=session_id)
         )
 
         if len(agent_roles) == 1:
@@ -436,10 +448,16 @@ class MicroAgentSwarm:
 
         # Phase 1: Primary agent works first (with tools)
         primary = agents[0]
+        start_time = asyncio.get_event_loop().time()
+        
         primary_result = await self._run_agent_with_tools(
             primary, task, session_id=session_id, websocket_send=websocket_send,
             task_hint="code" if primary.role == "coder" else "think"
         )
+        
+        duration = asyncio.get_event_loop().time() - start_time
+        task_id = session_id  # use session_id as task_id
+        self.economy.record_completion(task_id, primary.role, True, duration)
 
         # Phase 2: Other agents review/augment in parallel (with tools)
         review_tasks = []
@@ -524,5 +542,13 @@ class MicroAgentSwarm:
         # Cleanup
         for agent in agents:
             self._agents.pop(agent.agent_id, None)
+
+        # After run() completes, get economy report and emit to UI
+        economy_report = self.economy.close_task(task_id)
+        if economy_report and websocket_send:
+            await websocket_send({
+                "type": "economy_report",
+                "data": economy_report
+            })
 
         return final
