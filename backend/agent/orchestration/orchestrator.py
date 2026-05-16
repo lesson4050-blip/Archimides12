@@ -899,17 +899,29 @@ class AgentOrchestrator:
                             )
                             break
                     
-        # Phase 4: Verification (read-only, runs tests)
-        changed_files = getattr(state, 'changed_files', None) or state.metadata.get('changed_files', [])
-        if changed_files:
+        # Run VerificationAgent on completed coding tasks
+        changed_files = getattr(state, 'changed_files', None) or state.metadata.get("changed_files", [])
+        if changed_files and strategy_type in ("swarm_code", "codeact"):
             try:
-                verifier = VerificationAgent(self.router)
-                verification_result = await verifier.verify(changed_files, state.task_description)
-                state.metadata["verification_report"] = verification_result.to_dict()
-                if not verification_result.passed:
-                    logger.warning(f"Verification failed: {verification_result.summary}")
+                from backend.agent.orchestration.agents.verification_agent import VerificationAgent
+                verifier = VerificationAgent(router=self.router)
+                state = await verifier.process(state, websocket_send)
+                
+                verification = state.metadata.get("verification_report", {})
+                if not verification.get("passed", True):
+                    logger.warning(
+                        f"Verification failed: {verification.get('summary')}"
+                    )
+                    # Emit to UI
+                    if websocket_send:
+                        await websocket_send({
+                            "type": "verification_report",
+                            "passed": False,
+                            "summary": verification.get("summary"),
+                            "checks": verification.get("checks", [])
+                        })
             except Exception as e:
-                logger.warning(f"Verification skipped: {e}")
+                logger.debug(f"Post-task verification skipped: {e}")
 
         return await self._get_final_response(state, websocket_send)
 

@@ -449,6 +449,34 @@ class ExecutorAgent(BaseAgent):
                                     "error": f"SAFETY CHECK EXCEPTION: {str(e)}"
                                 }
 
+                    # ═══ PER-TOOL VERIFICATION ═══
+                    from backend.agent.verification.tool_verifier import tool_verifier
+                    verify_result = tool_verifier.verify(
+                        tool_name=t_name,
+                        params=t_params,
+                        result=tool_res if isinstance(tool_res, dict) else {"output": str(tool_res)},
+                        context=current_target if hasattr(self, 'current_target') else None
+                    )
+                    
+                    if verify_result.status.value == "fail":
+                        logger.warning(
+                            f"[ToolVerifier] FAIL on {t_name}: {verify_result.issues}"
+                        )
+                        # Emit to EventBus so UI shows the issue
+                        try:
+                            from backend.agent.orchestration.event_bus import EventBus
+                            bus = EventBus.get_instance(state.session_id)
+                            await bus.emit({
+                                "type": "tool_verification",
+                                "tool": t_name,
+                                "status": "fail",
+                                "issues": verify_result.issues
+                            })
+                        except Exception:
+                            pass
+                    elif verify_result.status.value == "warn":
+                        logger.debug(f"[ToolVerifier] WARN on {t_name}: {verify_result.issues}")
+
                     success = tool_res.get("success", True)
                     output = str(tool_res.get("output", tool_res.get("content", "OK")))
 
