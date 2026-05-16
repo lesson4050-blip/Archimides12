@@ -290,16 +290,22 @@ class ArchimedesCosmoAgent:
             except Exception as e:
                 logger.debug(f"Memory context fetch failed (non-critical): {e}")
           
-            # Prepend memory to task if we have relevant context
+            # Keep task clean — memory goes in separate message
             enriched_task = task_description
+            
+            # Build memory message separately (stable prefix preserved)
+            memory_message = None
             if memory_context:
-                enriched_task = (
-                    f"[MEMORY CONTEXT - use this to personalize your response]\n"
-                    f"{memory_context}\n"
-                    f"[END MEMORY CONTEXT]\n\n"
-                    f"CURRENT TASK: {task_description}"
-                )
-                logger.info(f"Memory injected: ~{len(memory_context.split())} tokens")
+                memory_message = {
+                    "role": "user",
+                    "content": (
+                        f"[RELEVANT CONTEXT FROM MEMORY]\n"
+                        f"{memory_context}\n"
+                        f"[END CONTEXT]\n\n"
+                        f"Use the above context to personalize your response if relevant."
+                    )
+                }
+                logger.info(f"Memory injected as separate message: ~{len(memory_context.split())} tokens")
 
             orch_result = await self.orchestrator.run_task(
                 task_description=enriched_task, 
@@ -307,7 +313,8 @@ class ArchimedesCosmoAgent:
                 session_id=self.session_id or "default", 
                 websocket_send=websocket_send,
                 task_hint=kwargs.get("task_hint", "default"), 
-                stream=stream
+                stream=stream,
+                memory_message=memory_message
             )
             
             if not orch_result.get("success"):

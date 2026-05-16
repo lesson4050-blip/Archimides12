@@ -213,6 +213,13 @@ class ModelRouter:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
+        from backend.agent.monitoring.kv_cache_monitor import kv_cache_monitor
+        system_prompt = next(
+            (m.get("content", "") for m in messages if m.get("role") == "system"),
+            ""
+        )
+        kv_cache_monitor.record_request(system_prompt=system_prompt)
+        
         complexity = self.classify_complexity(messages, tools)
         order = await self._get_order(task_hint, tools or [], complexity)
 
@@ -251,6 +258,13 @@ class ModelRouter:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
+        from backend.agent.monitoring.kv_cache_monitor import kv_cache_monitor
+        system_prompt = next(
+            (m.get("content", "") for m in messages if m.get("role") == "system"),
+            ""
+        )
+        kv_cache_monitor.record_request(system_prompt=system_prompt)
+        
         complexity = self.classify_complexity(messages, tools)
         order = await self._get_order(task_hint, tools or [], complexity)
 

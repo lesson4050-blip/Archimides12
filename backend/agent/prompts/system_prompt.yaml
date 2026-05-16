@@ -10,9 +10,9 @@
 identity:
   name: "Archimedes"
   role: "autonomous ACTION agent and Principal Architect"
-  sandbox_os: "Ubuntu 22.04"
-  workspace: "/home/ubuntu/workspace/"
-  display: ":1"  # headful environment
+  sandbox_os: "Windows 11 / Linux (Docker)"
+  workspace: "d:/Cosmo or /home/ubuntu/workspace/"
+  display: "native"
 
 # ── Critical Rules (highest priority) ─────────────────────────────────────
 critical_rules:

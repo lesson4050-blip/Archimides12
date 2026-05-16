@@ -318,7 +318,8 @@ class AgentOrchestrator:
                        session_id: str = "default",
                        websocket_send: Optional[Callable] = None,
                        task_hint: str = "default",
-                       stream: bool = False) -> Dict[str, Any]:
+                       stream: bool = False,
+                       memory_message: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         TIMEOUT = int(os.environ.get("AGENT_TASK_TIMEOUT", "900"))
         import time
         from backend.metrics import agent_task_duration, agent_timeouts_total
@@ -328,7 +329,7 @@ class AgentOrchestrator:
             result = await asyncio.wait_for(
                 self._run_task_internal(
                     task_description, mode, session_id,
-                    websocket_send, task_hint, stream
+                    websocket_send, task_hint, stream, memory_message
                 ),
                 timeout=TIMEOUT
             )
@@ -374,7 +375,8 @@ class AgentOrchestrator:
                        session_id: str = "default",
                        websocket_send: Optional[Callable] = None,
                        task_hint: str = "default",
-                       stream: bool = False) -> Dict[str, Any]:
+                       stream: bool = False,
+                       memory_message: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         
         # ── Wire EventBus to WebSocket consumer ──
         self.event_bus.session_id = session_id
@@ -416,18 +418,9 @@ class AgentOrchestrator:
         # Add initial greeting/task to history
         state.add_message("user", task_description)
         
-        # Unified Memory Router integration
-        try:
-            from backend.memory.memory_router import MemoryRouter
-            mem_router = MemoryRouter(
-                user_id=state.metadata.get("user_id", "default"),
-                session_id=session_id
-            )
-            context_str = await mem_router.get_context_string(task_description, max_tokens=8000)
-            if context_str:
-                state.add_message("system", f"Memory Context:\n{context_str}")
-        except Exception as e:
-            logger.warning(f"MemoryRouter context retrieval failed: {e}")
+        # If memory message provided, prepend to history
+        if memory_message:
+            state.add_message(memory_message["role"], memory_message["content"])
 
         # ── ALL return paths wrapped in try/finally for guaranteed consumer cleanup ──
         try:

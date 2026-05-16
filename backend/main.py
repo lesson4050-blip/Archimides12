@@ -406,6 +406,11 @@ async def model_health():
     router = get_model_router()
     return await router.get_health_status()
 
+@app.get("/api/metrics/kv-cache")
+async def kv_cache_stats():
+    from backend.agent.monitoring.kv_cache_monitor import kv_cache_monitor
+    return kv_cache_monitor.get_stats()
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
