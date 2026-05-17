@@ -323,6 +323,8 @@ app.include_router(council_router)
 from backend.api.research_slides_router import router as research_slides_router
 app.include_router(research_slides_router)
 
+from backend.api.triggers_router import router as triggers_router
+app.include_router(triggers_router)
 @app.get("/")
 async def root():
     return {"message": "Archimedes API is running."}
