@@ -15,6 +15,7 @@ from backend.agent.tool_registry import ToolRegistry
 from backend.memory.context_manager import ContextManager
 from backend.agent.skill_library import SkillLibrary
 from backend.telemetry import agent_span
+from backend.agent.transparency.audit_trail import audit_manager, TaskAuditTrail
 
 logger = logging.getLogger(__name__)
 
@@ -412,6 +413,12 @@ class AgentOrchestrator:
             stream=stream,
         )
 
+        import uuid
+        trail_id = f"{session_id}-{str(uuid.uuid4())[:8]}"
+        trail = audit_manager.start_trail(trail_id, task_description, session_id)
+        state.metadata["audit_trail"] = trail
+        state.metadata["audit_trail_id"] = trail_id
+
         # Inject mcp_client into state metadata for executor access
         state.metadata["mcp_client"] = getattr(self, '_mcp_client_ref', None)
         
@@ -436,10 +443,30 @@ class AgentOrchestrator:
             # Shortcut: conversational messages get answered directly without planning/critic
             if is_conversational(task_description):
                 logger.info(f"[{session_id}] Detected conversational message, using direct response")
-                return await self._run_conversational(state, websocket_send)
+                result = await self._run_conversational(state, websocket_send)
+                audit_data = audit_manager.complete_trail(trail_id)
+                if audit_data and websocket_send:
+                    await websocket_send({
+                        "type": "audit_trail",
+                        "task_id": trail_id,
+                        "summary": {
+                            "duration": audit_data["total_duration_seconds"],
+                            "events": audit_data["event_count"],
+                            "strategy": "conversational",
+                        }
+                    })
+                result["audit_trail_id"] = trail_id
+                return result
             
             # Semantic task routing
             complexity, strategy = await classify_task(task_description, self.router)
+
+            trail.record_routing(
+                chosen_strategy=strategy,
+                chosen_complexity=complexity,
+                alternatives_considered=["direct", "swarm_code", "swarm_research", "codeact"],
+                reason=f"Pattern match or LLM classification"
+            )
             
             # For medium-complexity ambiguous tasks, use LLM to refine routing
             # (Reserved for future A/B testing — not called in production)
@@ -467,17 +494,33 @@ class AgentOrchestrator:
                 if complexity == "simple":
                     if strategy == "direct":
                         logger.info(f"[{session_id}] Simple direct task → conversational mode")
-                        return await self._run_conversational(state, websocket_send)
-                    logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
-                    return await self._run_fast_mode(state, websocket_send)
-                
-                if mode == AgentMode.FAST or strategy == "single":
+                        result = await self._run_conversational(state, websocket_send)
+                    else:
+                        logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
+                        result = await self._run_fast_mode(state, websocket_send)
+                elif mode == AgentMode.FAST or strategy == "single":
                     logger.info(f"[{session_id}] Strategy '{strategy}' matches fast execution.")
-                    return await self._run_fast_mode(state, websocket_send)
+                    result = await self._run_fast_mode(state, websocket_send)
+                else:
+                    # Pass strategy to planning mode
+                    state.metadata["strategy"] = strategy
+                    result = await self._run_planning_mode(state, websocket_send)
+
+                audit_data = audit_manager.complete_trail(trail_id)
+                if audit_data and websocket_send:
+                    await websocket_send({
+                        "type": "audit_trail",
+                        "task_id": trail_id,
+                        "summary": {
+                            "duration": audit_data["total_duration_seconds"],
+                            "events": audit_data["event_count"],
+                            "strategy": strategy,
+                        }
+                    })
+                # Store full trail in result
+                result["audit_trail_id"] = trail_id
                 
-                # Pass strategy to planning mode
-                state.metadata["strategy"] = strategy
-                return await self._run_planning_mode(state, websocket_send)
+                return result
         finally:
             # Guaranteed cleanup: remove consumer from EventBus on ALL exit paths
             if websocket_send:

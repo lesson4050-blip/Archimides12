@@ -1,5 +1,5 @@
 export type AgentEvent = {
-  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued" | "confidence" | "suggestions" | "token" | "file_artifact" | "browser_navigate" | "desktop_frame" | "canvas_presentation" | "verification_report" | "tool_verification" | "economy_report";
+  type: "thought" | "tool_call" | "tool" | "tool_result" | "message_info" | "message_ask" | "message_result" | "agent_error" | "session_end" | "artifact" | "novnc_ready" | "plan_update" | "session_ready" | "session_queued" | "confidence" | "suggestions" | "token" | "file_artifact" | "browser_navigate" | "desktop_frame" | "canvas_presentation" | "verification_report" | "tool_verification" | "economy_report" | "audit_trail";
   content?: string;
   text?: string;
   tool?: string;

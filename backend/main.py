@@ -416,6 +416,40 @@ async def economy_stats():
     from backend.agent.economy.agent_economy import agent_economy
     return agent_economy.get_global_stats()
 
+@app.get("/api/audit/{task_id}")
+async def get_audit_trail(task_id: str, format: str = "json"):
+    from backend.agent.transparency.audit_trail import audit_manager
+    trail_data = audit_manager.get_completed(task_id)
+    if not trail_data:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Audit trail not found")
+    
+    if format == "markdown":
+        # Reconstruct markdown from stored data
+        from fastapi import Response
+        return Response(
+            content=f"# Audit Trail\n\nTask: {trail_data['task']}\n\nEvents: {trail_data['event_count']}",
+            media_type="text/markdown"
+        )
+    return trail_data
+
+@app.get("/api/audit")
+async def list_audit_trails():
+    from backend.agent.transparency.audit_trail import audit_manager
+    trails = audit_manager.get_all_completed()
+    return {
+        "count": len(trails),
+        "trails": [
+            {
+                "task_id": t["task_id"],
+                "task": t["task"][:60],
+                "duration": t["total_duration_seconds"],
+                "events": t["event_count"],
+            }
+            for t in trails[-10:]  # Last 10
+        ]
+    }
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
