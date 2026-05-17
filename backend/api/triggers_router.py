@@ -12,14 +12,14 @@ SECURITY:
 import re
 import time
 import logging
+from backend.middleware.rate_limiter import triggers_limiter
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["triggers"])
 
-_trigger_rate: dict = {}
-_TRIGGER_RPM = 10
+
 
 class TriggerCreate(BaseModel):
     task: str = Field(..., min_length=5, max_length=500)
@@ -39,21 +39,13 @@ class TriggerCreate(BaseModel):
         v = re.sub(r"[^a-zA-Z0-9 \-_]", "", v)
         return v.strip()
 
-def _check_rate(client_ip: str) -> bool:
-    now = time.time()
-    window = now - 60
-    history = [t for t in _trigger_rate.get(client_ip, []) if t > window]
-    if len(history) >= _TRIGGER_RPM:
-        return False
-    history.append(now)
-    _trigger_rate[client_ip] = history
-    return True
+
 
 @router.post("/triggers")
 async def create_trigger(request: Request, body: TriggerCreate):
     """Create a new proactive trigger."""
     client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate(client_ip):
+    if not triggers_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     
     try:
@@ -85,7 +77,7 @@ async def create_trigger(request: Request, body: TriggerCreate):
 async def list_triggers(request: Request):
     """List all active triggers."""
     client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate(client_ip):
+    if not triggers_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     
     try:
@@ -104,7 +96,7 @@ async def delete_trigger(request: Request, job_id: str):
         raise HTTPException(status_code=400, detail="Invalid job_id format")
     
     client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate(client_ip):
+    if not triggers_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
     
     try:

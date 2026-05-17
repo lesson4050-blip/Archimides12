@@ -422,6 +422,17 @@ async def economy_stats():
     from backend.agent.economy.agent_economy import agent_economy
     return agent_economy.get_global_stats()
 
+@app.get("/api/metrics/rate-limits")
+async def rate_limit_stats():
+    from backend.middleware.rate_limiter import council_limiter, research_limiter, triggers_limiter
+    return {
+        "limiters": [
+            council_limiter.get_stats(),
+            research_limiter.get_stats(),
+            triggers_limiter.get_stats(),
+        ]
+    }
+
 @app.get("/api/audit/{task_id}")
 async def get_audit_trail(task_id: str, format: str = "json"):
     from backend.agent.transparency.audit_trail import audit_manager

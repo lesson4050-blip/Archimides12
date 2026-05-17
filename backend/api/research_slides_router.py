@@ -12,16 +12,15 @@ SECURITY:
 """
 import time
 import json
-import re
 import logging
+from backend.middleware.rate_limiter import research_limiter
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["research"])
 
-_research_rate: dict = {}
-_RESEARCH_RPM = 3
+
 
 # Allowed slide types whitelist
 ALLOWED_SLIDE_TYPES = {
@@ -44,15 +43,7 @@ class ResearchSlidesRequest(BaseModel):
             raise ValueError("Topic cannot be empty after sanitization")
         return v
 
-def _check_rate(client_ip: str) -> bool:
-    now = time.time()
-    window = now - 60
-    history = [t for t in _research_rate.get(client_ip, []) if t > window]
-    if len(history) >= _RESEARCH_RPM:
-        return False
-    history.append(now)
-    _research_rate[client_ip] = history
-    return True
+
 
 def _sanitize_search_result(text: str, max_len: int = 3000) -> str:
     """Sanitize search results before injecting into LLM prompt."""
@@ -100,11 +91,8 @@ async def research_to_slides(request: Request, body: ResearchSlidesRequest):
     """Research a topic and generate presentation slides."""
     
     client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate(client_ip):
-        raise HTTPException(
-            status_code=429,
-            detail=f"Rate limit: max {_RESEARCH_RPM} research requests per minute"
-        )
+    if not research_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Rate limit: max 3 research requests per minute")
     
     start = time.time()
     

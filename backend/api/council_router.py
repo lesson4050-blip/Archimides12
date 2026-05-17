@@ -14,13 +14,11 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional
 import time
 import logging
+from backend.middleware.rate_limiter import council_limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["council"])
 
-# Simple in-memory rate limiter for council endpoint
-_council_rate: dict = {}
-_COUNCIL_RPM = 5  # requests per minute per IP
 _COUNCIL_TIMEOUT = 45.0  # seconds
 
 class CouncilRequest(BaseModel):
@@ -43,20 +41,7 @@ class CouncilResponse(BaseModel):
     total_count: int
     elapsed_seconds: float
 
-def _check_council_rate_limit(client_ip: str) -> bool:
-    """Simple token bucket rate limiter for council endpoint."""
-    now = time.time()
-    window_start = now - 60
-    
-    history = _council_rate.get(client_ip, [])
-    history = [t for t in history if t > window_start]
-    
-    if len(history) >= _COUNCIL_RPM:
-        return False
-    
-    history.append(now)
-    _council_rate[client_ip] = history
-    return True
+
 
 @router.post("/council", response_model=CouncilResponse)
 async def run_council(
@@ -67,10 +52,10 @@ async def run_council(
     client_ip = request.client.host if request.client else "unknown"
     
     # Rate limit
-    if not _check_council_rate_limit(client_ip):
+    if not council_limiter.is_allowed(client_ip):
         raise HTTPException(
             status_code=429,
-            detail=f"Rate limit: max {_COUNCIL_RPM} council requests per minute"
+            detail="Rate limit: max 5 council requests per minute"
         )
     
     start = time.time()
