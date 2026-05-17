@@ -317,6 +317,9 @@ app.include_router(quick_task_router)
 app.include_router(benchmark_router)
 app.include_router(streaming_router)
 
+from backend.api.council_router import router as council_router
+app.include_router(council_router)
+
 
 
 @app.get("/")

@@ -26,8 +26,16 @@ class MixtureOfAgents:
                 logger.warning(f"MoA proposer failed: {e}")
                 return None
 
-        proposals = await asyncio.gather(*[run_proposer(c) for c in proposer_configs], return_exceptions=True)
-        valid = [p for p in proposals if p and isinstance(p, str)]
+        # Slice configs based on min_proposers
+        configs_to_run = proposer_configs[:max(min_proposers, len(proposer_configs))]
+        proposals = await asyncio.gather(
+            *[run_proposer(c) for c in configs_to_run],
+            return_exceptions=True
+        )
+        valid = [
+            p for p in proposals
+            if isinstance(p, str) and not isinstance(p, BaseException) and len(p) > 5
+        ]
 
         if not valid:
             return await self.router.generate(messages=messages)
@@ -72,3 +80,81 @@ class MixtureOfAgents:
             f"3. CRITICAL: You MUST return the final answer in the EXACT format required by the System Rules (e.g., JSON, markdown). Do NOT add meta-commentary.\n\n"
             f"FINAL SYNTHESIZED OUTPUT:"
         )
+
+    async def council(
+        self,
+        messages: List[Dict],
+        task: str = "",
+        timeout_seconds: float = 30.0,
+    ) -> Dict[str, Any]:
+        """
+        Model Council — runs multiple model configs in parallel.
+        Returns ALL responses (not synthesized) for user comparison.
+        
+        SECURITY: timeout enforced per-proposer to prevent hanging.
+        SECURITY: output length capped to prevent memory bloat.
+        """
+        MAX_OUTPUT_LENGTH = 4000  # chars per model response
+        
+        council_configs = [
+            {"temp": 0.7, "hint": "fast",    "label": "Creative"},
+            {"temp": 0.3, "hint": "quality", "label": "Precise"},
+            {"temp": 0.5, "hint": "default", "label": "Balanced"},
+        ]
+        
+        async def run_council_member(config: dict) -> dict:
+            label = config["label"]
+            try:
+                resp = await asyncio.wait_for(
+                    self.router.generate(
+                        messages=messages,
+                        task_hint=config["hint"],
+                        temperature=config["temp"]
+                    ),
+                    timeout=timeout_seconds
+                )
+                text = resp.get("text", "").strip()
+                # Security: cap output length
+                if len(text) > MAX_OUTPUT_LENGTH:
+                    text = text[:MAX_OUTPUT_LENGTH] + "\n...[truncated]"
+                
+                return {
+                    "label": label,
+                    "model": resp.get("model_used", "unknown"),
+                    "text": text,
+                    "tokens": resp.get("usage", {}).get("total_tokens", 0),
+                    "success": bool(text),
+                    "error": None,
+                }
+            except asyncio.TimeoutError:
+                logger.warning(f"Council member '{label}' timed out after {timeout_seconds}s")
+                return {
+                    "label": label,
+                    "model": "timeout",
+                    "text": "",
+                    "success": False,
+                    "error": f"Timed out after {timeout_seconds}s",
+                }
+            except Exception as e:
+                logger.warning(f"Council member '{label}' failed: {e}")
+                return {
+                    "label": label,
+                    "model": "error",
+                    "text": "",
+                    "success": False,
+                    "error": str(e)[:200],  # Cap error message length
+                }
+        
+        results = await asyncio.gather(
+            *[run_council_member(c) for c in council_configs]
+        )
+        
+        successful = [r for r in results if r["success"]]
+        
+        return {
+            "type": "council",
+            "task": task[:500],  # Cap task length in response
+            "responses": list(results),  # All responses including failures
+            "successful_count": len(successful),
+            "total_count": len(results),
+        }
