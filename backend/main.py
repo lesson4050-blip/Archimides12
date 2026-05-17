@@ -320,7 +320,8 @@ app.include_router(streaming_router)
 from backend.api.council_router import router as council_router
 app.include_router(council_router)
 
-
+from backend.api.research_slides_router import router as research_slides_router
+app.include_router(research_slides_router)
 
 @app.get("/")
 async def root():
