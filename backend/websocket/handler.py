@@ -8,8 +8,12 @@ from backend.agent.core import ArchimedesCosmoAgent
 from backend.agent.agent_profiles import get_profile
 from backend.sandbox.singleton import sandbox_manager
 from backend.config import settings
+from backend.security.sandbox_hardening import SecurityGate
 
 logger = logging.getLogger(__name__)
+
+# Singleton prompt injection guard — shared across all sessions
+_injection_guard = SecurityGate()
 
 # Memory safety constants
 MAX_BUFFER_SIZE = 200  # Max offline events buffered per session
@@ -192,6 +196,20 @@ class ConnectionManager:
         if not task:
             await self.send_event(session_id, {"type": "agent_error", "message": "No task provided."})
             return
+
+        # ═══ PROMPT INJECTION GUARD ═══
+        injection_verdict = _injection_guard.full_prompt_analysis(task)
+        if not injection_verdict.allowed:
+            logger.warning(
+                f"[Security] Prompt injection blocked from session {session_id}: "
+                f"{injection_verdict.reasons}"
+            )
+            await self.send_event(session_id, {
+                "type": "agent_error",
+                "message": "Message blocked by security filter.",
+                "session_id": session_id,
+            })
+            return  # Do NOT process this message further
 
         agent = self.agent_loops.get(session_id)
         if agent:

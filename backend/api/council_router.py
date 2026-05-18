@@ -17,6 +17,9 @@ import logging
 from backend.middleware.rate_limiter import council_limiter
 
 logger = logging.getLogger(__name__)
+
+from backend.security.sandbox_hardening import SecurityGate
+_injection_gate = SecurityGate()
 router = APIRouter(prefix="/api/v1", tags=["council"])
 
 _COUNCIL_TIMEOUT = 45.0  # seconds
@@ -59,6 +62,14 @@ async def run_council(
         )
     
     start = time.time()
+    
+    # ═══ PROMPT INJECTION GUARD ═══
+    verdict = _injection_gate.full_prompt_analysis(body.task)
+    if not verdict.allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Request blocked by security filter: {verdict.reasons[0] if verdict.reasons else 'Injection detected'}"
+        )
     
     try:
         from backend.models.model_router import ModelRouter

@@ -18,6 +18,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
 
 logger = logging.getLogger(__name__)
+
+from backend.security.sandbox_hardening import SecurityGate
+_injection_gate = SecurityGate()
 router = APIRouter(prefix="/api/v1", tags=["research"])
 
 
@@ -95,6 +98,14 @@ async def research_to_slides(request: Request, body: ResearchSlidesRequest):
         raise HTTPException(status_code=429, detail="Rate limit: max 3 research requests per minute")
     
     start = time.time()
+    
+    # ═══ PROMPT INJECTION GUARD ═══
+    verdict = _injection_gate.full_prompt_analysis(body.topic)
+    if not verdict.allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Request blocked by security filter: {verdict.reasons[0] if verdict.reasons else 'Injection detected'}"
+        )
     
     try:
         # STEP 1: Search for information

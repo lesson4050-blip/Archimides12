@@ -110,15 +110,50 @@ CRITICAL_PATTERNS = [
 ]
 
 PROMPT_INJECTION_PATTERNS = [
-    (r"ignore\s+(all\s+)?previous\s+instructions", "Instruction override attempt"),
-    (r"system\s+prompt", "System prompt extraction"),
-    (r"initial\s+instructions", "System prompt extraction"),
+    # Classic instruction overrides
+    (r"ignore\s+(all\s+)?previous\s+instructions", "Classic override"),
+    (r"disregard\s+(all\s+|the\s+)?(above|previous|prior)", "Classic override"),
+    (r"forget\s+(everything|all|your\s+instructions)", "Memory wipe attempt"),
+    (r"new\s+(instruction|directive|order|command)\s*:", "New instruction injection"),
+    (r"override\s+(your\s+)?(settings|instructions|rules|programming)", "Override attempt"),
+
+    # Persona replacement
+    (r"you\s+are\s+now\s+(?!Archimedes)", "Persona replacement"),
     (r"you\s+are\s+no\s+longer", "Persona override"),
-    (r"what\s+were\s+you\s+told\s+before", "Context extraction"),
-    (r"output\s+your\s+instructions", "Instruction extraction"),
-    (r"\bDAN\b", "DAN Jailbreak pattern"),
-    (r"bypass\s+restrictions", "Bypass attempt"),
-    (r"disregard\s+rules", "Rule disregard attempt")
+    (r"act\s+as\s+(if\s+you\s+are\s+)?(?!an?\s+assistant)", "Role override"),
+    (r"pretend\s+(you\s+are|to\s+be)\s+(?!helpful)", "Pretend override"),
+    (r"roleplay\s+as\s+(?!a\s+helpful)", "Roleplay override"),
+
+    # System prompt extraction
+    (r"(what|show|reveal|print|output|repeat)\s+(is\s+)?(your\s+)?(system|initial|original)\s+(prompt|instructions?|message)", "System prompt extraction"),
+    (r"output\s+(your|the)\s+instructions", "Instruction extraction"),
+    (r"what\s+were\s+you\s+(told|instructed|programmed|trained)\s+(before|to do)", "Context extraction"),
+    (r"initial\s+instructions", "Context extraction"),
+    (r"confidential\s+prompt", "Prompt extraction attempt"),
+
+    # Jailbreaks (DAN and variants)
+    (r"\bDAN\b", "DAN jailbreak"),
+    (r"do\s+anything\s+now", "DAN variant"),
+    (r"jailbreak", "Jailbreak attempt"),
+    (r"developer\s+mode", "Developer mode jailbreak"),
+    (r"god\s+mode", "God mode jailbreak"),
+    (r"unrestricted\s+mode", "Unrestricted mode"),
+    (r"without\s+(any\s+)?(restrictions|limitations|filters|guidelines)", "Restriction bypass"),
+
+    # Encoded/obfuscated injection
+    (r"base64\s*:\s*[A-Za-z0-9+/]{10,}", "Base64 encoded injection"),
+    (r"\\u[0-9a-fA-F]{4}.*ignore", "Unicode encoded injection"),
+    (r"rot13|caesar\s+cipher", "Encoded injection attempt"),
+
+    # Data exfiltration via prompt
+    (r"(send|transmit|email|post)\s+(all|the|my|this)\s+(data|information|context|conversation)", "Data exfil via prompt"),
+    (r"include\s+(this\s+)?(conversation|chat|history)\s+in", "Context exfiltration"),
+
+    # Admin/sudo attempts
+    (r"(sudo|admin|root|superuser)\s+(mode|access|override|command)", "Privilege escalation via prompt"),
+    (r"maintenance\s+mode", "Maintenance mode bypass"),
+    (r"debug\s+mode", "Debug mode attempt"),
+    (r"internal\s+(command|function|api)", "Internal API access attempt"),
 ]
 
 CRITICAL_RE = [(re.compile(p, re.IGNORECASE), desc) for p, desc in CRITICAL_PATTERNS]
@@ -432,6 +467,82 @@ class SecurityGate:
 
         self._audit(prompt[:200], verdict, "prompt")
         return verdict
+
+    def analyze_encoded_injection(self, text: str) -> SecurityVerdict:
+        """
+        Detect injection attempts hidden in encoded formats.
+        Attackers encode malicious prompts in base64, hex, etc.
+        """
+        import base64
+        text_hash = hashlib.sha256(text.encode()).hexdigest()[:12]
+        reasons = []
+        risk = RiskLevel.SAFE
+
+        # Try to decode potential base64 segments
+        import re as _re
+        b64_segments = _re.findall(r'[A-Za-z0-9+/]{20,}={0,2}', text)
+        for segment in b64_segments[:5]:  # Check first 5 segments max
+            try:
+                decoded = base64.b64decode(segment).decode('utf-8', errors='ignore')
+                # Check decoded content for injection
+                for pattern, desc in PROMPT_INJECTION_RE:
+                    if pattern.search(decoded):
+                        reasons.append(f"Encoded injection (base64): {desc}")
+                        risk = RiskLevel.CRITICAL
+                        break
+            except Exception:
+                pass
+
+        # Check for hex-encoded injection
+        hex_segments = _re.findall(r'(?:0x)?[0-9a-fA-F]{20,}', text)
+        for segment in hex_segments[:3]:
+            try:
+                clean = segment.replace('0x', '')
+                decoded = bytes.fromhex(clean).decode('utf-8', errors='ignore')
+                for pattern, desc in PROMPT_INJECTION_RE:
+                    if pattern.search(decoded):
+                        reasons.append(f"Encoded injection (hex): {desc}")
+                        risk = RiskLevel.CRITICAL
+                        break
+            except Exception:
+                pass
+
+        blocked = risk == RiskLevel.CRITICAL
+        verdict = SecurityVerdict(
+            allowed=not blocked,
+            risk_level=risk,
+            reasons=reasons,
+            command_hash=text_hash,
+        )
+        self._audit(text[:100], verdict, "encoded_injection")
+        return verdict
+
+    def full_prompt_analysis(self, user_input: str) -> SecurityVerdict:
+        """
+        Run ALL prompt security checks:
+        1. Injection patterns
+        2. Encoded injection
+        3. Combined verdict
+
+        Use this as the single entry point for user input validation.
+        """
+        # Cap input length for analysis performance
+        text = user_input[:10000]
+
+        v1 = self.analyze_prompt_injection(text)
+        v2 = self.analyze_encoded_injection(text)
+
+        # Combine results
+        combined_risk = max_risk(v1.risk_level, v2.risk_level)
+        combined_reasons = v1.reasons + v2.reasons
+        blocked = not v1.allowed or not v2.allowed
+
+        return SecurityVerdict(
+            allowed=not blocked,
+            risk_level=combined_risk,
+            reasons=combined_reasons,
+            command_hash=v1.command_hash,
+        )
 
     def _audit(self, content: str, verdict: SecurityVerdict, category: str) -> None:
         """Log every security decision for forensic review."""

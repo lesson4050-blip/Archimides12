@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
+from backend.security.sandbox_hardening import SecurityGate
+_injection_gate = SecurityGate()
+
 router = APIRouter(prefix="/api/v1", tags=["quick"])
 
 # ── Simple in-memory rate limiter ────────────────────────────────
@@ -71,6 +74,14 @@ async def quick_task(req: QuickTaskRequest, request: FastAPIRequest):
         )
 
     t0 = time.time()
+
+    # ═══ PROMPT INJECTION GUARD ═══
+    verdict = _injection_gate.full_prompt_analysis(req.task)
+    if not verdict.allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Request blocked by security filter: {verdict.reasons[0] if verdict.reasons else 'Injection detected'}"
+        )
 
     try:
         from backend.models.model_router import ModelRouter

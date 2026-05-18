@@ -467,6 +467,17 @@ async def list_audit_trails():
         ]
     }
 
+@app.get("/api/security/audit")
+async def security_audit_log(last_n: int = 50):
+    """Returns recent security decisions for monitoring."""
+    if last_n > 500:
+        last_n = 500  # Cap
+    from backend.websocket.handler import _injection_guard
+    return {
+        "entries": _injection_guard.get_audit_log(last_n),
+        "total_logged": len(_injection_guard._audit_log),
+    }
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
