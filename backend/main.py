@@ -478,6 +478,31 @@ async def security_audit_log(last_n: int = 50):
         "total_logged": len(_injection_guard._audit_log),
     }
 
+@app.get("/api/v1/self-improvement/history")
+async def prompt_version_history(limit: int = 10):
+    """Get prompt version history for monitoring."""
+    if limit > 50:
+        limit = 50
+    from backend.agent.self_improvement_prompt import get_prompt_improver
+    improver = get_prompt_improver()
+    return {"versions": await improver.get_version_history(limit)}
+
+@app.post("/api/v1/self-improvement/rollback")
+async def rollback_prompt():
+    """Roll back to the previous prompt version."""
+    from backend.agent.self_improvement_prompt import get_prompt_improver
+    improver = get_prompt_improver()
+    success = await improver.rollback()
+    return {"success": success, "message": "Rolled back" if success else "No previous version"}
+
+@app.get("/api/v1/self-improvement/current-prompt")
+async def get_current_prompt():
+    """Get the currently active system prompt preview."""
+    from backend.agent.self_improvement_prompt import get_prompt_improver
+    improver = get_prompt_improver()
+    prompt = await improver.get_current_prompt()
+    return {"prompt_preview": prompt[:200], "length": len(prompt)}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

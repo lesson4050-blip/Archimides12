@@ -431,6 +431,30 @@ class ArchimedesCosmoAgent:
             
         self.results[task_id] = result
         self.execution_history.append(result)
+
+        # Self-improvement: record outcome for prompt optimization
+        try:
+            from backend.agent.self_improvement_prompt import get_prompt_improver
+
+            output_text = str(getattr(result, 'output', '') or '')
+            task_success = getattr(result, 'status', None) == TaskStatus.COMPLETED
+
+            # Simple quality score: 1.0 if success, 0.3 if failed
+            quality_score = 1.0 if task_success else 0.3
+            task_duration = getattr(result, 'duration', 0.0) or 0.0
+
+            improver = get_prompt_improver(self.router if hasattr(self, 'router') else None)
+            safe_create_task(
+                improver.record_task_outcome(
+                    task=task_description,
+                    output=output_text[:500],
+                    success=task_success,
+                    score=quality_score,
+                    duration=task_duration,
+                )
+            )
+        except Exception as e:
+            logger.debug(f"Self-improvement recording failed (non-critical): {e}")
         return result
 
     def register_tool(self, name: str, handler: Callable) -> None:
