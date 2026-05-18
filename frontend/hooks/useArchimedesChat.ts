@@ -224,6 +224,22 @@ export function useArchimedesChat(
             });
             break;
           }
+          case "economy_report": {
+            store.setEconomyReport((event as any).data);
+            break;
+          }
+          case "audit_trail": {
+            store.setAuditTrailId((event as any).task_id);
+            break;
+          }
+          case "tool_verification": {
+            store.setLastToolVerification({
+              tool: (event as any).tool,
+              status: (event as any).status,
+              issues: (event as any).issues || []
+            });
+            break;
+          }
         }
         
         if (event.type === "tool_call" || event.type === "tool" || event.type === "artifact") {

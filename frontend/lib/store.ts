@@ -41,6 +41,10 @@ interface AppState {
   confidence: {score: number; label: string} | null;
   liveReasoning: string;
 
+  economyReport: any | null;
+  auditTrailId: string | null;
+  lastToolVerification: { tool: string, status: string, issues: string[] } | null;
+
   // Actions
   setMessages: (updater: Message[] | ((prev: Message[]) => Message[])) => void;
   setInput: (val: string | ((prev: string) => string)) => void;
@@ -62,6 +66,10 @@ interface AppState {
   setSuggestions: (val: string[]) => void;
   setConfidence: (val: {score: number; label: string} | null) => void;
   setLiveReasoning: (updater: string | ((prev: string) => string)) => void;
+
+  setEconomyReport: (data: any | null) => void;
+  setAuditTrailId: (id: string | null) => void;
+  setLastToolVerification: (v: any | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -83,6 +91,9 @@ export const useAppStore = create<AppState>((set) => ({
   suggestions: [],
   confidence: null,
   liveReasoning: "",
+  economyReport: null,
+  auditTrailId: null,
+  lastToolVerification: null,
 
   setMessages: (updater) => set((state) => ({ 
       messages: typeof updater === 'function' ? updater(state.messages) : updater 
@@ -110,4 +121,7 @@ export const useAppStore = create<AppState>((set) => ({
   setLiveReasoning: (updater) => set((state) => ({ 
       liveReasoning: typeof updater === 'function' ? updater(state.liveReasoning) : updater 
   })),
+  setEconomyReport: (data) => set({ economyReport: data }),
+  setAuditTrailId: (id) => set({ auditTrailId: id }),
+  setLastToolVerification: (v) => set({ lastToolVerification: v }),
 }));

@@ -10,7 +10,7 @@ export default function MessageList({
 }: {
   messagesEndRef: React.RefObject<HTMLDivElement>;
 }) {
-  const { messages, isWorking, taskElapsed, confidence, suggestions, setInput, setSuggestions, liveReasoning } = useAppStore();
+  const { messages, isWorking, taskElapsed, confidence, suggestions, setInput, setSuggestions, liveReasoning, economyReport, auditTrailId } = useAppStore();
 
   return (
     <div className="w-full max-w-3xl flex flex-col gap-6">
@@ -73,6 +73,28 @@ export default function MessageList({
             </button>
           ))}
         </motion.div>
+      )}
+      {/* Economy + Audit Summary */}
+      {economyReport && (
+        <div className="flex items-center gap-3 mt-2 px-1 text-xs text-gray-500">
+          <span>💰 {economyReport.spent_credits}/{economyReport.total_credits} credits</span>
+          <span>·</span>
+          <span>⚡ {economyReport.efficiency * 100}% efficiency</span>
+          {auditTrailId && (
+            <>
+              <span>·</span>
+              <button
+                onClick={() => {
+                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+                  window.open(`${apiUrl}/api/audit/${auditTrailId}?format=markdown`, '_blank')
+                }}
+                className="text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                🔍 Audit trail
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       <div ref={messagesEndRef as any} />

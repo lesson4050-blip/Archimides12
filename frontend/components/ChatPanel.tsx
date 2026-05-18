@@ -22,7 +22,9 @@ export default function ChatPanel({
   executionMode,
   onModeChange,
   isComputerOpen, 
-  onToggleComputer 
+  onToggleComputer,
+  onCouncilOpen,
+  onResearchOpen
 }: { 
   sessionId: string, 
   isStarted: boolean, 
@@ -31,7 +33,9 @@ export default function ChatPanel({
   executionMode?: "fast" | "planning",
   onModeChange?: (mode: "fast" | "planning") => void,
   isComputerOpen?: boolean, 
-  onToggleComputer?: () => void 
+  onToggleComputer?: () => void,
+  onCouncilOpen?: () => void,
+  onResearchOpen?: () => void
 }) {
   const store = useAppStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -110,6 +114,8 @@ export default function ChatPanel({
             handleSend={handleSend}
             toggleMic={toggleMic}
             fileInputRef={fileInputRef}
+            onCouncilOpen={onCouncilOpen}
+            onResearchOpen={onResearchOpen}
           />
         ) : (
           <MessageList messagesEndRef={messagesEndRef} />

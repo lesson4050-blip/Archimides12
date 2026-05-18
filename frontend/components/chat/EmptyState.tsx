@@ -12,11 +12,15 @@ export default function EmptyState({
   handleSend,
   toggleMic,
   fileInputRef,
+  onCouncilOpen,
+  onResearchOpen,
 }: {
   currentMode: any;
   handleSend: () => void;
   toggleMic: () => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
+  onCouncilOpen?: () => void;
+  onResearchOpen?: () => void;
 }) {
   const {
     input,
@@ -132,6 +136,33 @@ export default function EmptyState({
             className="w-full flex justify-center py-2"
           >
              <ModeSelector activeMode={activeMode} onModeChange={setActiveMode} />
+          </motion.div>
+
+          {/* Quick Tool Buttons */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="flex items-center gap-2 flex-wrap justify-center mt-6 mb-4"
+          >
+            {[
+              { icon: '⚖️', label: 'Model Council', desc: 'Compare models', onClick: onCouncilOpen },
+              { icon: '🔬', label: 'Deep Research', desc: 'Research → Slides', onClick: onResearchOpen },
+              { icon: '🧠', label: 'Ask anything', desc: 'General chat', onClick: () => {} },
+              { icon: '💻', label: 'Build website', desc: 'Create web app', onClick: () => setInput('Build a website for ') },
+              { icon: '📊', label: 'Wide Research', desc: 'Deep analysis', onClick: () => setInput('Research and analyze: ') },
+            ].map((tool) => (
+              <button
+                key={tool.label}
+                onClick={tool.onClick}
+                className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 
+                           border border-white/10 hover:border-white/20 rounded-xl 
+                           text-sm text-gray-300 hover:text-white transition-all"
+              >
+                <span>{tool.icon}</span>
+                <span>{tool.label}</span>
+              </button>
+            ))}
           </motion.div>
       </div>
 

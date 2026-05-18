@@ -7,7 +7,21 @@ import MessagePill from "../MessagePill";
 import { useAppStore, Message } from "@/lib/store";
 
 const MessageItem = memo(({ msg, isConsecutive }: { msg: Message, isConsecutive?: boolean }) => {
-  const { setViewingArtifact } = useAppStore();
+  const store = useAppStore();
+  const { setViewingArtifact } = store;
+
+  const getVerificationBadge = (toolName: string) => {
+    if (!store.lastToolVerification || store.lastToolVerification.tool !== toolName) return null;
+    const { status, issues } = store.lastToolVerification;
+    if (status === 'pass') return <span className="text-xs text-green-400 ml-1">✓ verified</span>;
+    if (status === 'warn') return (
+      <span className="text-xs text-yellow-400 ml-1" title={issues.join(', ')}>⚠ {issues.length} warning</span>
+    );
+    if (status === 'fail') return (
+      <span className="text-xs text-red-400 ml-1" title={issues.join(', ')}>✗ {issues[0]?.slice(0,40)}</span>
+    );
+    return null;
+  };
 
   return (
     <motion.div 
@@ -68,7 +82,15 @@ const MessageItem = memo(({ msg, isConsecutive }: { msg: Message, isConsecutive?
             )}
             <div className={!isConsecutive ? "mt-2" : "mt-0"}>
               {(msg.type === "thought" || msg.type === "tool" || msg.type === "plan") ? (
-                <MessagePill type={msg.type} content={msg.content} />
+                <MessagePill 
+                  type={msg.type} 
+                  content={msg.content} 
+                  badge={
+                    msg.type === "tool"
+                      ? getVerificationBadge(msg.content.match(/\*\*([a-zA-Z0-9_]+)\*\*/)?.[1] || "")
+                      : null
+                  }
+                />
               ) : msg.type === "file_download" ? (
                 <div className="flex items-center gap-3 p-4 rounded-xl bg-violet-600/10 border border-violet-500/30 mt-2">
                   <span className="text-2xl">📊</span>

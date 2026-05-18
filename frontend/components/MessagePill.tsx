@@ -9,9 +9,10 @@ interface MessagePillProps {
   type: "thought" | "tool" | "plan" | "info" | "result";
   title?: string;
   content: string;
+  badge?: React.ReactNode;
 }
 
-export default function MessagePill({ type, title, content }: MessagePillProps) {
+export default function MessagePill({ type, title, content, badge }: MessagePillProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Determine styles and icons based on type
@@ -41,6 +42,7 @@ export default function MessagePill({ type, title, content }: MessagePillProps) 
         <div className="flex items-center gap-2 font-medium text-[13px]">
           {icon}
           <span>{displayTitle}</span>
+          {badge}
         </div>
         <motion.div
            animate={{ rotate: isOpen ? 90 : 0 }}
