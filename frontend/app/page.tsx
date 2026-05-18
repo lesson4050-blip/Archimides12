@@ -5,6 +5,8 @@ import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 import ComputerPanel from "@/components/ComputerPanel";
 import AgentDashboard from "@/components/AgentDashboard";
+import ModelCouncil from "@/components/ModelCouncil";
+import DeepResearch from "@/components/DeepResearch";
 import { AgentEvent } from "@/lib/websocket";
 
 export default function Home() {
@@ -23,6 +25,8 @@ export default function Home() {
   const [selectedAgent, setSelectedAgent] = useState("archimedes-cosmo");
   const [executionMode, setExecutionMode] = useState<"fast" | "planning">("planning");
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isCouncilOpen, setIsCouncilOpen] = useState(false);
+  const [isResearchOpen, setIsResearchOpen] = useState(false);
 
   const [isComputerOpen, setIsComputerOpen] = useState(false);
 
@@ -68,6 +72,8 @@ export default function Home() {
           if (!newState) userClosedComputerRef.current = true;
           else userClosedComputerRef.current = false;
         }}
+        onCouncilOpen={() => setIsCouncilOpen(true)}
+        onResearchOpen={() => setIsResearchOpen(true)}
       />
       
       {/* Main Area Layout */}
@@ -107,6 +113,46 @@ export default function Home() {
       {/* Full Screen Agent Dashboard Overlay */}
       {isDashboardOpen && (
         <AgentDashboard onClose={() => setIsDashboardOpen(false)} />
+      )}
+
+      {isCouncilOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#222]">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">⚖️</span>
+              <span className="font-semibold text-white">Model Council</span>
+            </div>
+            <button
+              onClick={() => setIsCouncilOpen(false)}
+              className="text-gray-400 hover:text-white transition-colors text-2xl"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <ModelCouncil />
+          </div>
+        </div>
+      )}
+
+      {isResearchOpen && (
+        <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[#222]">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🔬</span>
+              <span className="font-semibold text-white">Deep Research → Slides</span>
+            </div>
+            <button
+              onClick={() => setIsResearchOpen(false)}
+              className="text-gray-400 hover:text-white transition-colors text-2xl"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <DeepResearch />
+          </div>
+        </div>
       )}
     </main>
   );

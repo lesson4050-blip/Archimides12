@@ -17,9 +17,11 @@ interface SidebarProps {
   selectedAgent?: string;
   onDashboardOpen?: () => void;
   onToggleComputer?: () => void;
+  onCouncilOpen?: () => void;
+  onResearchOpen?: () => void;
 }
 
-export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDashboardOpen, onToggleComputer }: SidebarProps) {
+export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDashboardOpen, onToggleComputer, onCouncilOpen, onResearchOpen }: SidebarProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -94,6 +96,27 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
         >
           <Library size={16} className="text-gray-400" />
           <span>Библиотека</span>
+        </button>
+
+        <button
+          onClick={onCouncilOpen}
+          className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-gray-400 text-base">⚖️</span>
+            <span>Model Council</span>
+          </div>
+        </button>
+
+        <button
+          onClick={onResearchOpen}
+          className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-gray-400 text-base">🔬</span>
+            <span>Ресёрч</span>
+          </div>
+          <span className="text-[10px] text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded font-medium">New</span>
         </button>
 
         <button 

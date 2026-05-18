@@ -271,10 +271,29 @@ export default function DeepResearch() {
             </button>
           </div>
 
-          {/* Export hint */}
-          <div className="text-xs text-gray-600 text-center">
-            Open cosmo_artist to convert these slides to a full presentation
-          </div>
+          {/* Export to Presenton */}
+          {result && !loading && (
+            <button
+              onClick={() => {
+                // Encode slides data and open cosmo_artist
+                const payload = encodeURIComponent(JSON.stringify({
+                  topic: result.topic,
+                  slides: result.slides,
+                  style: result.style,
+                }))
+                // cosmo_artist runs on port 3000 (or 3001 — check your .env)
+                const cosmoUrl = process.env.NEXT_PUBLIC_COSMO_URL || 'http://localhost:3000'
+                window.open(`${cosmoUrl}/import?data=${payload}`, '_blank')
+              }}
+              className="w-full py-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 
+                         hover:from-blue-600/30 hover:to-purple-600/30
+                         border border-blue-500/30 rounded-xl text-sm text-blue-300 
+                         transition-all flex items-center justify-center gap-2"
+            >
+              <span>🎨</span>
+              Open in Presenton (cosmo_artist)
+            </button>
+          )}
         </div>
       )}
     </div>

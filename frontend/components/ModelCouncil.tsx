@@ -1,8 +1,8 @@
-"""
+/*
 Model Council UI — shows multiple model responses side by side.
 Inspired by Perplexity Model Council.
 Design: dark cards, color-coded by model label, expandable.
-"""
+*/
 
 'use client'
 
