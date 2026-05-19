@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Slide } from '../../types/slide';
 import { useRef } from 'react';
-import { V1ContentRender } from '../../components/V1ContentRender';
+import { PresentationLayoutRenderer } from '../../components/PresentationLayoutRenderer';
 import { useSearchParams } from 'next/navigation';
 interface SortableSlideProps {
     slide: Slide;
@@ -70,7 +70,7 @@ export function SortableSlide({ slide, index, selectedSlide, onSlideClick }: Sor
                         transform: `scale(${SCALE})`,
                     }}
                 >
-                    <V1ContentRender slide={slide} isEditMode={true} />
+                    <PresentationLayoutRenderer slide={slide} />
                 </div>
             </div>
 

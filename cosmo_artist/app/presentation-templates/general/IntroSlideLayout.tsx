@@ -41,7 +41,6 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
     const titleRef = useRef<HTMLHeadingElement>(null);
     const imageRef = useRef<HTMLDivElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
-    const bgElementRef = useRef<HTMLDivElement>(null);
 
     const getInitials = (name: string) => {
         return name.split(' ').map(word => word.charAt(0).toUpperCase()).join('');
@@ -62,7 +61,7 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
             // Animation Timeline
             const tl = gsap.timeline({ defaults: { ease: 'power4.out', duration: 1.2 } });
 
-            tl.to('.bg-accent-blob', { scale: 1, opacity: 0.15, stagger: 0.2, duration: 2 })
+            tl.to('.bg-accent-blob', { scale: 1, opacity: 0.25, stagger: 0.2, duration: 2 })
               .to(titleRef.current, { y: 0, opacity: 1 }, '-=1.5')
               .to(imageRef.current, { scale: 1, opacity: 1, rotate: 0 }, '-=1')
               .to(cardRef.current, { y: 0, opacity: 1 }, '-=0.8');
@@ -97,18 +96,18 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
             />
             <div
                 ref={containerRef}
-                className="w-full rounded-sm max-w-[1280px] shadow-2xl max-h-[720px] aspect-video bg-white relative z-20 mx-auto overflow-hidden border border-gray-100"
+                className="w-full rounded-sm max-w-[1280px] shadow-2xl max-h-[720px] aspect-video relative z-20 mx-auto overflow-hidden border border-white/5"
                 style={{
-                    background: "var(--background-color, #FAFAFA)",
+                    background: "#080615",
                     fontFamily: "'Plus Jakarta Sans', sans-serif"
                 }}
             >
                 {/* Decorative Background Elements */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="bg-accent-blob bg-accent-blob-1 absolute -top-20 -left-20 w-96 h-96 rounded-full blur-[100px]" 
-                         style={{ background: 'var(--primary-color, #6366f1)' }}></div>
+                         style={{ background: 'rgba(139, 92, 246, 0.3)' }}></div>
                     <div className="bg-accent-blob bg-accent-blob-2 absolute -bottom-20 -right-20 w-[500px] h-[500px] rounded-full blur-[120px]" 
-                         style={{ background: 'var(--secondary-color, #a855f7)' }}></div>
+                         style={{ background: 'rgba(236, 72, 153, 0.25)' }}></div>
                 </div>
 
                 {/* Header / Logo */}
@@ -119,14 +118,14 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
                                 <img src={(slideData as any)?._logo_url__} alt="logo" className="w-10 h-10 object-contain" />
                             )}
                             {(slideData as any)?.__companyName__ && (
-                                <span className="text-xl font-bold tracking-tight" style={{ color: 'var(--background-text, #0f172a)' }}>
+                                <span className="text-xl font-bold tracking-tight text-white/90">
                                     {(slideData as any)?.__companyName__}
                                 </span>
                             )}
                         </div>
-                        <div className="h-px flex-1 mx-8 bg-gray-200/50"></div>
-                        <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
-                            Confidential / {slideData?.presentationDate || '2025'}
+                        <div className="h-px flex-1 mx-8 bg-white/10"></div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-white/40">
+                            Confidential / {slideData?.presentationDate || '2026'}
                         </div>
                     </div>
                 </div>
@@ -137,14 +136,13 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
                     {/* Left Content */}
                     <div className="col-span-7 flex flex-col justify-center space-y-8">
                         <div className="space-y-4">
-                            <div className="inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-[0.2em] bg-gray-100 text-gray-500 mb-2 border border-gray-200">
+                            <div className="inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-[0.2em] bg-white/5 text-purple-300 mb-2 border border-white/10">
                                 Presentation Insight
                             </div>
                             <h1 
                                 ref={titleRef}
-                                className="text-6xl lg:text-7xl font-extrabold tracking-tighter leading-[0.95]"
+                                className="text-5xl lg:text-6xl font-extrabold tracking-tighter leading-[1.0] text-transparent bg-clip-text bg-gradient-to-r from-[#FF5E97] via-[#DF66FF] to-white"
                                 style={{ 
-                                    color: "var(--background-text, #0f172a)",
                                     fontFamily: "'Outfit', sans-serif"
                                 }}
                             >
@@ -152,22 +150,22 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
                             </h1>
                         </div>
 
-                        <div className="w-24 h-1.5 rounded-full" style={{ background: 'linear-gradient(90deg, var(--primary-color, #6366f1), var(--secondary-color, #a855f7))' }}></div>
+                        <div className="w-24 h-1.5 rounded-full" style={{ background: 'linear-gradient(90deg, #FF5E97, #DF66FF)' }}></div>
 
-                        <p className="text-xl text-gray-500 max-w-xl leading-relaxed font-medium">
+                        <p className="text-lg text-white/60 max-w-xl leading-relaxed font-medium">
                             {slideData?.description || 'Strategic overview and detailed roadmap for excellence.'}
                         </p>
 
                         {/* Glassmorphic Presenter Card */}
                         <div 
                             ref={cardRef}
-                            className="inline-flex items-center gap-4 p-5 rounded-2xl border border-white/40 shadow-xl backdrop-blur-xl bg-white/60"
+                            className="inline-flex items-center gap-4 p-5 rounded-2xl border border-white/10 shadow-xl backdrop-blur-xl bg-white/5"
                             style={{ maxWidth: 'fit-content' }}
                         >
                             <div className="relative">
                                 <div className="w-14 h-14 rounded-xl flex items-center justify-center font-bold text-lg shadow-inner"
                                      style={{ 
-                                         background: 'linear-gradient(135deg, var(--primary-color, #6366f1), var(--secondary-color, #a855f7))',
+                                         background: 'linear-gradient(135deg, #FF5E97, #DF66FF)',
                                          color: 'white'
                                      }}>
                                     {presenterInitials}
@@ -175,8 +173,8 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
                                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
                             </div>
                             <div className="flex flex-col pr-4">
-                                <span className="text-sm font-bold text-gray-400 uppercase tracking-tighter">Presented By</span>
-                                <span className="text-xl font-extrabold text-gray-900 tracking-tight">
+                                <span className="text-xs font-bold text-white/40 uppercase tracking-tighter">Presented By</span>
+                                <span className="text-lg font-extrabold text-white tracking-tight">
                                     {slideData?.presenterName || 'John Doe'}
                                 </span>
                             </div>
@@ -187,14 +185,14 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
                     <div className="col-span-5 relative h-full flex items-center justify-center">
                         <div 
                             ref={imageRef}
-                            className="relative w-full aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-2xl group"
+                            className="relative w-full aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-2xl group border border-white/10"
                         >
                             <img
                                 src={slideData?.image?.__image_url__ || ''}
                                 alt={slideData?.image?.__image_prompt__ || ''}
                                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"></div>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
                             
                             {/* Floating stat inside image */}
                             <div className="absolute bottom-6 left-6 right-6 p-4 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white">
@@ -204,8 +202,8 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
                         </div>
                         
                         {/* Decorative ring */}
-                        <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full border-4 border-gray-100 opacity-50 -z-10"></div>
-                        <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full border-[12px] border-gray-50 -z-10"></div>
+                        <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full border-4 border-white/5 opacity-50 -z-10"></div>
+                        <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full border-[12px] border-white/[0.02] -z-10"></div>
                     </div>
 
                 </div>
@@ -214,4 +212,4 @@ const IntroSlideLayout: React.FC<IntroSlideLayoutProps> = ({ data: slideData }) 
     )
 }
 
-export default IntroSlideLayout 
+export default IntroSlideLayout

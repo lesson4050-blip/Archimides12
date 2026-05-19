@@ -230,8 +230,8 @@ class TestE2EProcessTask:
                 MockBus.return_value.remove_consumer = MagicMock()
                 MockBus.return_value.session_id = "test"
 
-                from backend.agent.core import ArchimedesCosmoAgent
-                agent = ArchimedesCosmoAgent(name="TestAgent", session_id="e2e-test")
+                from backend.agent.factory import AgentFactory
+                agent = AgentFactory.create(name="TestAgent", session_id="e2e-test")
 
                 # Force tool_registry ready immediately
                 agent.tool_registry.set_ready()

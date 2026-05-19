@@ -108,10 +108,11 @@ async def test_agent(mock_router, mock_tool_registry, tmp_path):
     with patch("backend.models.model_router.ModelRouter", return_value=mock_router):
         with patch("backend.agent.tool_initializer.ToolInitializer") as mock_init:
             mock_init.return_value.initialize_all = AsyncMock()
-            from backend.agent.core import ArchimedesCosmoAgent
-            agent = ArchimedesCosmoAgent(
+            from backend.agent.factory import AgentFactory
+            agent = AgentFactory.create(
                 name="TestAgent",
                 session_id="test-session"
             )
+            # Ensure the router is the mock router
             agent.router = mock_router
             return agent

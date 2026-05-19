@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
-import { V1ContentRender } from '../../(presentation-generator)/components/V1ContentRender';
+import { PresentationLayoutRenderer } from './PresentationLayoutRenderer';
 
 
 const BASE_WIDTH = 1280;
@@ -82,7 +82,7 @@ const SlideScale = ({
                         aria-hidden="true"
 
                     />}
-                    <V1ContentRender slide={slide} isEditMode={isEditMode} theme={theme} />
+                    <PresentationLayoutRenderer slide={slide} theme={theme} />
                 </div>
 
 

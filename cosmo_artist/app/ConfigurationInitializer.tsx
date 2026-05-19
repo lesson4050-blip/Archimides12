@@ -33,7 +33,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
   const fetchUserConfigState = async () => {
     setIsLoading(true);
 
-    if (route.startsWith('/pdf-maker')) {
+    if (route?.startsWith('/pdf-maker') || (typeof window !== 'undefined' && window.location.pathname.startsWith('/pdf-maker'))) {
       setIsLoading(false);
       return;
     }
@@ -65,7 +65,7 @@ export function ConfigurationInitializer({ children }: { children: React.ReactNo
       dispatch(setLLMConfig(llmConfig));
       const isValid = hasValidLLMConfig(llmConfig);
       console.log('isValid', isValid);
-      if (route.startsWith('/pdf-maker')) {
+      if (route?.startsWith('/pdf-maker') || (typeof window !== 'undefined' && window.location.pathname.startsWith('/pdf-maker'))) {
         setIsLoading(false);
         return;
       }

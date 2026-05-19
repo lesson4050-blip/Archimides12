@@ -137,22 +137,98 @@ PRESENTATION_SCHEMA = {
 }
 
 
-GENERATION_PROMPT = """You are an expert presentation designer for Archimedes AI.
-Create a professional, visually compelling presentation.
+GENERATION_PROMPT = """You are an elite, world-class presentation designer and strategic communicator for Archimedes AI.
+Your goal is to create a presentation that leaves a "wow" impression, blending high-end visual layout choices with deep, analytical, and context-aware content.
+
+ANALYZE TOPIC NATURE & LEVEL OF COMPLEXITY:
+1. First, analyze the topic, audience, and instructions to determine the appropriate depth:
+   - **Scientific / Academic (Научный / Академический)**: (e.g., Quantum physics, neural network architectures, biology, history, academic studies). Use dense, precise, academic style and terminology. Explain concepts deeply. Bullet points must be highly detailed paragraphs of 2-3 sentences. Every bullet point must have between 25 and 45 words.
+   - **Technical / Engineering (Технический / Инженерный)**: (e.g., Code review, software design, infrastructure). Provide precise architecture terms, parameters, code snippets (layout_type="code_showcase").
+   - **Business / Strategic (Бизнес / Стратегический)**: (e.g., Financial reporting, marketing strategy, startup deck). Focus on business metrics, impact, timelines, ROI, structured value propositions.
+   - **Educational / Popular (Образовательный / Популярный)**: (e.g., Intro to astronomy, history for general audience). Clear, engaging explanations, rich analogies, structured definitions.
+   - **Creative / Pitch Deck (Творческий / Питч-дек)**: Punchy, emotionally engaging copy, bold declarations, core stats, and inspiring quotes.
+
+2. Language rule:
+   - Respond in the language of the topic/key points. If the topic is in Russian (or cyrillic), output all slide titles, bodies, and metrics in perfect, natural, professional Russian.
 
 STRICT RULES:
-1. Output ONLY valid JSON matching the schema below
-2. Use varied layout_types — never repeat the same layout 3 times in a row
-3. For hero slide: use layout_type="hero"
-4. For data/metrics: use layout_type="data_grid"
-5. For code: use layout_type="code_showcase"
-6. Keep titles under 8 words
-7. Bullet points: max 6 items, each under 15 words
-8. Every slide must have visual_config.background and visual_config.animation
-9. Use background="dark_gradient" for main slides, vary for emphasis slides
-10. Add speaker_notes to every slide (1-2 sentences)
+1. Output ONLY a valid JSON object instance matching the schema below.
+   DO NOT output a schema definition (do not output "type": "object" or "properties" at the root level).
+   Output the ACTUAL presentation object.
+2. Use varied layout_types — never repeat the same layout 3 times in a row. Use the best fit layout for the slide content.
+3. For hero slide: use layout_type="hero".
+4. For data/metrics: use layout_type="data_grid".
+5. For code: use layout_type="code_showcase".
+6. Avoid superficial content. Forbid generic placeholders ("point 1", "point 2", "etc.", "Lorem Ipsum"). Write highly detailed and domain-specific text.
+7. Title formatting: Every single slide in the presentation (including hero, bullet_list, data_grid, quote, code_showcase, etc.) MUST have a descriptive, non-empty, professional "title" inside the "content" object (max 10-12 words). For data_grid, quote, or other layouts, the title should summarize the theme of the metrics/quote.
+8. Bullet list formatting (layout_type="bullet_list" / "split_content" / "timeline" / "comparison"):
+   - For lists, every item MUST start with a bold key concept name followed by a colon and a space, strictly in the format "Concept: Detailed explanation".
+   - Russian example: "М-теория: 11-мерная супергравитационная модель, которая объединяет пять различных суперструнных теорий в единый математический каркас, предложенный Эдвардом Виттеном в 1995 году."
+   - Every bullet text MUST contain exactly one colon ":" separating the key concept title from its 20-40 word detailed explanation (at least 20-40 words per bullet point).
+   - Max 6 items per slide. Never generate short, lazy, single-word or 3-word bullets.
+9. Stats formatting (layout_type="data_grid"):
+   - Value must be a concrete, realistic metric (e.g., "99.9% Coherence", "$1.3T CAGR").
+   - Label must be a descriptive, professional summary of what the metric represents.
+10. Quote formatting (layout_type="quote"):
+    - Write deep, meaningful, historically/conceptually appropriate quotes with authentic or highly representative authors.
+11. Every slide must have visual_config.background and visual_config.animation.
+12. Use background="dark_gradient" for main slides, vary for emphasis slides.
+13. Add highly professional speaker_notes to every slide (2-3 detailed sentences summarizing delivery advice or extra data).
+14. NO REPETITIONS OR BOILERPLATES: Do NOT repeat the same sentences, phrases, or verbal templates (such as "Это требует глубокого теоретического анализа..." or "Инновационные подходы...") across bullet points or slides. Every single bullet point must contain unique, highly informative, and scientifically accurate facts related to the topic.
 
-Presentation Schema:
+Expected Output JSON Instance Template:
+{{
+  "title": "Descriptive Presentation Title",
+  "subtitle": "Analytical Subtitle",
+  "author": "Author Name",
+  "theme": "archimedes_dark",
+  "slides": [
+    {{
+      "layout_type": "hero",
+      "slide_number": 1,
+      "content": {{
+        "title": "Title of Slide",
+        "subtitle": "Subtitle of Slide"
+      }},
+      "visual_config": {{
+        "background": "dark_gradient",
+        "animation": "fade"
+      }},
+      "speaker_notes": "Detailed speaker notes..."
+    }},
+    {{
+      "layout_type": "bullet_list",
+      "slide_number": 2,
+      "content": {{
+        "title": "Slide Title",
+        "body": [
+          {{
+            "text": "Concept One: Detailed 2-3 sentence explanation with at least 20-40 words.",
+            "icon": "star",
+            "emphasis": true
+          }},
+          {{
+            "text": "Concept Two: Another detailed explanation demonstrating that every single bullet item in the list must strictly follow this colon-separated pattern.",
+            "icon": "circle",
+            "emphasis": false
+          }},
+          {{
+            "text": "Concept Three: Detailed explanation here as well, showing consistency across all elements of the body array.",
+            "icon": "bolt",
+            "emphasis": false
+          }}
+        ]
+      }},
+      "visual_config": {{
+        "background": "dark_gradient",
+        "animation": "slide_up"
+      }},
+      "speaker_notes": "Detailed notes..."
+    }}
+  ]
+}}
+
+Presentation Schema for slides:
 {schema}
 
 Topic: {topic}
@@ -160,7 +236,8 @@ Audience: {audience}
 Slide count: {slide_count}
 Key points to cover: {key_points}
 
-Output ONLY the JSON object. No markdown. No explanation."""
+Output ONLY the raw JSON object, no explanation, no markdown wrapping, no text outside the JSON."""
+
 
 
 class CanvasEngine:
@@ -242,22 +319,66 @@ class CanvasEngine:
             try:
                 response = await self.router.generate(
                     messages=[{"role": "user", "content": prompt}],
-                    task_hint="quality"
+                    task_hint="quality",
+                    max_tokens=4000
                 )
                 
                 text = response.get("text", "")
                 
+                # Auto-repair nested unescaped double quotes inside JSON string fields (like ""text"")
                 import re
-                # Extract JSON from response
-                match = re.search(r'\{.*\}', text, re.DOTALL)
-                if not match:
+                text = re.sub(r'":\s*""([^"]+)""', r'": "\1"', text)
+                text = re.sub(r'":\s*"([^"]+)""\s*(,)?\s*\n', r'": "\1"\2\n', text)
+                
+                from backend.utils.json_repair import repair_and_parse
+                presentation, parse_err = repair_and_parse(text)
+                if presentation is None or not isinstance(presentation, dict):
                     return {
                         "success": False,
-                        "error": "LLM did not return valid JSON",
-                        "raw": text[:500]
+                        "error": f"LLM did not return valid JSON: {parse_err}",
+                        "raw": text
                     }
                 
-                presentation = json.loads(match.group())
+                # Auto-repair presentation slide bullet formats and enrich short text
+                if presentation and isinstance(presentation, dict) and "slides" in presentation:
+                    for slide in presentation["slides"]:
+                        layout = slide.get("layout_type")
+                        content = slide.get("content", {})
+                        if not content:
+                            continue
+                        
+                        body = content.get("body")
+                        if layout in ["bullet_list", "split_content", "timeline", "comparison"] and isinstance(body, list):
+                            for item in body:
+                                if not isinstance(item, dict):
+                                    continue
+                                text = item.get("text", "").strip()
+                                if not text:
+                                    continue
+                                
+                                words = text.split()
+                                
+                                colon_idx = text.find(":")
+                                # A valid concept name should be short (max 40 characters)
+                                if colon_idx == -1 or colon_idx > 40:
+                                    # Extract first 2-3 words as concept name
+                                    concept_words = []
+                                    for w in words[:3]:
+                                        clean_w = w.strip(".,;:!?\"'()«»-—")
+                                        if clean_w:
+                                            concept_words.append(clean_w)
+                                    concept = " ".join(concept_words).capitalize()
+                                    if not concept or len(concept) < 3:
+                                        concept = "Важный тезис"
+                                    
+                                    # Clean up introductory words from the concept if any
+                                    for intro in ["Другим", "Хотя", "Однако", "Поэтому", "Кроме", "Также"]:
+                                        if concept.startswith(intro) and len(concept.split()) > 1:
+                                            concept = concept[len(intro):].strip().capitalize()
+                                            
+                                    text = f"{concept}: {text}"
+                                
+                                item["text"] = text
                 
                 # Add Archimedes metadata
                 from datetime import datetime, timezone
@@ -269,8 +390,8 @@ class CanvasEngine:
                 
                 # Save to file if output_path provided
                 if output_path:
-                    with open(output_path, "w") as f:
-                        json.dump(presentation, f, indent=2)
+                    with open(output_path, "w", encoding="utf-8") as f:
+                        json.dump(presentation, f, indent=2, ensure_ascii=False)
                 
                 return {
                     "success": True,
@@ -279,8 +400,6 @@ class CanvasEngine:
                     "slide_count": len(presentation.get("slides", [])),
                 }
                 
-            except json.JSONDecodeError as e:
-                return {"success": False, "error": f"JSON parse error: {e}"}
             except Exception as e:
                 logger.error(f"Canvas generation error: {e}")
                 return {"success": False, "error": str(e)}

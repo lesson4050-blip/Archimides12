@@ -13,6 +13,7 @@ SECURITY:
 import time
 import json
 import logging
+import re
 from backend.middleware.rate_limiter import research_limiter
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, validator
@@ -127,51 +128,78 @@ async def research_to_slides(request: Request, body: ResearchSlidesRequest):
         from backend.models.model_router import ModelRouter
         router_instance = ModelRouter()
         
-        synthesis_prompt = f"""You are a professional presentation designer.
-Research topic: {body.topic}
+        synthesis_prompt = f"""You are an elite, world-class presentation designer and strategic researcher.
+Your goal is to synthesize the provided research data into an outstanding, professional presentation that leaves a "wow" impression.
+
+Topic: {body.topic}
 Slides requested: {body.slide_count}
-Style: {body.style}
+Requested Style: {body.style}
 
 RESEARCH DATA:
-{search_content if search_content else "Generate from your knowledge."}
+{search_content if search_content else "No web research data available. Generate using your deep scientific/industry knowledge."}
 
-Generate EXACTLY {body.slide_count} slides as a JSON array.
-Return ONLY valid JSON, no other text, no markdown.
+ANALYZE TOPIC NATURE & LEVEL OF COMPLEXITY:
+Identify the topic type to determine tone, terminology density, and text length:
+1. **Scientific / Academic (Научный / Академический)**: Dense, precise, highly formal academic style. Bullet points must be detailed, analytical paragraphs of 2-3 sentences explaining complex mechanisms, theories, and studies.
+2. **Technical / Engineering (Технический / Инженерный)**: Precise architecture, terms, system designs, parameters, and structural components.
+3. **Business / Strategic (Бизнес / Стратегический)**: Analytical structure, emphasis on value propositions, strategic outcomes, business metrics (ROI, CAGR, LTV), market forces.
+4. **Educational / Popular (Образовательный / Популярный)**: Clean, engaging explanations, structured definitions, analogies, and detailed examples.
+5. **Creative / Pitch Deck (Творческий / Питч-дек)**: Compelling value declarations, powerful digital/financial metrics, high-impact quotes.
 
-Each slide must have this structure:
+STRICT WRITING RULES:
+1. **Language Adaptive Rule**: If the topic or research data is in Russian (or Cyrillic), you MUST generate all text (titles, body content, bullets, stats labels, and quotes) in impeccable, natural, professional Russian.
+2. **No Placeholders**: Never use lazy terms, generic fillers ("point 1", "metric a", "etc.", "Lorem Ipsum"). Write domain-specific, informative, and deep content. Integrate real figures, names, years, and facts from the RESEARCH DATA.
+3. **Bullet Formatting**: For slides with "bullets", every item MUST start with a key concept/title followed by a colon and a space, strictly in the format "Concept: Detailed explanation". Every bullet text MUST contain exactly one colon ":" separating the key concept title from the explanation (at least 20-40 words per bullet point, under 280 characters to fit visual boundaries).
+   - Russian example: "Квантовая гравитация: Теория струн пытается объединить квантовую механику и общую теорию относительности в единую теоретическую модель, описывающую все фундаментальные взаимодействия."
+4. **Stats Formatting**: Value must be a concrete, realistic metric (e.g., "99.9% Coherence", "$1.3T CAGR"). Label must be a descriptive summary.
+5. **Quote Formatting**: Deep, historically or conceptually accurate quote with authentic or highly representative author.
+6. **Structure Constraints**:
+   - First slide MUST be type "title".
+   - Last slide MUST be type "closing".
+   - The array must contain EXACTLY {body.slide_count} slides.
+   - Use varied slide types ("title", "content", "bullets", "stats", "quote", "closing") to ensure a dynamic presentation layout.
+7. **NO REPETITIONS OR BOILERPLATES**: Do NOT repeat the same sentences, phrases, or verbal templates (such as "Это требует глубокого теоретического анализа..." or "Инновационные подходы...") across bullet points or slides. Every single bullet point must contain unique, highly informative, and scientifically accurate facts related to the topic.
+
+Output EXACTLY {body.slide_count} slides as a JSON array. Do not include markdown formatting or wrapping around the JSON, return ONLY the raw valid JSON.
+
+JSON Structure for each slide:
 {{
   "type": "title|content|bullets|stats|quote|closing",
-  "title": "Slide title (max 80 chars)",
-  "content": "Main text (max 500 chars)",
-  "bullets": ["point 1", "point 2"],
-  "stats": [{{"value": "95%", "label": "description"}}]
+  "title": "Descriptive and professional title (max 200 chars)",
+  "content": "Rich, detailed main text or context (max 1000 chars)",
+  "bullets": [
+    "Concept: Detailed 2-3 sentence explanation (20-40 words)",
+    "Concept: Detailed 2-3 sentence explanation (20-40 words)"
+  ],
+  "stats": [
+    {{
+      "value": "99.9%",
+      "label": "Detailed metric description (max 100 chars)"
+    }}
+  ]
 }}
 
-First slide must be type "title".
-Last slide must be type "closing".
-Make it informative and professional.
-Return ONLY the JSON array, nothing else."""
+Return ONLY the JSON array, nothing else. Make the content extremely professional, academic, and deep."""
 
         llm_response = await router_instance.generate(
             messages=[{"role": "user", "content": synthesis_prompt}],
             task_hint="quality",
             temperature=0.4,
-            max_tokens=3000,
+            max_tokens=4000,
         )
         
         raw_text = llm_response.get("text", "")
         
-        # STEP 3: Parse and validate JSON
-        # Strip markdown code fences if present
-        clean_text = re.sub(r"```(?:json)?\s*", "", raw_text).strip()
-        clean_text = clean_text.rstrip("`").strip()
+        # Auto-repair nested unescaped double quotes inside JSON string fields (like ""text"")
+        import re
+        raw_text = re.sub(r'":\s*""([^"]+)""', r'": "\1"', raw_text)
+        raw_text = re.sub(r'":\s*"([^"]+)""\s*(,)?\s*\n', r'": "\1"\2\n', raw_text)
         
-        try:
-            slides_raw = json.loads(clean_text)
-            if not isinstance(slides_raw, list):
-                raise ValueError("Expected JSON array")
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Failed to parse slides JSON: {e}. Raw: {raw_text[:200]}")
+        # STEP 3: Parse and validate JSON
+        from backend.utils.json_repair import repair_and_parse
+        slides_raw, parse_err = repair_and_parse(raw_text)
+        if slides_raw is None or not isinstance(slides_raw, list):
+            logger.error(f"Failed to parse slides JSON: {parse_err}. Raw: {raw_text[:300]}")
             raise HTTPException(
                 status_code=422,
                 detail="Failed to generate valid slide structure. Please try again."

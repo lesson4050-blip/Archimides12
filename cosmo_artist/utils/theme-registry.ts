@@ -22,7 +22,7 @@ export const THEME_REGISTRY: Record<string, ThemeVariables> = {
     '--border-primary': 'rgba(99, 102, 241, 0.2)',
     '--glass-bg': 'rgba(15, 23, 42, 0.7)',
     '--glass-border': 'rgba(255, 255, 255, 0.08)',
-    '--font-main': 'var(--font-syne), sans-serif',
+    '--font-main': 'var(--font-rubik), sans-serif',
   },
   midnight_obsidian: {
     '--bg-primary': '#000000',

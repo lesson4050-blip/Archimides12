@@ -15,10 +15,10 @@ const nextConfig = {
         source: '/static/:path*',
         destination: 'http://localhost:5051/static/:path*',
       },
-      {
-        source: '/api/v1/ppt/:path*',
-        destination: 'http://localhost:5051/api/v1/ppt/:path*',
-      },
+      // {
+      //   source: '/api/v1/ppt/:path*',
+      //   destination: 'http://localhost:5051/api/v1/ppt/:path*',
+      // },
     ];
   },
 

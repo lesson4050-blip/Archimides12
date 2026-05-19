@@ -67,6 +67,9 @@ TASK_CLASSIFIERS = {
 
 MAX_TOOLS = 12
 
+# Essential tools that must always be available to the agent for recovery and operations
+ESSENTIAL_TOOLS = {"search", "shell", "file"}
+
 def select_tools(
     task: str,
     all_tool_definitions: List[Dict[str, Any]],
@@ -95,6 +98,7 @@ def select_tools(
             break
             
     desired = set(TOOL_PROFILES.get(matched_profile, TOOL_PROFILES["default"]))
+    desired.update(ESSENTIAL_TOOLS)
     desired -= excluded
     
     selected = []

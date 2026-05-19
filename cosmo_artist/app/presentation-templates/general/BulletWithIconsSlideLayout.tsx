@@ -62,8 +62,6 @@ interface BulletWithIconsSlideLayoutProps {
 const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({ data: slideData }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const titleRef = useRef<HTMLHeadingElement>(null);
-    const contentRef = useRef<HTMLDivElement>(null);
-    const bulletRef = useRef<HTMLDivElement>(null);
     const bulletPoints = slideData?.bulletPoints || []
 
     useEffect(() => {
@@ -99,20 +97,28 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
 
             <div
                 ref={containerRef}
-                className="w-full rounded-sm max-w-[1280px] shadow-2xl max-h-[720px] aspect-video relative z-20 mx-auto overflow-hidden border border-gray-100"
+                className="w-full rounded-sm max-w-[1280px] shadow-2xl max-h-[720px] aspect-video relative z-20 mx-auto overflow-hidden border border-white/5"
                 style={{
                     fontFamily: "'Plus Jakarta Sans', sans-serif",
-                    background: "var(--background-color, #FAFAFA)"
+                    background: "#080615"
                 }}
             >
                 {/* Subtle Grid Background */}
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
+                <div className="absolute inset-0 opacity-[0.02] pointer-events-none">
                     <svg width="100%" height="100%">
                         <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
-                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" />
+                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1" />
                         </pattern>
                         <rect width="100%" height="100%" fill="url(#grid-pattern)" />
                     </svg>
+                </div>
+
+                {/* Decorative blobs */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="bg-accent-blob bg-accent-blob-1 absolute -top-20 -left-20 w-96 h-96 rounded-full blur-[100px]" 
+                         style={{ background: 'rgba(139, 92, 246, 0.2)' }}></div>
+                    <div className="bg-accent-blob bg-accent-blob-2 absolute -bottom-20 -right-20 w-[500px] h-[500px] rounded-full blur-[120px]" 
+                         style={{ background: 'rgba(236, 72, 153, 0.15)' }}></div>
                 </div>
 
                 {/* Company Logo / Header */}
@@ -123,13 +129,13 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
                                 <img src={(slideData as any)?._logo_url__} alt="logo" className="w-8 h-8 object-contain" />
                             )}
                             {(slideData as any)?.__companyName__ && (
-                                <span className="text-lg font-bold tracking-tight text-gray-800">
+                                <span className="text-lg font-bold tracking-tight text-white/90">
                                     {(slideData as any)?.__companyName__}
                                 </span>
                             )}
                         </div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 border-l border-gray-300 pl-4">
-                            Strategic Brief / Page 04
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-white/40 border-l border-white/20 pl-4">
+                            Strategic Brief
                         </div>
                     </div>
                 </div>
@@ -137,11 +143,11 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
                 {/* Main Content */}
                 <div className="flex flex-col h-full px-12 pt-28 pb-12">
                     {/* Title Section */}
-                    <div className="mb-12 relative">
-                        <div className="absolute -left-4 top-0 w-1 h-full rounded-full" style={{ background: 'var(--primary-color, #6366f1)' }}></div>
+                    <div className="mb-10 relative pl-4">
+                        <div className="absolute left-0 top-0 w-1 h-full rounded-full" style={{ background: 'linear-gradient(180deg, #FF5E97, #DF66FF)' }}></div>
                         <h1 
                             ref={titleRef}
-                            className="text-5xl lg:text-6xl font-extrabold tracking-tight text-gray-900"
+                            className="text-4xl lg:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#FF5E97] via-[#DF66FF] to-white"
                             style={{ fontFamily: "'Outfit', sans-serif" }}
                         >
                             {slideData?.title || 'Strategic Challenges'}
@@ -153,40 +159,39 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
                         
                         {/* Left: Image */}
                         <div className="col-span-5 image-container relative h-full">
-                            <div className="w-full h-full rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white">
+                            <div className="w-full h-full rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white/5">
                                 <img
                                     src={slideData?.image?.__image_url__ || ''}
                                     alt={slideData?.image?.__image_prompt__ || ''}
                                     className="w-full h-full object-cover"
                                 />
                             </div>
-                            {/* Decorative element */}
-                            <div className="absolute -bottom-6 -right-6 w-32 h-32 rounded-full blur-3xl opacity-20 -z-10"
-                                 style={{ background: 'var(--primary-color, #6366f1)' }}></div>
                         </div>
 
                         {/* Right: Bullet Points */}
-                        <div className="col-span-7 flex flex-col justify-center space-y-6">
-                            <p className="text-xl text-gray-500 font-medium mb-4 leading-relaxed italic">
-                                "{slideData?.description || 'Navigating complex market dynamics requires precision.'}"
-                            </p>
+                        <div className="col-span-7 flex flex-col justify-center space-y-4">
+                            {slideData?.description && (
+                                <p className="text-lg text-white/60 font-medium mb-2 leading-relaxed italic">
+                                    "{slideData.description}"
+                                </p>
+                            )}
 
                             <div className="space-y-4">
                                 {bulletPoints.map((bullet, index) => (
                                     <div 
                                         key={index} 
-                                        className="bullet-card flex items-start gap-5 p-6 rounded-[1.5rem] bg-white border border-gray-100 shadow-sm transition-all hover:shadow-md hover:border-gray-200"
+                                        className="bullet-card flex items-start gap-5 p-5 rounded-[1.5rem] bg-white/[0.02] border border-white/5 shadow-xl backdrop-blur-md transition-all hover:bg-white/[0.05] hover:border-white/10"
                                     >
                                         {/* Icon Container */}
-                                        <div className="flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
+                                        <div className="flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg animate-pulse"
                                              style={{ 
-                                                 background: 'linear-gradient(135deg, var(--primary-color, #6366f1) 0%, var(--secondary-color, #a855f7) 100%)',
-                                                 boxShadow: '0 8px 16px -4px rgba(99, 102, 241, 0.3)'
+                                                 background: 'linear-gradient(135deg, #FF5E97 0%, #DF66FF 100%)',
+                                                 boxShadow: '0 8px 16px -4px rgba(255, 94, 151, 0.4)'
                                              }}>
                                             <RemoteSvgIcon
                                                 url={bullet.icon.__icon_url__}
                                                 strokeColor={"currentColor"}
-                                                className="w-7 h-7"
+                                                className="w-6 h-6"
                                                 color="white"
                                                 title={bullet.icon.__icon_query__}
                                             />
@@ -194,10 +199,10 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
 
                                         {/* Text Content */}
                                         <div className="flex-1">
-                                            <h3 className="text-xl font-bold text-gray-900 mb-1 tracking-tight">
+                                            <h3 className="text-lg font-bold text-white mb-1 tracking-tight">
                                                 {bullet.title}
                                             </h3>
-                                            <p className="text-base text-gray-500 leading-snug font-medium">
+                                            <p className="text-sm text-white/50 leading-snug font-medium">
                                                 {bullet.description}
                                             </p>
                                         </div>
@@ -212,4 +217,4 @@ const BulletWithIconsSlideLayout: React.FC<BulletWithIconsSlideLayoutProps> = ({
     )
 }
 
-export default BulletWithIconsSlideLayout 
+export default BulletWithIconsSlideLayout

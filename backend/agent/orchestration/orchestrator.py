@@ -139,7 +139,7 @@ ROUTING_RULES = [
     # (pattern, complexity, strategy)
     (r"(write|create|implement|build|code|script|function|class|api|endpoint)",
      "complex", "swarm_code"),
-    (r"(research|find|search|analyze|compare|summarize|report|study)",
+    (r"(research|find|search|analyze|compare|summarize|report|study|найди|поищи|найти|исследуй|новости|анализ)",
      "complex", "swarm_research"),
     (r"(present|slide|deck|pitch|визуал|presentation)",
      "complex", "single_slides"),
@@ -170,11 +170,10 @@ async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, s
     Signal 3: LLM classification (slow but accurate fallback)
     """
     SEARCH_DIRECT = re.compile(
-        r'\b(найди|поищи|найти|расскажи|новости|news|latest|what is|who is|'
-        r'search for|find|look up|покажи|что такое|почему|разница|explain|why)\b',
+        r'\b(расскажи|what is|who is|покажи|что такое|почему|разница|explain|why)\b',
         re.IGNORECASE
     )
-    if SEARCH_DIRECT.search(text) and not any(w in text.lower() for w in ['код', 'code', 'fix', 'bug', 'implement']):
+    if SEARCH_DIRECT.search(text) and not any(w in text.lower() for w in ['код', 'code', 'fix', 'bug', 'implement', 'error', 'errors', 'issue', 'issues', 'test', 'tests', 'problem', 'problems', 'ошиб', 'баг']):
         return "simple", "direct"
 
     text_lower = text.lower().strip()

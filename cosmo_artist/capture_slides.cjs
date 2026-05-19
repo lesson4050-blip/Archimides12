@@ -13,7 +13,7 @@ async function captureSlides(presentationId, outputDir) {
   // Set viewport to 1280x720, which is standard 16:9
   await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 2 });
   
-  const url = `http://localhost:3005/pdf-maker?id=${presentationId}&fastapiUrl=http://localhost:5051`;
+  const url = `http://localhost:3005/pdf-maker?id=${presentationId}&fastapiUrl=http://localhost:3005`;
   console.log(`Navigating to ${url}`);
   
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });

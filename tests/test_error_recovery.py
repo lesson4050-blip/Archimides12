@@ -147,12 +147,14 @@ async def test_backoff_delay():
 
 # ─── Git checkpoints (no real git) ───────────────────────────────
 
-def test_create_checkpoint_no_workspace():
+@pytest.mark.asyncio
+async def test_create_checkpoint_no_workspace():
     er = ErrorRecovery(workspace_dir=None)
-    result = er.create_checkpoint("session1")
+    result = await er.create_checkpoint("session1")
     assert result is None
 
 
-def test_rollback_no_checkpoint():
+@pytest.mark.asyncio
+async def test_rollback_no_checkpoint():
     er = ErrorRecovery()
-    assert er.rollback_to_checkpoint("unknown") is False
+    assert await er.rollback_to_checkpoint("unknown") is False

@@ -11,12 +11,12 @@ MAX_TOOL_CALL_RETRIES = 3
 
 
 OLLAMA_TIMEOUT_MAP = {
-    "qwen2.5:14b": 120.0,
-    "qwen2.5:32b": 180.0,
-    "qwen2.5-coder:14b": 120.0,
-    "qwen2.5:72b": 300.0,
-    "qwen2.5:7b": 60.0,
-    "default": 120.0
+    "qwen2.5:14b": 600.0,
+    "qwen2.5:32b": 900.0,
+    "qwen2.5-coder:14b": 600.0,
+    "qwen2.5:72b": 1200.0,
+    "qwen2.5:7b": 300.0,
+    "default": 600.0
 }
 
 class OllamaClient:
@@ -112,7 +112,6 @@ NEVER mix tool JSON with explanation text.
                 "num_gpu": 999,
                 "num_thread": 8,
                 "keep_alive": "10m",
-                "low_vram": False,
             }
         }
 
@@ -187,7 +186,6 @@ NEVER mix tool JSON with explanation text.
                             "num_gpu": 999,
                             "num_thread": 8,
                             "keep_alive": "10m",
-                            "low_vram": False,
                         }
                     }
                     client = self._get_client(chat_kwargs["model"])
