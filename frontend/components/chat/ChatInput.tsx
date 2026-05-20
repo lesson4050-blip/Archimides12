@@ -5,6 +5,7 @@ import { Search, Plus, Globe, Mic, X } from "lucide-react";
 import VoiceVisualizer from "../VoiceVisualizer";
 import ModeSelector from "../ModeSelector";
 import { useAppStore } from "@/lib/store";
+import { useVoiceMode } from "@/hooks/useVoiceMode";
 
 export default function ChatInput({
   currentMode,
@@ -23,6 +24,7 @@ export default function ChatInput({
   stopTask: () => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
 }) {
+  const { toggleMic: voiceToggleMic, isTranscribing, voiceError } = useVoiceMode();
   const {
     input,
     setInput,
@@ -108,13 +110,19 @@ export default function ChatInput({
               </div>
               
               <div className="flex items-center gap-2">
-                 <button 
-                   onClick={toggleMic}
-                   className={`p-2 rounded-full transition-colors tooltip tooltip-top ${isListening ? "text-red-400 bg-red-900/30 animate-pulse" : "text-gray-400 hover:text-white"}`}
-                   title="Голосовой ввод"
-                 >
-                   <Mic size={16} />
-                 </button>
+                  {isTranscribing && (
+                    <span className="text-xs text-purple-400 animate-pulse">transcribing...</span>
+                  )}
+                  {voiceError && (
+                    <span className="text-xs text-red-400">{voiceError}</span>
+                  )}
+                  <button 
+                    onClick={voiceToggleMic}
+                    className={`p-2 rounded-full transition-colors tooltip tooltip-top ${isListening ? "text-red-400 bg-red-900/30 animate-pulse" : "text-gray-400 hover:text-white"}`}
+                    title="Голосовой ввод"
+                  >
+                    <Mic size={16} />
+                  </button>
                  {isWorking ? (
                     <button 
                        onClick={stopTask}
