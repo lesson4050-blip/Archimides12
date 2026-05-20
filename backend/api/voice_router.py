@@ -15,12 +15,12 @@ import time
 import logging
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse
+from backend.middleware.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 
-_voice_rate: dict = {}
-_VOICE_RPM = 20
+voice_limiter = RateLimiter(requests_per_minute=20, name="voice")
 _MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 _ALLOWED_TYPES = {"audio/webm", "audio/wav", "audio/mp3", "audio/mpeg",
                    "audio/ogg", "audio/mp4", "audio/x-m4a", "video/webm"}
@@ -81,16 +81,6 @@ def apply_code_corrections(text: str) -> str:
         result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
     return result
 
-def _check_rate(client_ip: str) -> bool:
-    now = time.time()
-    window = now - 60
-    history = [t for t in _voice_rate.get(client_ip, []) if t > window]
-    if len(history) >= _VOICE_RPM:
-        return False
-    history.append(now)
-    _voice_rate[client_ip] = history
-    return True
-
 @router.post("/transcribe")
 async def transcribe_audio(
     request: Request,
@@ -99,7 +89,7 @@ async def transcribe_audio(
     """Transcribe audio to text using Whisper or Web Speech fallback."""
     
     client_ip = request.client.host if request.client else "unknown"
-    if not _check_rate(client_ip):
+    if not voice_limiter.is_allowed(client_ip):
         raise HTTPException(status_code=429, detail="Rate limit: 20 transcriptions/minute")
     
     # Validate file type
