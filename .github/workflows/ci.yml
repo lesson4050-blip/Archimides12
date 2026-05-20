@@ -42,6 +42,11 @@ jobs:
             --ignore=tests/test_e2e.py \
             -m "not integration" \
             -o "addopts="
+          pytest tests/test_prompt_injection.py tests/test_security_hardening.py -v
+
+      - name: Security Tests
+        run: |
+          PYTHONPATH=. pytest tests/test_prompt_injection.py tests/test_security_hardening.py -v --tb=short
 
       - name: Verify GOD MODE module imports
         env:

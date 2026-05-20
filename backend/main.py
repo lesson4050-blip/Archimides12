@@ -240,7 +240,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Archimedes COSMO",
     description="AI-powered full-stack development agent with specialized MCTS reasoning.",
-    version="0.2.0",
+    version="3.0.0",
     lifespan=lifespan
 )
 
@@ -476,11 +476,14 @@ async def security_audit_log(last_n: int = 50):
     """Returns recent security decisions for monitoring."""
     if last_n > 500:
         last_n = 500  # Cap
-    from backend.websocket.handler import _injection_guard
-    return {
-        "entries": _injection_guard.get_audit_log(last_n),
-        "total_logged": len(_injection_guard._audit_log),
-    }
+    try:
+        from backend.websocket.handler import _injection_guard
+        entries = _injection_guard.get_audit_log(last_n)
+        total = len(_injection_guard._audit_log)
+    except ImportError:
+        entries = []
+        total = 0
+    return {"entries": entries, "total_logged": total}
 
 @app.get("/api/v1/self-improvement/history")
 async def prompt_version_history(limit: int = 10):

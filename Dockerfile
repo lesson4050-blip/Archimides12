@@ -57,7 +57,7 @@ RUN mkdir -p /app/logs /app/data /app/workspace && \
     chmod -R 755 /app
 
 # Expose ports
-EXPOSE 8000
+EXPOSE 8001
 
 # Startup script (lightweight init check only)
 RUN cat > /app/start.sh << 'EOF'
@@ -82,7 +82,7 @@ EOF
 RUN chmod +x /app/start.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+    CMD curl -f http://localhost:8001/api/health || exit 1
 
 # Use shell form so uvicorn is PID 1 and receives SIGTERM directly.
 # --workers 1 inside async FastAPI — multiple workers share no state.
@@ -90,6 +90,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 ENTRYPOINT ["/app/start.sh"]
 CMD ["python3", "-m", "uvicorn", "backend.main:app", \
      "--host", "0.0.0.0", \
-     "--port", "8000", \
+     "--port", "8001", \
      "--workers", "1", \
      "--timeout-graceful-shutdown", "30"]
