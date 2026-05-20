@@ -104,14 +104,8 @@ async def lifespan(app: FastAPI):
     from backend.tools.scheduler_singleton import get_scheduler
     get_scheduler().start()
     
-    # Start COSMO Presentation engine
-    logger.info("Initializing COSMO Presentation engine...")
-    try:
-        from backend.cosmo.engine import start_engine, stop_engine
-        safe_create_task(start_engine())
-        logger.info("COSMO Presentation engine starting...")
-    except ImportError:
-        logger.warning("COSMO engine not found. Skipping.")
+    # Start COSMO Presentation engine (legacy module placeholder)
+    pass
 
     # ChromaDB Monitoring Task
     async def _monitor_chroma():
@@ -170,13 +164,8 @@ async def lifespan(app: FastAPI):
 
     safe_create_task(_archive_old_facts())
 
-    # Start COSMO Artist (Next.js template server)
-    try:
-        from backend.cosmo.artist import start_artist, stop_artist as stop_artist_fn
-        artist_task = safe_create_task(start_artist())
-        logger.info("COSMO Artist server starting on port 3005...")
-    except ImportError:
-        logger.warning("COSMO Artist not found. Skipping.")
+    # Start COSMO Artist (Next.js template server - legacy module placeholder)
+    pass
     
     logger.info(f"Auth: {'ENABLED' if settings.AUTH_ENABLED else 'DISABLED (dev mode)'}")
     logger.info(f"Database: {settings.DATABASE_URL.split('@')[-1] if '@' in settings.DATABASE_URL else settings.DATABASE_URL}")
@@ -226,16 +215,8 @@ async def lifespan(app: FastAPI):
         self_play_loop_instance.stop()
 
     await sandbox_manager.cleanup()
-    try:
-        from backend.cosmo.engine import stop_engine
-        await stop_engine()
-    except ImportError:
-        pass
-    try:
-        from backend.cosmo.artist import stop_artist as stop_artist_fn
-        await stop_artist_fn()
-    except ImportError:
-        pass
+    # Legacy engine/artist shutdown placeholder
+    pass
 
 app = FastAPI(
     title="Archimedes COSMO",
