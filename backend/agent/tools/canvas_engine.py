@@ -352,13 +352,13 @@ class CanvasEngine:
                             for item in body:
                                 if not isinstance(item, dict):
                                     continue
-                                text = item.get("text", "").strip()
-                                if not text:
+                                item_text = item.get("text", "").strip()
+                                if not item_text:
                                     continue
                                 
-                                words = text.split()
+                                words = item_text.split()
                                 
-                                colon_idx = text.find(":")
+                                colon_idx = item_text.find(":")
                                 # A valid concept name should be short (max 40 characters)
                                 if colon_idx == -1 or colon_idx > 40:
                                     # Extract first 2-3 words as concept name
@@ -376,9 +376,9 @@ class CanvasEngine:
                                         if concept.startswith(intro) and len(concept.split()) > 1:
                                             concept = concept[len(intro):].strip().capitalize()
                                             
-                                    text = f"{concept}: {text}"
+                                    item_text = f"{concept}: {item_text}"
                                 
-                                item["text"] = text
+                                item["text"] = item_text
                 
                 # Add Archimedes metadata
                 from datetime import datetime, timezone

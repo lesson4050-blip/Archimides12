@@ -101,7 +101,7 @@ NEVER mix tool JSON with explanation text.
         max_tokens: int = 4096
     ) -> Any:
         chat_kwargs = {
-            "model": self._select_model(self._current_task_hint) if hasattr(self, '_current_task_hint') else self.model,
+            "model": self._select_model(getattr(self, "_current_task_hint", "default")),
             "messages": messages,
             "options": {
                 "num_ctx": min(
@@ -174,7 +174,7 @@ NEVER mix tool JSON with explanation text.
                 # If force_json_schema and no tools, apply format constraint
                 if force_json_schema and not tools:
                     chat_kwargs = {
-                        "model": self._select_model(self._current_task_hint) if hasattr(self, '_current_task_hint') else self.model,
+                        "model": self._select_model(getattr(self, "_current_task_hint", "default")),
                         "messages": messages,
                         "format": force_json_schema,
                         "options": {
