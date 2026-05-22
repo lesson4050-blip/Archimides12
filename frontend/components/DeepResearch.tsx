@@ -2,20 +2,14 @@
 
 import { useState } from 'react'
 
-interface Slide {
-  type: string
-  title: string
-  content: string
-  bullets: string[]
-  stats: { value: string; label: string }[]
-}
-
-interface ResearchResult {
+interface MarpResult {
+  success: boolean
   topic: string
   slide_count: number
   style: string
   elapsed_seconds: number
-  slides: Slide[]
+  markdown: string
+  html: string
   search_used: boolean
   model: string
 }
@@ -27,22 +21,15 @@ const STYLES = [
   { value: 'technical', label: '⚙️ Technical' },
 ]
 
-const TYPE_COLORS: Record<string, string> = {
-  title:   'from-blue-600/20 to-purple-600/20 border-blue-500/30',
-  closing: 'from-green-600/20 to-teal-600/20 border-green-500/30',
-  stats:   'from-orange-600/20 to-yellow-600/20 border-orange-500/30',
-  quote:   'from-pink-600/20 to-rose-600/20 border-pink-500/30',
-  default: 'from-gray-700/30 to-gray-800/30 border-gray-600/30',
-}
-
 export default function DeepResearch() {
   const [topic, setTopic] = useState('')
   const [slideCount, setSlideCount] = useState(6)
   const [style, setStyle] = useState('professional')
-  const [result, setResult] = useState<ResearchResult | null>(null)
+  const [result, setResult] = useState<MarpResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeSlide, setActiveSlide] = useState(0)
+  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   const runResearch = async () => {
     if (!topic.trim() || loading) return
@@ -54,11 +41,11 @@ export default function DeepResearch() {
     setLoading(true)
     setError(null)
     setResult(null)
-    setActiveSlide(0)
+    setActiveTab('preview')
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
-      const resp = await fetch(`${apiUrl}/api/v1/research-to-slides`, {
+      const resp = await fetch(`${apiUrl}/api/v1/research-to-marp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -66,7 +53,7 @@ export default function DeepResearch() {
           slide_count: slideCount,
           style,
         }),
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.timeout(120000), // 2 minutes timeout for deep research + CLI compile
       })
 
       if (!resp.ok) {
@@ -74,11 +61,11 @@ export default function DeepResearch() {
         throw new Error(data.detail || `Error ${resp.status}`)
       }
 
-      const data: ResearchResult = await resp.json()
+      const data: MarpResult = await resp.json()
       setResult(data)
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.name === 'TimeoutError' ? 'Research timed out (90s)' : err.message)
+        setError(err.name === 'TimeoutError' ? 'Research timed out (120s)' : err.message)
       } else {
         setError('Unknown error occurred')
       }
@@ -87,213 +74,249 @@ export default function DeepResearch() {
     }
   }
 
-  const currentSlide = result?.slides[activeSlide]
-  const colorClass = TYPE_COLORS[currentSlide?.type ?? ''] ?? TYPE_COLORS.default
+  const downloadHtml = () => {
+    if (!result) return
+    const blob = new Blob([result.html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${result.topic.slice(0, 30).replace(/[^a-zA-Z0-9а-яА-Я]+/g, '_')}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportPdf = async () => {
+    if (!result || exportingPdf) return
+    setExportingPdf(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'
+      const resp = await fetch(`${apiUrl}/api/v1/export-marp-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markdown: result.markdown }),
+      })
+      if (!resp.ok) throw new Error('PDF export failed')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${result.topic.slice(0, 30).replace(/[^a-zA-Z0-9а-яА-Я]+/g, '_')}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error(err)
+      alert('Failed to export vector PDF. Please ensure node / marp-cli dependencies are met on the server.')
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   return (
-    <div className="flex flex-col gap-4 p-4 max-w-5xl mx-auto">
+    <div className="flex flex-col gap-5 p-5 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <span className="text-xl">🔬</span>
-        <h2 className="text-lg font-semibold text-white">Deep Research → Slides</h2>
-        <span className="text-xs text-gray-500 ml-2">
-          Research any topic and generate a presentation instantly
-        </span>
+      <div className="flex items-center justify-between border-b border-white/5 pb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl animate-pulse">🔬</span>
+          <div>
+            <h2 className="text-xl font-bold text-white tracking-tight">Archimedes Marp Slides</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Deep web research synthesized instantly into premium Markdown presentations
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-col gap-3">
+      {/* Inputs and Controls */}
+      <div className="flex flex-col gap-4 bg-white/[0.02] border border-white/10 rounded-2xl p-5 shadow-xl">
         <textarea
           value={topic}
           onChange={e => setTopic(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) runResearch() }}
-          placeholder="Enter research topic (e.g. 'The future of quantum computing')"
+          placeholder="Enter research topic (e.g. 'The mechanism of CRISPR gene editing or history of Byzantine architecture')"
           maxLength={500}
           rows={2}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-gray-500"
+          className="w-full bg-gray-900/50 border border-white/10 rounded-xl p-4 text-sm text-white placeholder-gray-500 resize-none focus:outline-none focus:border-purple-500/50 transition-colors"
         />
 
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Style selector */}
-          <div className="flex gap-1">
-            {STYLES.map(s => (
-              <button
-                key={s.value}
-                onClick={() => setStyle(s.value)}
-                className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
-                  style === s.value
-                    ? 'bg-white/20 text-white'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Style Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-medium">Style:</span>
+            <div className="flex gap-1.5">
+              {STYLES.map(s => (
+                <button
+                  key={s.value}
+                  onClick={() => setStyle(s.value)}
+                  className={`text-xs px-3.5 py-2 rounded-lg font-medium transition-all ${
+                    style === s.value
+                      ? 'bg-purple-600/30 border border-purple-500/50 text-white'
+                      : 'bg-white/5 border border-white/5 text-gray-400 hover:bg-white/10'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Slide count */}
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-xs text-gray-500">Slides:</span>
-            {[4, 6, 8, 10].map(n => (
-              <button
-                key={n}
-                onClick={() => setSlideCount(n)}
-                className={`text-xs w-8 h-7 rounded transition-colors ${
-                  slideCount === n
-                    ? 'bg-white/20 text-white'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
+          {/* Slide Count Selector */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500 font-medium">Slides:</span>
+              {[4, 6, 8, 10, 12].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setSlideCount(n)}
+                  className={`text-xs w-9 h-8 rounded-lg font-semibold transition-all ${
+                    slideCount === n
+                      ? 'bg-purple-600/30 border border-purple-500/50 text-white'
+                      : 'bg-white/5 border border-white/5 text-gray-400 hover:bg-white/10'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
 
-          <button
-            onClick={runResearch}
-            disabled={loading || !topic.trim()}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
-          >
-            {loading ? '⟳ Researching...' : '🔬 Research & Generate'}
-          </button>
+            <button
+              onClick={runResearch}
+              disabled={loading || !topic.trim()}
+              className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/10 flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <span className="animate-spin">⟳</span>
+                  Researching...
+                </>
+              ) : (
+                <>
+                  <span>🔬</span>
+                  Generate Slides
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Error */}
+      {/* Error Frame */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-400 font-medium flex items-center gap-2 animate-shake">
+          <span>⚠️</span>
           {error}
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading State */}
       {loading && (
-        <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-8 text-center">
-          <div className="text-3xl mb-3 animate-pulse">🔬</div>
-          <p className="text-gray-300 text-sm">Researching and generating slides...</p>
-          <p className="text-gray-500 text-xs mt-1">This may take 20-40 seconds</p>
+        <div className="bg-white/[0.01] border border-white/5 rounded-2xl p-12 flex flex-col items-center justify-center text-center shadow-inner min-h-[350px]">
+          <div className="text-5xl mb-4 animate-bounce">🤖</div>
+          <h3 className="text-lg font-bold text-white mb-2">Researching & Formatting slides</h3>
+          <p className="text-gray-400 text-sm max-w-sm">
+            Archimedes is querying search providers, analyzing articles, and synthesizing Markdown slides...
+          </p>
+          <div className="mt-6 flex gap-2">
+            <span className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce delay-100" />
+            <span className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce delay-200" />
+            <span className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce delay-300" />
+          </div>
         </div>
       )}
 
-      {/* Result */}
+      {/* Presentation Workspace */}
       {result && !loading && (
-        <div className="flex flex-col gap-4">
-          {/* Meta bar */}
-          <div className="flex items-center gap-4 text-xs text-gray-500">
-            <span>📊 {result.slide_count} slides</span>
-            <span>⏱️ {result.elapsed_seconds}s</span>
-            <span>{result.search_used ? '🌐 Web researched' : '🧠 From knowledge'}</span>
-            <span className="truncate">🤖 {result.model}</span>
-          </div>
-
-          {/* Slide navigation */}
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {result.slides.map((slide, i) => (
+        <div className="flex flex-col gap-4 animate-fadeIn">
+          {/* Metadata Ribbon */}
+          <div className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 text-xs text-gray-400 flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <span>📊 <strong>{result.slide_count}</strong> slides</span>
+              <span>⏱️ <strong>{result.elapsed_seconds}s</strong> elapsed</span>
+              <span>{result.search_used ? '🌐 Web Researched' : '🧠 Internal Knowledge'}</span>
+              <span className="truncate">🤖 Model: <strong>{result.model}</strong></span>
+            </div>
+            
+            {/* View Mode Toggle */}
+            <div className="flex bg-white/5 p-0.5 rounded-lg border border-white/5">
               <button
-                key={i}
-                onClick={() => setActiveSlide(i)}
-                className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg transition-colors ${
-                  i === activeSlide
-                    ? 'bg-white/20 text-white'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                onClick={() => setActiveTab('preview')}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  activeTab === 'preview' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white'
                 }`}
               >
-                {i + 1}. {slide.title.slice(0, 20)}{slide.title.length > 20 ? '...' : ''}
+                👁️ Preview
               </button>
-            ))}
+              <button
+                onClick={() => setActiveTab('code')}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  activeTab === 'code' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                📝 Markdown
+              </button>
+            </div>
           </div>
 
-          {/* Active slide */}
-          {currentSlide && (
-            <div className={`rounded-xl border bg-gradient-to-br p-6 min-h-[300px] flex flex-col gap-4 ${colorClass}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400 uppercase tracking-wider">
-                  {currentSlide.type} · Slide {activeSlide + 1}/{result.slide_count}
-                </span>
-                <button
-                  onClick={() => navigator.clipboard.writeText(
-                    JSON.stringify(currentSlide, null, 2)
-                  )}
-                  className="text-xs text-gray-500 hover:text-gray-300"
-                >
-                  Copy JSON
-                </button>
+          {/* Active Workspace Tabs */}
+          {activeTab === 'preview' ? (
+            <div className="flex flex-col gap-3">
+              {/* Responsive Widescreen Iframe Container */}
+              <div className="w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-gray-950 shadow-2xl relative">
+                <iframe
+                  srcDoc={result.html}
+                  className="w-full h-full border-none"
+                  title="Archimedes Presentation Preview"
+                  sandbox="allow-scripts allow-same-origin"
+                />
               </div>
-
-              <h3 className="text-2xl font-bold text-white">{currentSlide.title}</h3>
-
-              {currentSlide.content && (
-                <p className="text-gray-300 text-sm leading-relaxed">{currentSlide.content}</p>
-              )}
-
-              {currentSlide.bullets.length > 0 && (
-                <ul className="space-y-2">
-                  {currentSlide.bullets.map((b, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                      <span className="text-blue-400 mt-0.5">→</span>
-                      {b}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {currentSlide.stats.length > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                  {currentSlide.stats.map((s, i) => (
-                    <div key={i} className="bg-white/10 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-white">{s.value}</div>
-                      <div className="text-xs text-gray-400 mt-1">{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <p className="text-[11px] text-gray-500 text-center font-medium">
+                💡 Click inside the preview window above, then use <strong>Right/Left arrows</strong> or <strong>Spacebar</strong> to navigate.
+              </p>
+            </div>
+          ) : (
+            <div className="relative">
+              <pre className="bg-gray-950/70 border border-white/10 rounded-2xl p-5 text-xs text-purple-300/90 font-mono overflow-auto max-h-[480px] leading-relaxed">
+                <code>{result.markdown}</code>
+              </pre>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(result.markdown)
+                  alert('Marp Markdown copied to clipboard!')
+                }}
+                className="absolute top-4 right-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium text-xs px-3.5 py-1.5 rounded-lg transition-colors"
+              >
+                📋 Copy Code
+              </button>
             </div>
           )}
 
-          {/* Navigation arrows */}
-          <div className="flex items-center justify-between">
+          {/* Export Action Block */}
+          <div className="grid grid-cols-2 gap-4 mt-2">
             <button
-              onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))}
-              disabled={activeSlide === 0}
-              className="text-sm px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-30 text-gray-300 rounded-lg transition-colors"
+              onClick={downloadHtml}
+              className="py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-semibold text-white transition-all flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-white/5"
             >
-              ← Previous
+              <span>💾</span>
+              Download Interactive HTML (Offline Presenter)
             </button>
-            <span className="text-xs text-gray-500">
-              {activeSlide + 1} / {result.slide_count}
-            </span>
+            
             <button
-              onClick={() => setActiveSlide(Math.min(result.slide_count - 1, activeSlide + 1))}
-              disabled={activeSlide === result.slide_count - 1}
-              className="text-sm px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-30 text-gray-300 rounded-lg transition-colors"
+              onClick={exportPdf}
+              disabled={exportingPdf}
+              className="py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-semibold text-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/10"
             >
-              Next →
+              {exportingPdf ? (
+                <>
+                  <span className="animate-spin">⟳</span>
+                  Compiling PDF...
+                </>
+              ) : (
+                <>
+                  <span>📄</span>
+                  Export Premium PDF
+                </>
+              )}
             </button>
           </div>
-
-          {/* Export to Presenton */}
-          {result && !loading && (
-            <button
-              onClick={() => {
-                // Encode slides data and open cosmo_artist
-                const payload = encodeURIComponent(JSON.stringify({
-                  topic: result.topic,
-                  slides: result.slides,
-                  style: result.style,
-                }))
-                // cosmo_artist runs on port 3000 (or 3001 — check your .env)
-                const cosmoUrl = process.env.NEXT_PUBLIC_COSMO_URL || 'http://localhost:3000'
-                window.open(`${cosmoUrl}/import?data=${payload}`, '_blank')
-              }}
-              className="w-full py-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 
-                         hover:from-blue-600/30 hover:to-purple-600/30
-                         border border-blue-500/30 rounded-xl text-sm text-blue-300 
-                         transition-all flex items-center justify-center gap-2"
-            >
-              <span>🎨</span>
-              Open in Presenton (cosmo_artist)
-            </button>
-          )}
         </div>
       )}
     </div>

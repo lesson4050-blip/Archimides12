@@ -310,6 +310,9 @@ app.include_router(triggers_router)
 from backend.api.voice_router import router as voice_router
 app.include_router(voice_router)
 
+from backend.api.marp_routes import router as marp_routes
+app.include_router(marp_routes)
+
 @app.get("/")
 async def root():
     return {"message": "Archimedes API is running."}

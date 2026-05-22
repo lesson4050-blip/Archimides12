@@ -146,6 +146,13 @@ cosmo_engine_core/placeholder
 archimedes_cosmo*/
 data/checkpoints/
 chroma/
+data/sessions.db-shm
+data/sessions.db-wal
+
+# Temp / scratch
+tmp/
+scratch_*.py
+*.tsbuildinfo
 
 # VSCode Extension build artifacts
 vscode-extension/out/

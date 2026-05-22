@@ -26,6 +26,7 @@ TOOL_CONFIG = [
     {"name": "email", "module": "backend.agent.tools.email_tool", "class": "EmailTool"},
     {"name": "vision_browser", "module": "backend.tools.vision_browser_tool", "class": "VisionBrowserTool", "kwargs": {"router": "router"}},
     {"name": "canvas", "module": "backend.agent.tools.canvas_engine", "class": "CanvasEngine", "kwargs": {"router": "router"}},
+    {"name": "marp", "module": "backend.agent.tools.marp_engine", "class": "MarpEngine", "kwargs": {"router": "router"}},
     {"name": "omnimodal", "module": "backend.agent.omnimodal_ingester", "class": "OmnimodalIngester", "kwargs": {"router": "router"}},
     {"name": "computer", "module": "backend.agent.tools.desktop_tool", "class": "DesktopTool"},
     {"name": "mutate_test", "module": "backend.agent.tools.mutation_tool", "class": "MutationTool"},

@@ -34,17 +34,16 @@ class ExecutorAgent(BaseAgent):
     4. NO PLACEHOLDERS: Never output markdown code blocks if you can use the 'file' tool to write the actual file. 
     5. PROGRESSION: Each step MUST move the task forward via a tool call. Do not just talk about what you will do.
     6. TOOL USAGE: When using a tool, provide the exact parameters defined in its schema. 
-       Example tool call: {{"name": "file", "params": {{"action": "write", "path": "math_utils.py", "content": "def add(a,b): return a+b"}}}}
+       Example tool call: {"name": "file", "params": {"action": "write", "path": "math_utils.py", "content": "def add(a,b): return a+b"}}
        For the 'file' tool, ALWAYS provide 'action', 'path', and 'content' (if writing).
     
     PRESENTATION GENERATION (MANDATORY RULES):
     - For ANY request about "презентация", "слайды", "pitch deck",
-      "deck", "presentation" → ALWAYS use the canvas_engine tool.
-    - NEVER try to generate slides with file tool or shell tool.
-    - canvas_engine produces premium React-rendered presentations.
-    - You MUST provide a 'topic' string and a 'slides_json' array.
-    - Each slide object: {{"title": "...", "body": "...", "notes": "..."}}
-    - The tool validates JSON and saves the artifact automatically.
+      "deck", "presentation" → ALWAYS use the 'marp' tool with action="generate".
+    - The 'marp' tool generates modern premium presentations in Marp Markdown format.
+    - NEVER try to compile, write or generate slides with the file tool or manually with shell tools. Use 'marp' instead.
+    - Specifying 'topic', 'slide_count', and 'research_data' helps produce premium fact-rich slides.
+    - The engine automatically applies our premium glassmorphic dark-theme Archimedes CSS styles.
     
     When you have completed the subtask, you MUST provide a highly detailed, professional textual summary of EXACTLY what you implemented, why you did it, and how it works. Speak like a Principal Architect. NEVER output robotic phrases like "Ready for next task".
     """
@@ -620,7 +619,7 @@ class ExecutorAgent(BaseAgent):
                             )
                         )
 
-                    # Canvas Engine / File artifact emissions via websocket
+                    # Canvas Engine / Marp / File artifact emissions via websocket
                     if websocket_send:
                         if t_name == "file" and t_params.get("action") == "write" and success:
                             import os
@@ -631,6 +630,36 @@ class ExecutorAgent(BaseAgent):
                                 "content": t_params.get("content", ""),
                                 "language": "markdown" if path.endswith(".md") else "plaintext"
                             })
+                        elif t_name == "marp" and success:
+                            action = t_params.get("action", "")
+                            if action == "generate":
+                                import time
+                                timestamp = int(time.time())
+                                os.makedirs("tmp", exist_ok=True)
+                                file_path = f"tmp/slide_{timestamp}.md"
+                                with open(file_path, "w", encoding="utf-8") as f:
+                                    f.write(tool_res.get("markdown", ""))
+                                
+                                await websocket_send({
+                                    "type": "artifact",
+                                    "name": os.path.basename(file_path),
+                                    "content": tool_res.get("markdown", ""),
+                                    "language": "markdown"
+                                })
+                            elif action == "compile_html":
+                                import time
+                                timestamp = int(time.time())
+                                os.makedirs("tmp", exist_ok=True)
+                                file_path = f"tmp/slide_{timestamp}.html"
+                                with open(file_path, "w", encoding="utf-8") as f:
+                                    f.write(tool_res.get("html", ""))
+                                
+                                await websocket_send({
+                                    "type": "artifact",
+                                    "name": os.path.basename(file_path),
+                                    "content": tool_res.get("html", ""),
+                                    "language": "html"
+                                })
                         elif t_name == "canvas_engine" and success:
                             artifact_path = tool_res.get("artifact_path", "")
                             if artifact_path:

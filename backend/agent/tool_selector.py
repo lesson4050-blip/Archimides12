@@ -19,7 +19,7 @@ TOOL_PROFILES = {
     "default": ["search", "shell", "file", "web_read"],
     "coding": ["python_repl", "fast_linter", "code_edit", "grep", "glob", "repo_map", "git", "patch", "ast_navigator", "swe_rag", "shell", "file", "search"],
     "file_ops": ["grep", "glob", "code_edit", "git", "patch", "shell", "file"],
-    "presentation": ["canvas_engine", "vision", "image_gen"],
+    "presentation": ["marp", "canvas", "canvas_engine", "vision", "image_gen"],
     "media": ["image_gen", "video", "audio", "audio_synth", "vision", "media", "omnimodal"],
     "devops": ["deploy", "monitor", "infra", "log_analyzer", "expose", "shell", "file"],
     "browsing": ["browser", "vision_browser", "web_read"]
