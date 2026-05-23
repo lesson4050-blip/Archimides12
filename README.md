@@ -42,22 +42,46 @@ Through recent production hardening, Archimedes features:
 
 ---
 
-## Architecture
+## 🗺️ Эволюционная архитектура и Фазы (Evolutionary Phases)
 
-Archimedes follows a decoupled Backend-Frontend architecture with a heavy focus on tool-use and planning reliability.
+Кодовая база Archimedes полностью структурирована по **5 ключевым эволюционным фазам**, разделяющим ядро, фронтенд, интеллект, песочницы безопасности и инструменты визуализации.
 
-### Backend Structure
-- `backend/agent/core.py` — **ArchimedesCosmoAgent**: The main cognitive engine.
-- `backend/agent/skill_engine.py` — **SkillEngine**: Dynamic loading of agent capabilities.
-- `backend/tools/` — **Toolbox**: 45+ atomic tools (File, Git, Shell, Vision, Notebook, Grep, Glob, etc.).
-- `backend/agent/orchestration/` — **Planning**: MCTS, Swarm logic, Verification Agent, and Routing.
-- `backend/memory/` — **Context**: Auto-Compact, Session Memory, Context Manager.
-- `backend/agent/tools/canvas_tool.py` — **Canvas Engine**: JSON-based React presentation generation.
+Подробный гид по всем файлам находится в [PHASES.md](file:///d:/Cosmo/PHASES.md), а автоматическая разметка представлена в [PROJECT_MAP.md](file:///d:/Cosmo/PROJECT_MAP.md).
 
-### Frontend Structure
-- `frontend/components/` — **UI Components**: Modularized components (Settings, Chat, Canvas).
-- `frontend/hooks/` — **Business Logic**: Decoupled React hooks for state and API interaction.
-- `frontend/lib/` — **State Management**: Zustand stores for global application state.
+### 🔌 Фаза 1: Core Engine & Unified Routing (Ядро и Маршрутизация)
+*Базовый каркас системы: сервер FastAPI, WebSocket-сессии с пользователем, Prometheus-интеграция, конфигурации среды и ORM база данных.*
+- `backend/main.py` — Главная точка входа API сервера.
+- `backend/config.py` — Менеджер настроек и валидации путей.
+- `backend/websocket/` — WebSocket сессионные стримы.
+- `backend/db/` — Таблицы и модели SQLAlchemy (Pydantic v2).
+- `backend/middleware/` — Заголовки безопасности и лимитер запросов.
+
+### 🎨 Фаза 2: Decoupled UI & Zustand State (Фронтенд и Стейт)
+*Пользовательский веб-интерфейс: декуплированная Next.js-архитектура, Zustand глобальный стейт, кастомные хуки бизнес-логики и Framer Motion анимации.*
+- `frontend/components/` — Модульные React UI компоненты (Settings, Chat, Canvas).
+- `frontend/hooks/` — Декуплированные хуки состояния (`useSettings`, `useAppshots`).
+- `frontend/lib/store.ts` — Zustand хранилища глобального стейта.
+
+### 🧠 Фаза 3: Cognitive Swarm & MCTS Reasoning (Когнитивный Сварм и Поиск)
+*Мозг агента: планирование задач, MCTS поиск решений, Mixture of Agents (MoA) синтез, динамическая библиотека навыков (ChromaDB) и трехуровневая сессионная память.*
+- `backend/agent/core.py` — Главный когнитивный движок `ArchimedesCosmoAgent`.
+- `backend/agent/orchestration/` — Планировщики, Hydra Swarm и дерево MCTS.
+- `backend/memory/auto_compact.py` — Менеджер умного сжатия контекста.
+
+### 🛡️ Фаза 4: Restricted Execution & Sandbox Hardening (Песочница и Hardening)
+*Изоляция выполнения и безопасность: Docker/Kubernetes песочницы, AST-валидатор Python, защита от Bash инъекций шелла и отзыв JWT сессий.*
+- `backend/sandbox/` — Persistent Shell сессии и SandboxFilesystem изоляция.
+- `backend/security/sandbox_hardening.py` — AST-валидатор команд Python.
+- `backend/tools/bash_security.py` — Защитник шелла от внедрения вредоносного кода.
+- `backend/auth/` — JWT токены, отзыв по JTI и сессионные ключи.
+
+### 📊 Фаза 5: Presentation Engine & Visual Analysis (Визуальный Аудит и Презентации)
+*Инструменты генерации и аудита: Marp/Canvas генераторы, Visual QA скриншотер Playwright, Bumblebee Vulnerability Scanner.*
+- `backend/api/marp_routes.py` — API генерации Marp слайдов.
+- `backend/agent/tools/canvas_tool.py` — Canvas Engine для React-презентаций.
+- `backend/security/vuln_scanner.py` — Bumblebee-сканер MCP конфигураций и зависимостей.
+- `frontend/components/AppshotOverlay.tsx` — Региональный захват экрана и аннотаций.
+
 
 ---
 

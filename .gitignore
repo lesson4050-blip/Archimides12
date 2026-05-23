@@ -1,22 +1,29 @@
 # ═══════════════════════════════════════
-# Archimedes — .gitignore
+# Archimedes — Optimized .gitignore
 # ═══════════════════════════════════════
 
-# Secrets — NEVER commit
+# Secrets & Local Configurations (NEVER COMMIT)
 .env
+.env.local
 .env.*
+.env.*.local
 !.env.example
 backend/.env
+backend_*.txt
 
-# Logs & databases
-*.log
+# Databases & Caching
 *.db
 *.sqlite3
+backend/archemidas.db
+chroma_db/
+chroma/
+cosmo_engine_core/container.db
+cosmo_engine_core/presenton.db
+data/checkpoints/
+data/sessions.db-shm
+data/sessions.db-wal
 
-# Stray node_modules
-backend/node_modules/
-
-# Python
+# Python Runtime & Build Artifacts
 **/__pycache__/
 *.py[cod]
 *.pyo
@@ -28,63 +35,13 @@ build/
 .eggs/
 venv/
 .venv/
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Database
-*.db
-*.sqlite3
-chroma_db/
-
-# Logs
-*.log
-backend_*.log
-backend_*.txt
-backend/archemidas.db
-
-# Workspace (agent runtime outputs)
-workspace/
-logs/
-
-# Archives
-*.zip
-*.tar.gz
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Test artifacts
 .pytest_cache/
 htmlcov/
 .coverage
 coverage.xml
-temp_zip/
-benchmark_workspace/
-*.pptx
-*.pdf
-output/
-test_output/
+*.tsbuildinfo
 
-# Docker volumes
-postgres_data/
-
-# Artifacts
-output/
-
-# Temp clones & embedded repos
-_presenton_tmp/
-cosmo_engine/
-
-# Engine model cache
-cosmo_engine_core/chroma/
-cosmo_engine_core/data/**
-!cosmo_engine_core/data/.keep
-
-# COSMO Artist
+# Node.js Dependencies & Builds
 **/node_modules/
 **/.next/
 cosmo_artist/out/
@@ -94,16 +51,55 @@ cosmo_artist/api_resp.json
 cosmo_artist/html_dump.txt
 cosmo_artist/test_pexels.png
 cosmo_artist/.next-build/
+cosmo_artist/capture_now.cjs
+cosmo_artist/capture_results.cjs
+cosmo_artist/dump_html.cjs
+cosmo_artist/test_pexels.cjs
+cosmo_artist/app/debug-slides/
 
-# Backend Node
-backend/node_modules/
+# VS Code Extension Build Artifacts
+vscode-extension/out/
+vscode-extension/*.vsix
+vscode-extension/node_modules/
 
-# Test/scratch/helper scripts
+# Logs & Diagnostics
+*.log
+backend_*.log
+logs/
+cosmo_engine_core/dump.txt
+
+# Agent Workspace & Output Assets
+workspace/
+generated_images/
+output/
+test_output/
+temp_zip/
+benchmark_workspace/
+_presenton_tmp/
+cosmo_engine/
+cosmo_engine_core/data/**
+!cosmo_engine_core/data/.keep
+cosmo_engine_core/placeholder
+archimedes_cosmo*/
+
+# Archives & Documents
+*.zip
+*.tar.gz
+*.pptx
+*.pdf
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# Diagnostics & Local Scratch Space (Ignored)
+scratch/
+scratch_*.py
+test_*.py
+!tests/test_*.py
 validate_ppt.py
 test_presentation.py
 skills-lock.json
-generated_images/
-scratch/
 check_integrations.py
 generate_space.py
 install_engine.py
@@ -112,8 +108,6 @@ setup_nango_integrations.py
 tags.json
 test_uvicorn.py
 test_uvicorn2.py
-test_*.py
-!tests/test_*.py
 uv.lock
 capture_results.cjs
 dump_latest.py
@@ -125,40 +119,12 @@ test_pexels.js
 test_pexels.png
 html_dump.txt
 api_resp.json
-cosmo_artist/capture_now.cjs
-cosmo_artist/capture_results.cjs
-cosmo_artist/dump_html.cjs
-cosmo_artist/test_pexels.cjs
-cosmo_artist/app/debug-slides/
-cosmo_engine_core/dump.txt
 cosmo_engine_core/dump_latest.py
 cosmo_engine_core/list_presentations.py
 cosmo_engine_core/api_resp.json
 
-# Symlinks
+# Symlinks & Testing Runtime
 skills
 skills/
-
-# Runtime data
-cosmo_engine_core/container.db
-cosmo_engine_core/presenton.db
-cosmo_engine_core/placeholder
-archimedes_cosmo*/
-data/checkpoints/
-chroma/
-data/sessions.db-shm
-data/sessions.db-wal
-
-# Temp / scratch
-tmp/
-scratch_*.py
-*.tsbuildinfo
-
-# VSCode Extension build artifacts
-vscode-extension/out/
-vscode-extension/*.vsix
-vscode-extension/node_modules/
-
-# Test run artifacts
 tests/*.json
 tests/*.jsonl
