@@ -494,6 +494,15 @@ async def get_current_prompt():
     prompt = await improver.get_current_prompt()
     return {"prompt_preview": prompt[:200], "length": len(prompt)}
 
+@app.post("/api/security/scan")
+async def run_security_scan():
+    """Run Bumblebee-style vulnerability scan. Read-only."""
+    from backend.security.vuln_scanner import VulnScanner
+    import asyncio
+    scanner = VulnScanner(root_dir=".")
+    result = await asyncio.get_event_loop().run_in_executor(None, scanner.scan)
+    return result.to_dict()
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

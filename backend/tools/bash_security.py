@@ -152,6 +152,9 @@ def extract_unquoted_content(command: str) -> str:
     Strip quoted content from command, preserving only unquoted parts.
     This prevents false positives from patterns inside string literals.
     """
+    # Strip null bytes before processing — prevents parser desync
+    command = command.replace('\x00', '')
+    
     result = []
     in_single = False
     in_double = False
@@ -407,6 +410,23 @@ def validate_command(command: str) -> SecurityResult:
     """
     if not command or not command.strip():
         return SecurityResult(allowed=True, message="Empty command")
+
+    # ═══ LAYER -1: NULL BYTE CHECK (CVE-class vulnerability) ═══
+    # Must run before any parsing — null bytes corrupt quote tracking
+    if '\x00' in command:
+        return SecurityResult(
+            allowed=False,
+            check_id=SecurityCheckID.INVISIBLE_CHARACTERS,
+            message="Null byte injection attempt blocked (\\x00)"
+        )
+
+    # Also check for null bytes in various encodings
+    if '%00' in command or '\\0' in command or '\\x00' in command:
+        return SecurityResult(
+            allowed=False,
+            check_id=SecurityCheckID.INVISIBLE_CHARACTERS,
+            message="Encoded null byte injection blocked"
+        )
 
     # Layer 0: Invisible characters (check RAW command, before any parsing)
     result = validate_invisible_chars(command)

@@ -70,6 +70,7 @@ interface AppState {
   setEconomyReport: (data: any | null) => void;
   setAuditTrailId: (id: string | null) => void;
   setLastToolVerification: (v: any | null) => void;
+  appendAttachment?: (attachment: any) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -124,4 +125,7 @@ export const useAppStore = create<AppState>((set) => ({
   setEconomyReport: (data) => set({ economyReport: data }),
   setAuditTrailId: (id) => set({ auditTrailId: id }),
   setLastToolVerification: (v) => set({ lastToolVerification: v }),
+  appendAttachment: (attachment) => {
+    console.log("Attachment appended:", attachment);
+  },
 }));

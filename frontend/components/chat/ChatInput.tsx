@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plus, Globe, Mic, X } from "lucide-react";
+import { Search, Plus, Globe, Mic, X, Camera } from "lucide-react";
 import VoiceVisualizer from "../VoiceVisualizer";
 import ModeSelector from "../ModeSelector";
 import { useAppStore } from "@/lib/store";
 import { useVoiceMode } from "@/hooks/useVoiceMode";
+import AppshotOverlay from "../AppshotOverlay";
+import { useAppshots } from "@/hooks/useAppshots";
 
 export default function ChatInput({
   currentMode,
@@ -37,6 +40,18 @@ export default function ChatInput({
     activeMode,
     setActiveMode,
   } = useAppStore();
+  const { startCapture, isSelecting } = useAppshots();
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'S') {
+        e.preventDefault()
+        startCapture()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [startCapture])
 
   return (
     <motion.div 
@@ -73,9 +88,22 @@ export default function ChatInput({
            
            <div className="flex items-center justify-between px-2 pb-1 pt-2">
               <div className="flex items-center gap-1">
-                 <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-white hover:bg-[#333] rounded-full transition-colors tooltip tooltip-top" title="Прикрепить файл">
-                   <Plus size={14} />
-                 </button>
+                  <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-white hover:bg-[#333] rounded-full transition-colors tooltip tooltip-top" title="Прикрепить файл">
+                    <Plus size={14} />
+                  </button>
+                  
+                  <button
+                    onClick={startCapture}
+                    disabled={isSelecting}
+                    className={`p-2 rounded-full transition-colors tooltip tooltip-top ${
+                      isSelecting
+                        ? 'text-blue-400 bg-blue-900/30 animate-pulse'
+                        : 'text-gray-400 hover:text-white hover:bg-[#333]'
+                    }`}
+                    title="Appshots — выделить область экрана (Ctrl+Shift+S)"
+                  >
+                    <Camera size={14} />
+                  </button>
                  
                  <button 
                    onClick={() => setWebSearchEnabled(!webSearchEnabled)} 
@@ -149,6 +177,7 @@ export default function ChatInput({
             У Archimedes могут быть ошибки. Пожалуйста, проверяйте важную информацию.
          </div>
        </div>
+       <AppshotOverlay />
     </motion.div>
   );
 }
