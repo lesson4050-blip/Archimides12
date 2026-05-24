@@ -242,6 +242,10 @@ class ShellTool:
             # Try sandbox shell first
             result = await self._run_via_sandbox(session_id, command, timeout, is_background)
             if result is not None:
+                if result.get("success"):
+                    if is_background:
+                        await asyncio.sleep(2)
+                    await self._auto_expose_ports(session_id)
                 return result
 
             # Fallback: persistent local session (if session_id provided)
@@ -253,7 +257,11 @@ class ShellTool:
                     if isinstance(output, str) and len(output) > 2000:
                         output = output[:2000] + "\n...[truncated]"
                     prefix = "Background process started. " if is_background else ""
-                    return {"success": True, "output": f"{prefix}{output}"}
+                    res = {"success": True, "output": f"{prefix}{output}"}
+                    if is_background:
+                        await asyncio.sleep(2)
+                    await self._auto_expose_ports(session_id)
+                    return res
                 except Exception as e:
                     logger.warning(f"Persistent session failed: {e}, falling back to executor")
 
@@ -265,6 +273,10 @@ class ShellTool:
             output = result.get("output", "")
             if isinstance(output, str) and len(output) > 2000:
                 result["output"] = output[:2000] + "\n...[truncated]"
+            if result.get("success"):
+                if is_background:
+                    await asyncio.sleep(2)
+                await self._auto_expose_ports(session_id)
             return result
 
         elif action == "view":
@@ -285,6 +297,69 @@ class ShellTool:
 
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
+
+    async def _auto_expose_ports(self, session_id: str):
+        """Scans active listening ports inside the container and auto-exposes them."""
+        import os
+        if not session_id or os.environ.get("TESTING") == "1":
+            return
+        
+        try:
+            # Check open TCP ports in container using `ss` or `netstat`
+            check_res = await self.executor.run_command(session_id, "ss -tln 2>/dev/null || netstat -tln 2>/dev/null")
+            if not check_res.get("success"):
+                return
+            
+            output = check_res.get("output", "")
+            import re
+            found_ports = set()
+            for line in output.split("\n"):
+                if "LISTEN" in line or "listen" in line.lower():
+                    matches = re.findall(r'(?::|:)(\d+)\s', line)
+                    for m in matches:
+                        port = int(m)
+                        if port not in (22, 5900, 6080, 9222):
+                            found_ports.add(port)
+            
+            if not found_ports:
+                return
+            
+            from backend.tools.expose_tool import ExposeTool
+            expose_tool = ExposeTool(self.executor)
+            event_bus = getattr(self.executor, "event_bus", None)
+            
+            if not hasattr(self, "_auto_exposed_ports"):
+                self._auto_exposed_ports = set()
+                
+            for port in found_ports:
+                if port not in self._auto_exposed_ports:
+                    logger.info(f"Auto-Exposing detected port {port} for session {session_id}...")
+                    
+                    expose_res = await expose_tool.execute(session_id=session_id, port=port)
+                    if expose_res.get("success"):
+                        url = expose_res.get("url")
+                        self._auto_exposed_ports.add(port)
+                        
+                        logger.info(f"Auto-Expose SUCCESS: Port {port} -> {url}")
+                        
+                        if event_bus:
+                            from backend.agent.orchestration.event_bus import StreamEvent, EventType
+                            await event_bus.emit(StreamEvent(
+                                type=EventType.BROWSER_NAVIGATE,
+                                content={
+                                    "url": url,
+                                    "title": f"Port {port} Preview"
+                                },
+                                agent="shell_tool",
+                                session_id=session_id
+                            ))
+                            await event_bus.emit_thought(
+                                f"🌐 Запустилось веб-приложение на порту {port}! Я автоматически проксировал его. Вкладка браузера должна открыться автоматически на адресе: {url}",
+                                agent="shell_tool"
+                            )
+        except Exception as e:
+            logger.warning(f"Failed to auto-expose ports: {e}")
+
 
     async def _run_via_sandbox(self, session_id: str, command: str,
                                timeout: int, is_background: bool) -> Optional[Dict[str, Any]]:

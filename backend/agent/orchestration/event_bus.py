@@ -46,6 +46,7 @@ class EventType(str, Enum):
     METRIC = "metric"
     STATUS = "status"
     DONE = "done"
+    BROWSER_NAVIGATE = "browser_navigate"
 
 
 @dataclass

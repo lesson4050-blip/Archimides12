@@ -678,6 +678,36 @@ class AgentOrchestrator:
         if not state.current_plan:
              return {"success": False, "error": "Planning failed and fallback failed."}
         
+        # plan approval gate loop
+        while os.environ.get("TESTING") != "1" and websocket_send:
+            from backend.websocket.handler import manager as ws_manager
+            phases_text = []
+            for p_idx, phase in enumerate(state.current_plan.get("phases", [])):
+                phases_text.append(f"🟢 **Фаза {p_idx+1}: {phase.get('name', 'Без названия')}**")
+                for s_idx, subtask in enumerate(phase.get("subtasks", [])):
+                    phases_text.append(f"  - Шаг {s_idx+1}: {subtask.get('description')}")
+            
+            plan_prompt = (
+                "📋 **Сформирован пошаговый план действий:**\n\n"
+                + "\n".join(phases_text) + "\n\n"
+                "Отправьте **'yes'** (или просто отправьте пустое сообщение/Enter), чтобы утвердить этот план.\n"
+                "Если у вас есть замечания, напишите их ниже для корректировки:"
+            )
+            
+            user_response = await ws_manager.get_user_approval(state.session_id, plan_prompt)
+            user_response_clean = user_response.strip().lower() if user_response else ""
+            
+            if user_response_clean in ("", "yes", "да", "одобрить", "одобрено", "окей", "ок"):
+                await self.event_bus.emit_thought("Plan approved by user. Starting execution...", agent="orchestrator")
+                break
+            else:
+                # Replan
+                await self.event_bus.emit_thought(f"User requested changes to the plan: {user_response}. Replanning...", agent="orchestrator")
+                state.add_message("user", f"Пожалуйста, скорректируй план с учетом замечаний: {user_response}")
+                state = await self.planner.process(state, websocket_send)
+                if not state.current_plan:
+                    return {"success": False, "error": "Planning failed during replan."}
+
         # 2. EXECUTE & CRITIQUE LOOP
         # Flatten subtasks for easier iteration
         all_subtasks = []
@@ -737,6 +767,22 @@ class AgentOrchestrator:
                 # Reset per-subtask state to prevent cross-contamination
                 state.reset_for_subtask()
                 
+                # Subtask HITL approval gate
+                if os.environ.get("TESTING") != "1" and websocket_send:
+                    from backend.websocket.handler import manager as ws_manager
+                    subtask_prompt = (
+                        f"🚀 **Готов приступить к шагу {i+1} из {len(all_subtasks)}:**\n"
+                        f"Описание: *{subtask.get('description')}*\n\n"
+                        "Отправьте **'yes'** (или Enter) для запуска шага, либо напишите свои корректировки:"
+                    )
+                    user_response = await ws_manager.get_user_approval(state.session_id, subtask_prompt)
+                    user_response_clean = user_response.strip().lower() if user_response else ""
+                    if user_response_clean not in ("", "yes", "да", "одобрить", "одобрено", "окей", "ок"):
+                        # User provided feedback for the subtask
+                        await self.event_bus.emit_thought(f"User adjusted step {i+1}: {user_response}", agent="orchestrator")
+                        # Inject feedback into the subtask description so the executor executes it with feedback!
+                        subtask["description"] = f"{subtask['description']} (ВАЖНОЕ указание пользователя: {user_response})"
+
                 # Circuit Breaker: hard cap to prevent infinite loops
                 _MAIN_LOOP_LIMIT = 8      # Reduced from 15 to prevent long stuck loops
                 _RESCUE_LOOP_LIMIT = 8    # Rescue pass gets its own budget

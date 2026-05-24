@@ -32,6 +32,7 @@ class ConnectionManager:
         self.buffers: Dict[str, List[Dict[str, Any]]] = {}
         self._rate_buckets: Dict[str, list] = {}
         self._agent_last_active: Dict[str, float] = {}  # session_id -> timestamp
+        self.pending_approvals: Dict[str, asyncio.Future] = {}
 
     async def connect(self, websocket: WebSocket, session_id: str):
         await websocket.accept()
@@ -126,6 +127,25 @@ class ConnectionManager:
             logger.warning(f"Buffer overflow for {session_id}: trimmed to {len(self.buffers[session_id])} events")
         self.buffers[session_id].append(event)
 
+    async def get_user_approval(self, session_id: str, prompt: str) -> str:
+        """Request user approval/input via WebSocket in a non-blocking wait."""
+        if session_id not in self.active_connections:
+            logger.warning(f"get_user_approval: no active websocket connection for session {session_id}, auto-approving.")
+            return "yes"
+        
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        self.pending_approvals[session_id] = fut
+        try:
+            await self.send_event(session_id, {
+                "type": "message_ask",
+                "content": prompt
+            })
+            response = await fut
+            return response or "yes"
+        finally:
+            self.pending_approvals.pop(session_id, None)
+
     def _cleanup_stale_agents(self):
         """Remove agent loops for sessions that have been inactive beyond AGENT_STALE_TIMEOUT.
         
@@ -176,6 +196,15 @@ class ConnectionManager:
             return
         if not isinstance(data, dict):
             data = {}
+
+        # Intercept approval responses when a HITL future is pending
+        if session_id in self.pending_approvals:
+            fut = self.pending_approvals[session_id]
+            if not fut.done():
+                user_text = data.get("task", "")
+                fut.set_result(user_text)
+                return
+
         task = data.get("task")
         agent_profile_id = data.get("agent_id", "archimedes-cosmo")
         

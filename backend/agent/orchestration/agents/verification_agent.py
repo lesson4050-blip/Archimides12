@@ -117,7 +117,7 @@ class VerificationAgent(BaseAgent):
 
     VERIFICATION_STRATEGIES = {
         ChangeType.BACKEND: ["run_pytest", "run_linter", "check_imports", "verify_api_health"],
-        ChangeType.FRONTEND: ["run_npm_test", "check_typescript", "verify_build"],
+        ChangeType.FRONTEND: ["run_npm_test", "check_typescript", "verify_build", "verify_visual_rendering"],
         ChangeType.CONFIG: ["validate_syntax", "run_pytest"],
         ChangeType.DATABASE: ["check_migration_syntax", "run_pytest"],
         ChangeType.TEST: ["run_pytest"],
@@ -337,6 +337,77 @@ Output ONLY commands, no explanations."""
         result = await executor("shell", {"action": "execute", "command": "cd /app/frontend && npm run build 2>&1 | tail -10"})
         output = result.get("output", "")
         return VerificationCheck(name="verify_build", status=VerificationStatus.PASSED if "error" not in output.lower() else VerificationStatus.FAILED, command="npm run build", output=output)
+
+    async def _check_verify_visual_rendering(self, executor: Callable, files: List[str]) -> VerificationCheck:
+        """Scan open ports, take a visual screenshot and evaluate frontend rendering."""
+        import json
+        import os
+        try:
+            # Step 1: Detect open port in the container
+            check_res = await executor("shell", {"action": "execute", "command": "ss -tln 2>/dev/null || netstat -tln 2>/dev/null"})
+            output = check_res.get("output", "")
+            
+            import re
+            port = None
+            for line in output.split("\n"):
+                if "LISTEN" in line or "listen" in line.lower():
+                    matches = re.findall(r'(?::|:)(\d+)\s', line)
+                    for m in matches:
+                        p = int(m)
+                        if p in (3000, 3001, 5000, 5173, 8000, 8080):
+                            port = p
+                            break
+                if port:
+                    break
+            
+            if not port:
+                return VerificationCheck(
+                    name="verify_visual_rendering",
+                    status=VerificationStatus.SKIPPED,
+                    details="No active web server (port 3000/5173/etc.) found in sandbox container. Visual QA skipped."
+                )
+            
+            # Step 2: Access the server and take screenshot
+            # Since playwright is running on the host, we need to access the container IP
+            ip_res = await executor("shell", {"action": "execute", "command": "hostname -I"})
+            ip = ip_res.get("output", "").strip().split()[0] if ip_res.get("success") else "localhost"
+            
+            url = f"http://{ip}:{port}"
+            
+            from backend.agent.vision_feedback import VisionFeedbackLoop
+            vision = VisionFeedbackLoop(router=self.router)
+            
+            # Run vision QA check
+            result = await vision.analyze_url(url=url, context="frontend application interface")
+            
+            if not result.get("analyzed"):
+                return VerificationCheck(
+                    name="verify_visual_rendering",
+                    status=VerificationStatus.SKIPPED,
+                    details=f"Vision analysis skipped: {result.get('reason')}"
+                )
+            
+            passed = result.get("quality_score", 0) >= 6.0 and not result.get("has_problems", False)
+            problems_str = "\n".join([f"- {p.get('severity').upper()}: {p.get('fix')} ({p.get('location')})" 
+                                      for p in result.get("problems", [])])
+            
+            details = f"Score: {result.get('quality_score')}/10\nAssessment: {result.get('summary')}"
+            if problems_str:
+                details += f"\n\nProblems found:\n{problems_str}"
+                
+            return VerificationCheck(
+                name="verify_visual_rendering",
+                status=VerificationStatus.PASSED if passed else VerificationStatus.FAILED,
+                command=f"Visual QA check on {url}",
+                output=json.dumps(result, indent=2),
+                details=details
+            )
+        except Exception as e:
+            return VerificationCheck(
+                name="verify_visual_rendering",
+                status=VerificationStatus.ERROR,
+                details=f"Visual verification failed: {e}"
+            )
 
     async def _check_validate_syntax(self, executor: Callable, files: List[str]) -> VerificationCheck:
         yml_files = [f for f in files if f.endswith((".yml", ".yaml"))]

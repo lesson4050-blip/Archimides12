@@ -51,12 +51,24 @@ class PersistentShell:
         # Inject ACI tools (SWE-agent style)
         init_script = """
 function search_dir() {
-    grep -rnI "$1" .
+    if [ -z "$1" ]; then
+        echo "Error: Pattern parameter is required. Usage: search_dir \\"pattern\\""
+        return 1
+    fi
+    grep -rnI "$1" . | head -n 50
 }
 function find_file() {
-    find . -type f -name "*$1*"
+    if [ -z "$1" ]; then
+        echo "Error: Filename parameter is required. Usage: find_file \\"filename\\""
+        return 1
+    fi
+    find . -type f -name "*$1*" | head -n 50
 }
 function str_replace_editor() {
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo "Error: File path and old_string are required. Usage: str_replace_editor \\"file_path\\" \\"old_string\\" \\"new_string\\""
+        return 1
+    fi
     python3 -c '
 import sys
 file, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -114,7 +126,14 @@ export -f search_dir find_file str_replace_editor
                             if full_cmd in output:
                                 output = output.replace(full_cmd, "", 1).strip()
                             
-                            return {"success": True, "output": output[:3000]}
+                            # Smart truncation (first/last 1000 chars) with explanatory instructions
+                            if len(output) > 3000:
+                                truncated_marker = f"\n\n... [OUTPUT TRUNCATED - total {len(output)} characters. " \
+                                                   f"Showing first 1000 and last 1000 characters to prevent token overflow. " \
+                                                   f"Use 'grep' or 'tail' to read specific lines] ...\n\n"
+                                output = output[:1000] + truncated_marker + output[-1000:]
+                            
+                            return {"success": True, "output": output}
                 except asyncio.TimeoutError:
                     continue
                 except (OSError, ConnectionResetError) as e:
