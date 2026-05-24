@@ -44,9 +44,9 @@ async def main():
     md_path = output_dir / f"qa_report_{timestamp}.md"
     latest_path = output_dir / "latest.json"
     
-    json_path.write_text(json.dumps(report.to_dict(), indent=2))
-    md_path.write_text(report.to_markdown())
-    latest_path.write_text(json.dumps(report.to_dict(), indent=2))
+    json_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    md_path.write_text(report.to_markdown(), encoding="utf-8")
+    latest_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
     
     print(f"\nReports saved:")
     print(f"  JSON: {json_path}")

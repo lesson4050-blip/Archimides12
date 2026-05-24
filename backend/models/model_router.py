@@ -29,7 +29,8 @@ class ModelRouter:
     def __init__(self):
         # Instance-level Gemini cooldown (was class-level — one session's rate limit
         # would block ALL sessions for 60 minutes, which is catastrophic).
-        self._gemini_blocked_until: float = 0.0
+        # We allow fallback to class-level variable if explicitly overridden (e.g. by QA runner).
+        self._gemini_blocked_until: float = getattr(self.__class__, "_gemini_blocked_until", 0.0)
 
         self.ollama = OllamaClient()
         self._ollama_healthy = True

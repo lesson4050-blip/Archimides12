@@ -20,9 +20,12 @@ class PersistentShell:
 
     def stop(self):
         """Close the socket and discard the shell session securely."""
-        if self._socket and hasattr(self._socket, '_sock'):
+        if self._socket:
             try:
-                self._socket._sock.close()
+                if hasattr(self._socket, '_sock'):
+                    self._socket._sock.close()
+                else:
+                    self._socket.close()
             except (TimeoutError, OSError, ValueError) as e:
                 logging.getLogger(__name__).warning(f"Sandbox execution error: {e}")
         self._socket = None
@@ -84,9 +87,11 @@ export -f search_dir find_file str_replace_editor
             full_cmd = f"{command}; echo {sentinel}\n"
             loop = asyncio.get_running_loop()
             
+            sock = self._socket._sock if hasattr(self._socket, '_sock') else self._socket
+            
             try:
                 await loop.run_in_executor(None, 
-                    lambda: self._socket._sock.send(full_cmd.encode()))
+                    lambda: sock.send(full_cmd.encode()))
             except (OSError, BrokenPipeError, ConnectionResetError) as e:
                 logger.error(f"Shell socket dead: {e}")
                 self._socket = None
@@ -98,7 +103,7 @@ export -f search_dir find_file str_replace_editor
                 try:
                     chunk = await asyncio.wait_for(
                         loop.run_in_executor(None, 
-                            lambda: self._socket._sock.recv(4096)),
+                            lambda: sock.recv(4096)),
                         timeout=2.0
                     )
                     if chunk:

@@ -489,10 +489,10 @@ class SandboxManager:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(
                     None, 
-                    session.container.update, 
-                    target["mem_limit"], 
-                    None, # memswap
-                    target["cpu_quota"]
+                    lambda: session.container.update(
+                        mem_limit=target["mem_limit"],
+                        cpu_quota=target["cpu_quota"]
+                    )
                 )
                 logger.info(f"Dynamic Compute Scaled: {session_id} -> {complexity.upper()} ({target['mem_limit']} RAM)")
                 return True

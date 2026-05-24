@@ -372,8 +372,12 @@ class MarpEngine:
                     f.write(markdown)
                 
                 # Build Marp-CLI compilation command
-                # npx -y @marp-team/marp-cli md_file -o out_file
-                cmd = ["npx", "-y", "@marp-team/marp-cli", "--html", "true", md_file, "-o", out_file]
+                # We check for a local installation in frontend/node_modules/ to avoid flaky/network npx calls
+                local_marp_path = os.path.join(workspace_dir, "frontend", "node_modules", "@marp-team", "marp-cli", "marp-cli.js")
+                if os.path.exists(local_marp_path):
+                    cmd = ["node", local_marp_path, "--no-stdin", "--html", md_file, "-o", out_file]
+                else:
+                    cmd = ["npx", "-y", "@marp-team/marp-cli", "--no-stdin", "--html", md_file, "-o", out_file]
                 
                 # Add pdf flag if compiling to pdf
                 if action == "compile_pdf":

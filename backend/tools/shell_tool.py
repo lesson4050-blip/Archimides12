@@ -170,7 +170,7 @@ class ShellTool:
                         "action": {"type": "string", "enum": ["exec"]},
                         "command": {"type": "string", "description": "The command to execute"}
                     },
-                    "required": ["action", "command"]
+                    "required": ["command"]
                 }
             }
         }
