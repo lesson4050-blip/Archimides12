@@ -8,6 +8,10 @@ import os
 import sys
 from pathlib import Path
 
+# Reconfigure stdout to support UTF-8 emojis on Windows terminals
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 async def main():
     print("=" * 60)
     print("ARCHIMEDES QA — Full System Review")
