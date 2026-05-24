@@ -503,6 +503,26 @@ async def run_security_scan():
     result = await asyncio.get_event_loop().run_in_executor(None, scanner.scan)
     return result.to_dict()
 
+@app.post("/api/qa/run")
+async def run_qa_report():
+    """Run full QA suite and return report."""
+    from backend.agent.qa.qa_runner import ArchimedesQARunner
+    import asyncio
+    runner = ArchimedesQARunner(timeout_per_test=30.0)
+    report = await runner.run_all()
+    return report.to_dict()
+
+@app.get("/api/qa/latest")
+async def get_latest_qa():
+    """Get the most recent QA report."""
+    from pathlib import Path
+    import json
+    latest = Path("data/qa_reports/latest.json")
+    if not latest.exists():
+        from fastapi import HTTPException
+        raise HTTPException(404, "No QA report yet. Run POST /api/qa/run first.")
+    return json.loads(latest.read_text())
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))

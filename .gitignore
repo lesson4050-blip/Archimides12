@@ -128,3 +128,11 @@ skills
 skills/
 tests/*.json
 tests/*.jsonl
+
+# Archimedes QA & Runtime DBs
+data/qa_reports/
+data/flywheel.jsonl
+data/scheduler_jobs.json
+data/archimedes.db
+data/prompt_versions.db
+data/chroma_db/
