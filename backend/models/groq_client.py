@@ -48,7 +48,7 @@ def _parse_failed_generation(content: str) -> List[Dict[str, Any]]:
     
     tool_calls = []
     # Known tool names to avoid false positives on random XML tags
-    KNOWN_TOOLS = {"search", "shell", "file", "ast_navigator", "fast_linter", "web_read", "browser"}
+    KNOWN_TOOLS = {"search", "shell", "file", "ast_navigator", "fast_linter", "web_read", "browser", "message"}
     
     for match in matches:
         try:
@@ -86,6 +86,8 @@ def _parse_failed_generation(content: str) -> List[Dict[str, Any]]:
                         try:
                             parsed_args[k] = int(v)
                         except: pass
+                    if isinstance(v, str) and v.lower() in ("true", "false"):
+                        parsed_args[k] = (v.lower() == "true")
                 
                 raw_tc = {"name": name, "params": parsed_args}
                 validated = validate_tool_call(raw_tc)
@@ -190,7 +192,18 @@ class GroqClient:
                 if "tool_use_failed" in err_str or "failed_generation" in err_str:
                     logger.warning(f"Groq tool_use_failed detected. Attempting rescue. Error: {err_str[:200]}...")
                     try:
-                        tool_calls = _parse_failed_generation(err_str)
+                        # Extract unescaped failed_generation directly from exception body if available
+                        failed_gen = ""
+                        if hasattr(e, "body") and isinstance(e.body, dict):
+                            failed_gen = e.body.get("error", {}).get("failed_generation", "")
+                        if not failed_gen and hasattr(e, "response") and hasattr(e.response, "json"):
+                            try:
+                                failed_gen = e.response.json().get("error", {}).get("failed_generation", "")
+                            except Exception:
+                                pass
+                        
+                        source_str = failed_gen if failed_gen else err_str
+                        tool_calls = _parse_failed_generation(source_str)
                         if tool_calls:
                             logger.info(f"Successfully rescued {len(tool_calls)} tool calls from error string")
                             return {
@@ -201,7 +214,26 @@ class GroqClient:
                                 "tokens_used": 0
                             }
                         else:
-                            logger.warning("Rescue failed: no valid tool calls found in error string.")
+                            # Text-rescue fallback: if no valid tool calls, extract clean text/code
+                            import re
+                            text_content = ""
+                            if failed_gen:
+                                text_content = failed_gen
+                                text_content = re.sub(r'<message>(.*?)</message>', r'\1', text_content, flags=re.DOTALL)
+                                text_content = re.sub(r'</?[a-zA-Z0-9_-]+(?:=[^>]+)?>', '', text_content)
+                                text_content = text_content.strip()
+                            
+                            if text_content:
+                                logger.info("Successfully rescued text content from failed generation")
+                                return {
+                                    "model_used": "groq",
+                                    "thought": "Rescued text response from tool_use_failed",
+                                    "tool_calls": [],
+                                    "text": text_content,
+                                    "tokens_used": 0
+                                }
+                            
+                            logger.warning("Rescue failed: no valid tool calls or text found in error string.")
                     except Exception as rescue_err:
                         logger.error(f"Failed to rescue Groq tool call: {rescue_err}")
 

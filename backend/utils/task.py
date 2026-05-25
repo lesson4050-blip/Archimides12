@@ -37,6 +37,9 @@ def safe_create_task(coro, name=None):
     This prevents unbounded task spawning from crashing the event loop.
     """
     async def _guarded():
+        if coro is None:
+            _logger.debug("safe_create_task received None — skipping")
+            return
         sem = _get_semaphore()
         await sem.acquire()
         try:

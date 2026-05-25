@@ -541,17 +541,24 @@ class AgentOrchestrator:
         )
         
         # Proactive search for information questions
+        search_context = ""
         if not _MEMORY_RECALL.search(state.task_description):
-            search_context = await self._maybe_search_for_context(state.task_description)
-            if search_context:
-                system_prompt += (
-                    f"\n\nRelevant search results (use these to answer accurately):\n"
-                    f"{search_context}"
-                )
+            search_context = await self._maybe_search_for_context(state.task_description) or ""
         
         messages = [
             {"role": "system", "content": system_prompt},
         ]
+        
+        # Inject dynamic search results as a separate user message (preserves KV-cache prefix)
+        if search_context:
+            messages.append({
+                "role": "user",
+                "content": (
+                    "[RELEVANT SEARCH RESULTS — use these to answer accurately]\n"
+                    f"{search_context}\n"
+                    "[END SEARCH RESULTS]"
+                )
+            })
         
         # Include prior conversation turns
         try:

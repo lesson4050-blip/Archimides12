@@ -31,14 +31,13 @@ def get_aspect_ratio(width: int, height: int) -> str:
 class ImageGenTool:
     """
     Инструмент для генерации изображений.
-    По умолчанию использует Gemini 3.1 Flash Image (Nano Banana 2) при наличии GOOGLE_API_KEY,
-    с автоматическим откатом на бесплатный Pollinations.ai (Flux) при его отсутствии или ошибках.
+    Использует API Pollinations.ai (Flux) для генерации высококачественных изображений.
     """
 
     def get_definition(self) -> Dict[str, Any]:
         return {
             "name": "image_gen",
-            "description": "Генерация высококачественных изображений по текстовому описанию с использованием Gemini 3.1 (Nano Banana 2) или бесплатного резервного API.",
+            "description": "Генерация высококачественных изображений по текстовому описанию с использованием API Pollinations.ai (Flux).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -46,7 +45,7 @@ class ImageGenTool:
                     "width": {"type": "integer", "description": "Ширина изображения", "default": 1024},
                     "height": {"type": "integer", "description": "Высота изображения", "default": 1024},
                     "seed": {"type": "integer", "description": "Случайное число для генерации"},
-                    "model": {"type": "string", "description": "Модель для генерации при откате (flux, turbo и др.)", "default": "flux"}
+                    "model": {"type": "string", "description": "Модель для генерации (flux, turbo и др.)", "default": "flux"}
                 },
                 "required": ["prompt"]
             }
@@ -58,69 +57,9 @@ class ImageGenTool:
         seed = kwargs.get("seed", uuid.uuid4().int % 1000000)
         model = kwargs.get("model", "flux")
         
-        # 1. Попытка использовать Google Gemini 3.1 Flash Image (Nano Banana 2)
-        api_key = settings.GOOGLE_API_KEY
-        if api_key:
-            try:
-                logger.info("Использование Google Gemini 3.1 Flash Image API (Nano Banana 2)")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key={api_key}"
-                
-                aspect_ratio = get_aspect_ratio(width, height)
-                
-                payload = {
-                    "contents": [
-                        {
-                            "parts": [
-                                {
-                                    "text": prompt
-                                }
-                            ]
-                        }
-                    ],
-                    "generationConfig": {
-                        "imageConfig": {
-                            "aspectRatio": aspect_ratio
-                        }
-                    }
-                }
-                
-                response = requests.post(
-                    url, 
-                    json=payload, 
-                    headers={"Content-Type": "application/json"}, 
-                    timeout=30
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            inline_data = parts[0].get("inlineData", {})
-                            image_base64 = inline_data.get("data")
-                            if image_base64:
-                                output_dir = "generated_images"
-                                os.makedirs(output_dir, exist_ok=True)
-                                filename = f"image_{uuid.uuid4().hex[:8]}.png"
-                                filepath = os.path.join(output_dir, filename)
-                                
-                                with open(filepath, "wb") as f:
-                                    f.write(base64.b64decode(image_base64))
-                                    
-                                return {
-                                    "success": True,
-                                    "url": f"local:{filepath}",
-                                    "local_path": filepath,
-                                    "message": f"Изображение успешно сгенерировано с помощью Gemini 3.1 Flash Image по промпту: {prompt}"
-                                }
-                logger.warning(f"Ошибка Gemini API ({response.status_code}): {response.text}. Откат на Pollinations.ai.")
-            except Exception as e:
-                logger.error(f"Не удалось сгенерировать изображение через Gemini API: {e}. Откат на Pollinations.ai.")
-
-        # 2. Резервный вариант: бесплатный API Pollinations.ai
+        # Используем API Pollinations.ai для генерации изображений
         try:
-            logger.info("Использование резервного API Pollinations.ai")
+            logger.info("Использование API Pollinations.ai")
             encoded_prompt = requests.utils.quote(prompt)
             url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&model={model}"
             
@@ -138,11 +77,11 @@ class ImageGenTool:
                     "success": True,
                     "url": url,
                     "local_path": filepath,
-                    "message": f"Изображение успешно сгенерировано через резервный API (Flux) по промпту: {prompt}"
+                    "message": f"Изображение успешно сгенерировано через Pollinations.ai (Flux) по промпту: {prompt}"
                 }
             else:
-                return {"success": False, "error": f"Ошибка резервного API: {response.status_code}"}
+                return {"success": False, "error": f"Ошибка API: {response.status_code}"}
                 
         except Exception as e:
-            logger.error(f"Ошибка ImageGenTool (резервный API): {e}")
+            logger.error(f"Ошибка ImageGenTool: {e}")
             return {"success": False, "error": str(e)}

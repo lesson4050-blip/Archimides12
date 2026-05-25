@@ -107,7 +107,8 @@ class ToolInitializer:
 
         try:
             async def _dummy_message(**kwargs):
-                return {"success": True, "output": "Message generated."}
+                content = kwargs.get("content", "")
+                return {"success": True, "output": content or "Message delivered.", "is_final_message": True}
             self.tool_registry.register("message", _dummy_message)
         except Exception as e:
             logger.error(f"Failed to register message handler: {e}")

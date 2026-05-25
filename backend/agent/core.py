@@ -174,15 +174,10 @@ class ArchimedesCosmoAgent:
             self.tool_registry.set_ready()
 
     async def _init_connectors(self) -> None:
-        """Synchronizes connected services and updates system prompt with connector context."""
+        """Synchronizes connected services."""
         try:
             await self.connector_bridge.sync_connected_services()
-            ctx = self.connector_bridge.get_active_services_context()
-            if ctx:
-                self.system_prompt += f"\n\n{ctx}"
-                if self.history and self.history[0].get("role") == "system":
-                    self.history[0]["content"] = self.system_prompt
-                logger.info("Connector bridge initialized")
+            logger.info("Connector bridge initialized")
         except Exception as e:
             logger.warning(f"Connector init failed (non-critical): {e}")
 
@@ -289,23 +284,37 @@ class ArchimedesCosmoAgent:
                 )
             except Exception as e:
                 logger.debug(f"Memory context fetch failed (non-critical): {e}")
+
+            # Inject active connected services context
+            connector_context = ""
+            try:
+                connector_context = self.connector_bridge.get_active_services_context()
+            except Exception as e:
+                logger.debug(f"Connector context fetch failed (non-critical): {e}")
           
-            # Keep task clean — memory goes in separate message
+            # Keep task clean — memory and connector context go in separate message
             enriched_task = task_description
             
-            # Build memory message separately (stable prefix preserved)
-            memory_message = None
+            # Build memory and connector context message separately (stable prefix preserved)
+            memory_message_content = []
             if memory_context:
+                memory_message_content.append(
+                    f"[RELEVANT CONTEXT FROM MEMORY]\n"
+                    f"{memory_context}\n"
+                    f"[END CONTEXT]"
+                )
+            if connector_context:
+                memory_message_content.append(
+                    f"{connector_context}"
+                )
+
+            memory_message = None
+            if memory_message_content:
                 memory_message = {
                     "role": "user",
-                    "content": (
-                        f"[RELEVANT CONTEXT FROM MEMORY]\n"
-                        f"{memory_context}\n"
-                        f"[END CONTEXT]\n\n"
-                        f"Use the above context to personalize your response if relevant."
-                    )
+                    "content": "\n\n".join(memory_message_content) + "\n\nUse the above context to personalize your response and guide your service usage if relevant."
                 }
-                logger.info(f"Memory injected as separate message: ~{len(memory_context.split())} tokens")
+                logger.info("Context injected as separate user message (stable prefix preserved)")
 
             orch_result = await self.orchestrator.run_task(
                 task_description=enriched_task, 

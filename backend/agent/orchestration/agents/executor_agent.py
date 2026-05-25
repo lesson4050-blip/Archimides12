@@ -176,7 +176,7 @@ class ExecutorAgent(BaseAgent):
         max_reasoning = 15
         max_tool = 25
         
-        MAX_ITERATIONS = 5  # for simple tasks
+        MAX_ITERATIONS = 8  # enough for coding tasks with error recovery
         iteration_count = 0
 
         while reasoning_steps < max_reasoning and tool_call_steps < max_tool:
@@ -513,13 +513,13 @@ class ExecutorAgent(BaseAgent):
                             return call_id, t_name, t_params, success, output, should_stop, reason, tool_res, this_error
 
                         from backend.agent.self_improvement import log_error
-                        log_error(output, t_name, state.session_id)
+                        await log_error(output, t_name, state.session_id)
     
                         recovery_advice = self.error_recovery.get_recovery_advice(t_name, output)
                         output += f"\n[RECOVERY HINT]: {recovery_advice}"
                         
                         from backend.agent.self_improvement import get_fix_hint
-                        fix_hint = get_fix_hint(output)
+                        fix_hint = await get_fix_hint(output, t_name)
                         if fix_hint:
                             output += f"\n[LEARNED FIX]: {fix_hint}"
                             await self.log_thought(f"💡 Applied learned fix pattern", websocket_send)
@@ -547,7 +547,7 @@ class ExecutorAgent(BaseAgent):
     
                         if local_prev_error and success:
                             from backend.agent.self_improvement import learn_from_error
-                            learn_from_error(
+                            await learn_from_error(
                                 error=local_prev_error,
                                 fix=f"Used {t_name} with {t_params}",
                                 tool_name=t_name
@@ -677,6 +677,26 @@ class ExecutorAgent(BaseAgent):
                 state.history = self.context_manager.get_messages()
                 
                 await self.context_manager.summarize_if_needed(self.router)
+
+                # Check if any tool call was the 'message' tool (final answer signal)
+                message_result = None
+                for call_id, t_name, t_params, success, output, should_stop, reason, tool_res, this_error in results:
+                    if t_name == "message" and success:
+                        message_result = output or t_params.get("content", "")
+                        break
+                
+                if message_result:
+                    # Model signaled final answer via message tool — stop the loop
+                    logger.info("Message tool called — treating as final answer")
+                    if websocket_send:
+                        safe_create_task(websocket_send({
+                            "type": "message_chunk",
+                            "content": message_result
+                        }))
+                    state.results.append({"step": state.current_step_index, "output": message_result})
+                    state.history = self.context_manager.get_messages()
+                    return state
+
                 # CONTINUE the loop to process tool output
                 tool_call_steps += 1
                 continue

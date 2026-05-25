@@ -271,13 +271,22 @@ class ToolRegistry:
                         pass  # Keep original if conversion fails
 
         try:
-            TOOLS_NEEDING_SESSION = {
-                "file", "shell", "browser", "voice", "document",
-                "slides", "expose", "plan", "monitor", "trigger",
-                "fast_linter", "ast_navigator",
-            }
-            if session_id and name in TOOLS_NEEDING_SESSION:
-                params["session_id"] = session_id
+            try:
+                import inspect
+                sig = inspect.signature(self.tools[name])
+                has_session_id = "session_id" in sig.parameters
+                has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+                if (has_session_id or has_kwargs) and session_id:
+                    params["session_id"] = session_id
+            except Exception:
+                # Fallback to hardcoded list if inspection fails
+                TOOLS_NEEDING_SESSION = {
+                    "file", "shell", "browser", "voice", "document",
+                    "slides", "expose", "plan", "monitor", "trigger",
+                    "fast_linter", "ast_navigator", "repo_map", "repl", "swarm", "vision_critic", "schedule"
+                }
+                if session_id and name in TOOLS_NEEDING_SESSION:
+                    params["session_id"] = session_id
 
             result = await self.tools[name](**params)
 

@@ -362,8 +362,14 @@ class MicroAgentSwarm:
             knowledge_ctx = ""
 
         messages = [
-            {"role": "system", "content": agent.system_prompt + knowledge_ctx},
+            {"role": "system", "content": agent.system_prompt},
         ]
+        # Inject dynamic knowledge as a separate user message (preserves KV-cache prefix)
+        if knowledge_ctx:
+            messages.append({
+                "role": "user",
+                "content": f"[RELEVANT KNOWLEDGE CONTEXT]{knowledge_ctx}\n[END KNOWLEDGE CONTEXT]"
+            })
         if context:
             messages.append({
                 "role": "user",
