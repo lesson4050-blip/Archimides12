@@ -31,19 +31,21 @@ def get_aspect_ratio(width: int, height: int) -> str:
 class ImageGenTool:
     """
     Инструмент для генерации изображений.
-    Использует API Pollinations.ai (Flux) для генерации высококачественных изображений.
+    По умолчанию использует Pollinations.ai (Flux) для генерации высококачественных изображений.
+    В качестве дополнительного апгрейда при наличии GOOGLE_API_KEY поддерживает переход на Gemini Image API.
     """
 
     def get_definition(self) -> Dict[str, Any]:
         return {
             "name": "image_gen",
-            "description": "Генерация высококачественных изображений по текстовому описанию с использованием API Pollinations.ai (Flux).",
+            "description": "Генерация высококачественных изображений по текстовому описанию с использованием Pollinations.ai (Flux) или Google Gemini Image.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "prompt": {"type": "string", "description": "Текстовое описание изображения"},
-                    "width": {"type": "integer", "description": "Ширина изображения", "default": 1024},
-                    "height": {"type": "integer", "description": "Высота изображения", "default": 1024},
+                    "size": {"type": "string", "description": "Размер изображения (например, 512x512, 1024x1024)", "default": "512x512"},
+                    "width": {"type": "integer", "description": "Ширина изображения", "default": 512},
+                    "height": {"type": "integer", "description": "Высота изображения", "default": 512},
                     "seed": {"type": "integer", "description": "Случайное число для генерации"},
                     "model": {"type": "string", "description": "Модель для генерации (flux, turbo и др.)", "default": "flux"}
                 },
@@ -52,16 +54,24 @@ class ImageGenTool:
         }
 
     async def execute(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        width = kwargs.get("width", 1024)
-        height = kwargs.get("height", 1024)
+        size = kwargs.get("size")
+        if size and "x" in size:
+            try:
+                width, height = map(int, size.split("x"))
+            except ValueError:
+                width, height = 512, 512
+        else:
+            width = kwargs.get("width", 512)
+            height = kwargs.get("height", 512)
+            
         seed = kwargs.get("seed", uuid.uuid4().int % 1000000)
         model = kwargs.get("model", "flux")
         
-        # Используем API Pollinations.ai для генерации изображений
+        # 1. Основной провайдер: Pollinations.ai (бесплатно)
         try:
             logger.info("Использование API Pollinations.ai")
             encoded_prompt = requests.utils.quote(prompt)
-            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&seed={seed}&model={model}"
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&nologo=true"
             
             output_dir = "generated_images"
             os.makedirs(output_dir, exist_ok=True)
@@ -77,11 +87,75 @@ class ImageGenTool:
                     "success": True,
                     "url": url,
                     "local_path": filepath,
-                    "message": f"Изображение успешно сгенерировано через Pollinations.ai (Flux) по промпту: {prompt}"
+                    "file_path": filepath,
+                    "provider": "pollinations",
+                    "message": f"Изображение успешно сгенерировано через Pollinations.ai по промпту: {prompt}"
                 }
             else:
-                return {"success": False, "error": f"Ошибка API: {response.status_code}"}
-                
+                logger.warning(f"Ошибка API Pollinations.ai ({response.status_code}): {response.text}")
         except Exception as e:
-            logger.error(f"Ошибка ImageGenTool: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Ошибка при работе с Pollinations.ai: {e}")
+
+        # 2. Опциональный апгрейд: Google Gemini Image (imagen-3.0-generate-002)
+        api_key = settings.GOOGLE_API_KEY
+        if api_key:
+            try:
+                logger.info("Использование Google Gemini Image API (imagen-3.0-generate-002)")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateContent?key={api_key}"
+                
+                aspect_ratio = get_aspect_ratio(width, height)
+                
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {
+                                    "text": prompt
+                                }
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "imageConfig": {
+                            "aspectRatio": aspect_ratio
+                        }
+                    }
+                }
+                
+                response = requests.post(
+                    url, 
+                    json=payload, 
+                    headers={"Content-Type": "application/json"}, 
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            inline_data = parts[0].get("inlineData", {})
+                            image_base64 = inline_data.get("data")
+                            if image_base64:
+                                output_dir = "generated_images"
+                                os.makedirs(output_dir, exist_ok=True)
+                                filename = f"image_{uuid.uuid4().hex[:8]}.png"
+                                filepath = os.path.join(output_dir, filename)
+                                
+                                with open(filepath, "wb") as f:
+                                    f.write(base64.b64decode(image_base64))
+                                    
+                                return {
+                                    "success": True,
+                                    "url": f"local:{filepath}",
+                                    "local_path": filepath,
+                                    "file_path": filepath,
+                                    "provider": "imagen-3.0-generate-002",
+                                    "message": f"Изображение успешно сгенерировано с помощью Gemini Image API по промпту: {prompt}"
+                                }
+                logger.error(f"Ошибка Gemini API ({response.status_code}): {response.text}")
+            except Exception as e:
+                logger.error(f"Не удалось сгенерировать изображение через Gemini API: {e}")
+
+        return {"success": False, "error": "Не удалось сгенерировать изображение ни одним из доступных методов."}
