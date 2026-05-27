@@ -170,7 +170,7 @@ async def classify_task(text: str, router: Optional[Any] = None) -> Tuple[str, s
     Signal 3: LLM classification (slow but accurate fallback)
     """
     SEARCH_DIRECT = re.compile(
-        r'\b(расскажи|what is|who is|покажи|что такое|почему|разница|explain|why)\b',
+        r'\b(расскажи|what is|who is|покажи|что такое|почему|разница|explain|why|найди|найти|поищи|новости|news|find|search)\b',
         re.IGNORECASE
     )
     if SEARCH_DIRECT.search(text) and not any(w in text.lower() for w in ['код', 'code', 'fix', 'bug', 'implement', 'error', 'errors', 'issue', 'issues', 'test', 'tests', 'problem', 'problems', 'ошиб', 'баг']):
@@ -459,6 +459,8 @@ class AgentOrchestrator:
             
             # Semantic task routing
             complexity, strategy = await classify_task(task_description, self.router)
+            state.metadata["complexity"] = complexity
+            state.metadata["strategy"] = strategy
 
             trail.record_routing(
                 chosen_strategy=strategy,
@@ -684,9 +686,23 @@ class AgentOrchestrator:
         state = await self.planner.process(state, websocket_send)
         if not state.current_plan:
              return {"success": False, "error": "Planning failed and fallback failed."}
+
+        complexity = state.metadata.get("complexity", "complex")
+        strategy = state.metadata.get("strategy", "swarm_code")
+        task_lower = state.task_description.lower()
+
+        # Only show HITL for genuinely complex tasks
+        should_show_hitl = (
+            strategy in ('swarm_code', 'codeact') and  # Only for coding
+            complexity == 'complex' and
+            not any(kw in task_lower for kw in [
+                'найди', 'поищи', 'search', 'find', 'what is', 'tell me',
+                'расскажи', 'новости', 'news'
+            ])
+        )
         
         # plan approval gate loop
-        while os.environ.get("TESTING") != "1" and websocket_send:
+        while os.environ.get("TESTING") != "1" and websocket_send and should_show_hitl:
             from backend.websocket.handler import manager as ws_manager
             phases_text = []
             for p_idx, phase in enumerate(state.current_plan.get("phases", [])):
@@ -775,7 +791,7 @@ class AgentOrchestrator:
                 state.reset_for_subtask()
                 
                 # Subtask HITL approval gate
-                if os.environ.get("TESTING") != "1" and websocket_send:
+                if os.environ.get("TESTING") != "1" and websocket_send and should_show_hitl:
                     from backend.websocket.handler import manager as ws_manager
                     subtask_prompt = (
                         f"🚀 **Готов приступить к шагу {i+1} из {len(all_subtasks)}:**\n"

@@ -240,6 +240,8 @@ class MicroAgentSwarm:
 
             thought = response.get("thought", response.get("thinking", ""))
             tool_call = response.get("tool_call")
+            if not tool_call and response.get("tool_calls"):
+                tool_call = response.get("tool_calls")[0]
 
             if tool_call:
                 t_name = tool_call["name"]

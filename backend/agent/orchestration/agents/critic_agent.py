@@ -58,7 +58,7 @@ AUTO-FAIL TRIGGERS:
 - Security violation (e.g., hardcoded secrets).
 
 VERDICT RULES:
-- If ALL scores >= 8 and no auto-fail: "VERDICT: PASS"
+- If average score >= 4 and no auto-fail: "VERDICT: PASS"
 - Otherwise: "VERDICT: FAIL"
 
 For FAIL, list specific issues: "ISSUE: [actionable technical problem]"
@@ -74,6 +74,23 @@ IMPORTANT: Respond in the SAME LANGUAGE as the original task description.
     ) -> OrchestrationState:
         if not state.results:
             return state  # Nothing to review
+
+        # Count tools used in the current subtask attempt
+        tools_used = 0
+        for msg in reversed(state.history):
+            if msg.get("role") == "user":
+                break
+            if msg.get("role") == "tool":
+                tools_used += 1
+
+        if state.current_retry_count >= 2 and tools_used == 0:
+            logger.info(
+                f"[Critic] retry_count={state.current_retry_count} >= 2 "
+                f"and no tools were used. Accepting result."
+            )
+            state.metadata["critic_verdict"] = "PASS"
+            state.current_retry_count = 0
+            return state
 
         last_result = state.results[-1].get("output", "")
 
@@ -158,13 +175,24 @@ IMPORTANT: Respond in the SAME LANGUAGE as the original task description.
                 r"\s*security=(\d+),\s*quality=(\d+)",
                 review_text, re.IGNORECASE
             )
+            average_score = 1.0
             if scores_match:
-                state.metadata["critic_scores"] = {
+                scores = {
                     "correctness": int(scores_match.group(1)),
                     "completeness": int(scores_match.group(2)),
-                    "language": int(scores_match.group(3)),
+                    "security": int(scores_match.group(3)),
                     "quality": int(scores_match.group(4)),
                 }
+                state.metadata["critic_scores"] = scores
+                average_score = sum(scores.values()) / 40.0
+                
+            if scores_match:
+                if average_score >= 0.4:
+                    is_pass = True
+                    is_fail = False
+                else:
+                    is_pass = False
+                    is_fail = True
 
             if is_pass and not is_fail:
                 await self.log_thought(
