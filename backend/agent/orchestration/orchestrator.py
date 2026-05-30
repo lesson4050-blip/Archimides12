@@ -477,8 +477,16 @@ class AgentOrchestrator:
                 state.add_message("system", skill_ctx)
                 logger.info("SkillLibrary: injected matching playbook")
             
-            # Semantic task routing
-            complexity, strategy = await classify_task(task_description, self.router)
+            # Use instance method first (fast, deterministic, no LLM cost)
+            complexity, strategy = self.classify_task(task_description)
+            
+            # Only use LLM classifier for ambiguous medium-complexity tasks
+            if complexity == "medium" or strategy == "single":
+                try:
+                    llm_complexity, llm_strategy = await classify_task(task_description, self.router)
+                    complexity, strategy = llm_complexity, llm_strategy
+                except Exception as e:
+                    logger.warning(f"LLM classifier failed, using heuristic result: {e}")
             state.metadata["complexity"] = complexity
             state.metadata["strategy"] = strategy
 
