@@ -34,7 +34,32 @@ class SandboxFilesystem:
     async def read_file(self, session_id: str, path: str, start_line: int = None, end_line: int = None) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
-            return {"success": False, "error": "Sandbox container not available."}
+            try:
+                base_workspace = os.path.abspath("./workspace")
+                session_workspace = os.path.abspath(os.path.join(base_workspace, session_id))
+                full_path = os.path.abspath(os.path.join(session_workspace, path))
+                if not full_path.startswith(session_workspace + os.sep) and full_path != session_workspace:
+                    return {"success": False, "error": "Path traversal attempt blocked."}
+                
+                if not os.path.exists(full_path):
+                    return {"success": False, "error": f"File not found: {path}"}
+                
+                with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.readlines()
+                
+                if start_line is not None and end_line is not None:
+                    selected_lines = lines[start_line - 1 : end_line]
+                elif start_line is not None:
+                    selected_lines = lines[start_line - 1 :]
+                elif end_line is not None:
+                    selected_lines = lines[:end_line]
+                else:
+                    selected_lines = lines
+                
+                content = "".join(selected_lines)
+                return {"success": True, "content": content}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
             
         try:
             # Use cat via exec_run to read
@@ -70,7 +95,26 @@ class SandboxFilesystem:
     async def write_file(self, session_id: str, path: str, content: Any) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
-            return {"success": False, "error": "Sandbox container not available."}
+            try:
+                base_workspace = os.path.abspath("./workspace")
+                session_workspace = os.path.abspath(os.path.join(base_workspace, session_id))
+                full_path = os.path.abspath(os.path.join(session_workspace, path))
+                if not full_path.startswith(session_workspace + os.sep) and full_path != session_workspace:
+                    return {"success": False, "error": "Path traversal attempt blocked."}
+                
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                
+                if isinstance(content, str):
+                    content_bytes = content.encode('utf-8')
+                else:
+                    content_bytes = content
+                
+                with open(full_path, "wb") as f:
+                    f.write(content_bytes)
+                
+                return {"success": True, "size": len(content_bytes)}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
             
         try:
             safe_path = self._safe_path(path)
@@ -104,7 +148,27 @@ class SandboxFilesystem:
     async def list_files(self, session_id: str, path: str = ".") -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
-            return {"success": False, "error": "Sandbox container not available."}
+            try:
+                base_workspace = os.path.abspath("./workspace")
+                session_workspace = os.path.abspath(os.path.join(base_workspace, session_id))
+                full_path = os.path.abspath(os.path.join(session_workspace, path))
+                if not full_path.startswith(session_workspace + os.sep) and full_path != session_workspace:
+                    return {"success": False, "error": "Path traversal attempt blocked."}
+                
+                if not os.path.exists(full_path):
+                    return {"success": False, "error": f"Directory not found: {path}"}
+                
+                entries = os.listdir(full_path)
+                formatted = []
+                for entry in entries:
+                    entry_path = os.path.join(full_path, entry)
+                    if os.path.isdir(entry_path):
+                        formatted.append(entry + "/")
+                    else:
+                        formatted.append(entry)
+                return {"success": True, "files": formatted}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
             
         try:
             import shlex

@@ -403,45 +403,72 @@ class SandboxManager:
     # Session Lifecycle
     # ------------------------------------------------------------------
 
-    async def create_session(self, session_id: str) -> bool:
-        from backend.metrics import active_sandboxes, warm_pool_hits, warm_pool_misses
-        async with self._lock:
-            if session_id in self._sessions:
-                self._sessions[session_id].last_activity = time.time()
-                return True
-            
-            # Пробуем warm pool сначала
-            if hasattr(self, 'warm_pool'):
-                container = await self.warm_pool.acquire(session_id)
-                if container:
-                    self._sessions[session_id] = SessionInfo(
-                        container=container, session_id=session_id
-                    )
-                    # Start VNC/Desktop streaming for the warm container
-                    await self.novnc.start_streaming(session_id)
-                    # Запустить persistent shell на уже работающем контейнере
-                    shell = PersistentShell(container)
-                    await shell.start()
-                    self._shells[session_id] = shell
-                    active_sandboxes.inc()
+    async def create_session(self, session_id: str) -> Any:
+        try:
+            if not self.client:
+                raise RuntimeError("Docker daemon is not running or client is unavailable.")
+            from backend.metrics import active_sandboxes, warm_pool_hits, warm_pool_misses
+            async with self._lock:
+                if session_id in self._sessions:
+                    self._sessions[session_id].last_activity = time.time()
                     return True
+                
+                # Пробуем warm pool сначала
+                if hasattr(self, 'warm_pool'):
+                    container = await self.warm_pool.acquire(session_id)
+                    if container:
+                        self._sessions[session_id] = SessionInfo(
+                            container=container, session_id=session_id
+                        )
+                        # Start VNC/Desktop streaming for the warm container
+                        await self.novnc.start_streaming(session_id)
+                        # Запустить persistent shell на уже работающем контейнере
+                        shell = PersistentShell(container)
+                        await shell.start()
+                        self._shells[session_id] = shell
+                        active_sandboxes.inc()
+                        return True
+                
+                # Fallback: cold start
+                if len(self._sessions) >= settings.SANDBOX_MAX_CONTAINERS:
+                    oldest_sid = min(self._sessions.keys(), key=lambda sid: self._sessions[sid].last_activity)
+                    logger.info(f"Max containers reached, destroying oldest session: {oldest_sid}")
+                    # Вызываем напрямую _stop_and_remove, чтобы не возвращать эвикнутый контейнер в пул
+                    session_to_evict = self._sessions.pop(oldest_sid)
+                    active_sandboxes.dec()
+                    shell_to_evict = self._shells.pop(oldest_sid, None)
+                    if shell_to_evict:
+                        shell_to_evict.stop()
+                    await self._stop_and_remove(session_to_evict.container, oldest_sid)
+                
+                result = await self._create_container(session_id)
+                if not result:
+                    raise RuntimeError("Failed to create container.")
+                if result:
+                    active_sandboxes.inc()
+                return result
+        except Exception as e:
+            logger.error(
+                f"[Sandbox] Docker unavailable: {e}. "
+                f"FALLING BACK TO HOST EXECUTION — no isolation!"
+            )
             
-            # Fallback: cold start
-            if len(self._sessions) >= settings.SANDBOX_MAX_CONTAINERS:
-                oldest_sid = min(self._sessions.keys(), key=lambda sid: self._sessions[sid].last_activity)
-                logger.info(f"Max containers reached, destroying oldest session: {oldest_sid}")
-                # Вызываем напрямую _stop_and_remove, чтобы не возвращать эвикнутый контейнер в пул
-                session_to_evict = self._sessions.pop(oldest_sid)
-                active_sandboxes.dec()
-                shell_to_evict = self._shells.pop(oldest_sid, None)
-                if shell_to_evict:
-                    shell_to_evict.stop()
-                await self._stop_and_remove(session_to_evict.container, oldest_sid)
+            # Emit warning to UI via EventBus
+            try:
+                from backend.agent.orchestration.event_bus import EventBus
+                bus = EventBus.get_instance(session_id)
+                await bus.emit({
+                    "type": "agent_error",
+                    "error": "⚠️ Sandbox isolation unavailable (Docker not running). "
+                             "Commands execute on your machine directly.",
+                    "severity": "warning",
+                    "session_id": session_id,
+                })
+            except Exception:
+                pass
             
-            result = await self._create_container(session_id)
-            if result:
-                active_sandboxes.inc()
-            return result
+            # Fall back to local session
+            return {"mode": "local", "session_id": session_id, "isolated": False}
 
     async def destroy_session(self, session_id: str):
         from backend.metrics import active_sandboxes

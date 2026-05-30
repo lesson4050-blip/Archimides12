@@ -162,7 +162,39 @@ class SandboxExecutor:
     async def _run_in_docker(self, session_id: str, command: str, timeout: int = 60, user: str = "ubuntu", detach: bool = False) -> Dict[str, Any]:
         container = await self.manager.get_container(session_id)
         if not container:
-            return {"success": False, "error": "Sandbox container not available."}
+            try:
+                import subprocess
+                import os
+                loop = asyncio.get_running_loop()
+                
+                base_workspace = os.path.abspath("./workspace")
+                session_workspace = os.path.abspath(os.path.join(base_workspace, session_id))
+                os.makedirs(session_workspace, exist_ok=True)
+                
+                def _run_local():
+                    res = subprocess.run(
+                        command,
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        cwd=session_workspace
+                    )
+                    return res.returncode, res.stdout, res.stderr
+                
+                exit_code, stdout, stderr = await loop.run_in_executor(None, _run_local)
+                output_str = stdout + stderr
+                return {
+                    "success": exit_code == 0,
+                    "exit_code": exit_code,
+                    "output": output_str,
+                    "error": output_str if exit_code != 0 else None
+                }
+            except subprocess.TimeoutExpired:
+                return {"success": False, "error": f"Command timed out after {timeout} seconds."}
+            except Exception as e:
+                logger.error(f"Local command execution error: {e}")
+                return {"success": False, "error": str(e)}
 
         # Wrap command in timeout and bash
         cmd_list = ["timeout", str(timeout), "bash", "-c", command] if not detach else ["bash", "-c", command]

@@ -26,12 +26,62 @@ class AgentMessage:
 class HydraAgent:
     """Single agent with isolated history."""
 
-    def __init__(self, role: str, system_prompt: str, router):
+    def __init__(self, role: str, system_prompt: str, router, tool_registry=None):
         self.role = role
         self.router = router
+        self.tool_registry = tool_registry
         self.history: List[Dict] = [
             {"role": "system", "content": system_prompt}
         ]
+        ROLE_HINTS = {
+            "scout": "fast",
+            "warrior": "code",
+            "sentinel": "think",
+            "commander": "plan",
+        }
+        self.task_hint = ROLE_HINTS.get(self.role, "default")
+
+    def _get_tools_for_role(self) -> list:
+        """Get tool definitions appropriate for this agent's role."""
+        from backend.agent.tool_selector import select_tools
+        
+        # Get all tool definitions from registry
+        if not hasattr(self, 'tool_registry') or not self.tool_registry:
+            return []
+        
+        all_tools = []
+        for tool_name, tool_fn in self.tool_registry.tools.items():
+            # Build OpenAI-compatible tool definition
+            import inspect
+            try:
+                sig = inspect.signature(tool_fn)
+                params = {}
+                required = []
+                for pname, param in sig.parameters.items():
+                    if pname in ('self', 'kwargs', 'args'):
+                        continue
+                    params[pname] = {"type": "string", "description": pname}
+                    if param.default == inspect.Parameter.empty:
+                        required.append(pname)
+                
+                all_tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": f"Tool: {tool_name}",
+                        "parameters": {
+                            "type": "object",
+                            "properties": params,
+                            "required": required
+                        }
+                    }
+                })
+            except Exception:
+                pass
+        
+        # Select relevant tools for this role
+        task = self.history[-1].get("content", "") if self.history else ""
+        return select_tools(task, all_tools, max_tools=6)
 
     async def run(
         self,
@@ -54,16 +104,12 @@ class HydraAgent:
         done_signal = done_signal or f"{self.role.upper()}_DONE"
         last_text = ""
 
-        ROLE_HINTS = {
-            "scout": "fast",
-            "warrior": "code",
-            "sentinel": "think",
-            "commander": "plan",
-        }
         for _ in range(max_iters):
+            tools = self._get_tools_for_role()
             response = await self.router.generate(
                 messages=self.history,
-                task_hint=ROLE_HINTS.get(self.role, "default")
+                tools=tools if tools else None,
+                task_hint=self.task_hint
             )
             text = response.get("text", "")
             if not text:
@@ -73,6 +119,25 @@ class HydraAgent:
 
             if done_signal in text:
                 break
+
+            # Execute tool calls if any
+            tool_calls = response.get("tool_calls", [])
+            for tc in tool_calls:
+                tool_name = tc.get("name", "")
+                tool_params = tc.get("params", {})
+                if tool_name and hasattr(self, 'tool_registry') and self.tool_registry:
+                    try:
+                        tool_result = await self.tool_registry.execute_tool(
+                            tool_name, tool_params
+                        )
+                        # Add tool result to history
+                        self.history.append({
+                            "role": "tool",
+                            "content": str(tool_result.get("output", tool_result))[:2000],
+                            "tool_name": tool_name
+                        })
+                    except Exception as e:
+                        logger.warning(f"[Hydra] Tool {tool_name} failed: {e}")
 
             self.history.append({
                 "role": "user",
@@ -162,16 +227,16 @@ class HydraCommander:
 
 
 class HydraScout(HydraAgent):
-    def __init__(self, router):
-        super().__init__("scout", SCOUT_PROMPT, router)
+    def __init__(self, router, tool_registry=None):
+        super().__init__("scout", SCOUT_PROMPT, router, tool_registry=tool_registry)
 
     async def investigate(self, task: str) -> AgentMessage:
         return await self.run(task, done_signal="SCOUT_DONE", max_iters=8)
 
 
 class HydraWarrior(HydraAgent):
-    def __init__(self, router):
-        super().__init__("warrior", WARRIOR_PROMPT, router)
+    def __init__(self, router, tool_registry=None):
+        super().__init__("warrior", WARRIOR_PROMPT, router, tool_registry=tool_registry)
 
     async def execute(
         self, task: str, context: List[AgentMessage]
@@ -183,8 +248,8 @@ class HydraWarrior(HydraAgent):
 
 
 class HydraSentinel(HydraAgent):
-    def __init__(self, router):
-        super().__init__("sentinel", SENTINEL_PROMPT, router)
+    def __init__(self, router, tool_registry=None):
+        super().__init__("sentinel", SENTINEL_PROMPT, router, tool_registry=tool_registry)
 
     async def verify(
         self, task: str, context: List[AgentMessage]
@@ -202,9 +267,9 @@ class HydraSwarm:
         self.router = router
         self.tool_registry = tool_registry
         self.commander = HydraCommander(router)
-        self.scout = HydraScout(router)
-        self.warrior = HydraWarrior(router)
-        self.sentinel = HydraSentinel(router)
+        self.scout = HydraScout(router, tool_registry=tool_registry)
+        self.warrior = HydraWarrior(router, tool_registry=tool_registry)
+        self.sentinel = HydraSentinel(router, tool_registry=tool_registry)
 
     async def run(
         self,
