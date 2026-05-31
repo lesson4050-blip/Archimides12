@@ -226,20 +226,13 @@ Do not output any reasoning, just 'DONE' or the new query.
                 results = data.get("results", [])
                 answer = data.get("answer", "")
 
-                formatted = []
+                formatted_output = self._format_search_results(results, max_results, query)
                 if answer:
-                    formatted.append(f"DIRECT ANSWER: {answer}\n")
-                
-                for i, r in enumerate(results[:max_results]):
-                    formatted.append(
-                        f"[{i+1}] {r.get('title', 'No title')}\n"
-                        f"URL: {r.get('url', '')}\n"
-                        f"{r.get('content', '')[:400]}"
-                    )
+                    formatted_output = f"DIRECT ANSWER: {answer}\n\n" + formatted_output
 
                 return {
                     "success": True,
-                    "output": "\n\n".join(formatted),
+                    "output": formatted_output,
                     "results": results,
                     "source": "tavily"
                 }
@@ -269,14 +262,9 @@ Do not output any reasoning, just 'DONE' or the new query.
                 data = response.json()
 
                 results = []
-                formatted = []
 
                 # Instant answer
                 if data.get("AbstractText"):
-                    formatted.append(
-                        f"ANSWER: {data['AbstractText']}\n"
-                        f"Source: {data.get('AbstractURL', '')}"
-                    )
                     results.append({
                         "title": data.get("Heading", query),
                         "url": data.get("AbstractURL", ""),
@@ -284,22 +272,24 @@ Do not output any reasoning, just 'DONE' or the new query.
                     })
 
                 # Related topics
-                for topic in data.get("RelatedTopics", [])[:max_results - 1]:
+                for topic in data.get("RelatedTopics", []):
                     if isinstance(topic, dict) and topic.get("Text"):
-                        url = topic.get("FirstURL", "")
-                        text = topic.get("Text", "")[:300]
-                        formatted.append(f"• {text}\n  {url}")
-                        results.append({"title": text[:60], "url": url, "content": text})
+                        results.append({
+                            "title": topic.get("Text", "")[:60],
+                            "url": topic.get("FirstURL", ""),
+                            "content": topic.get("Text", "")
+                        })
 
-                if not formatted:
+                if not results:
                     return {
                         "success": False,
                         "error": "DuckDuckGo returned no results"
                     }
 
+                formatted_output = self._format_search_results(results, max_results, query)
                 return {
                     "success": True,
-                    "output": "\n\n".join(formatted),
+                    "output": formatted_output,
                     "results": results,
                     "source": "duckduckgo"
                 }
@@ -323,21 +313,20 @@ Do not output any reasoning, just 'DONE' or the new query.
                 data = response.json()
 
                 results = []
-                formatted = []
 
-                for i, r in enumerate(data.get("web", {}).get("results", [])[:max_results]):
+                for r in data.get("web", {}).get("results", [])[:max_results]:
                     title = r.get("title", "No title")
                     url = r.get("url", "")
                     desc = r.get("description", "")[:400]
-                    formatted.append(f"[{i+1}] {title}\nURL: {url}\n{desc}")
                     results.append({"title": title, "url": url, "content": desc})
 
-                if not formatted:
+                if not results:
                     return {"success": False, "error": "Brave returned no results"}
 
+                formatted_output = self._format_search_results(results, max_results, query)
                 return {
                     "success": True,
-                    "output": "\n\n".join(formatted),
+                    "output": formatted_output,
                     "results": results,
                     "source": "brave",
                 }
@@ -369,22 +358,137 @@ Do not output any reasoning, just 'DONE' or the new query.
                 data = response.json()
                 results = data.get("results", [])
                 
-                formatted = []
-                for i, r in enumerate(results):
-                    # Get up to 2000 chars of deep content per result
-                    text = r.get("text", "")[:2000]
-                    formatted.append(
-                        f"[{i+1}] {r.get('title', 'No title')}\n"
-                        f"URL: {r.get('url', '')}\n"
-                        f"CONTENT:\n{text}..."
-                    )
-                
+                # Map 'text' to 'content' for the unified formatter
+                for r in results:
+                    r["content"] = r.get("text", "")
+                    
+                formatted_output = self._format_search_results(results, max_results, query)
                 return {
                     "success": True,
-                    "output": "\n\n".join(formatted),
+                    "output": formatted_output,
                     "results": results,
                     "source": "exa"
                 }
         except Exception as e:
             logger.error(f"Exa search error: {e}")
             return {"success": False, "error": str(e)}
+
+    def _get_domain_label(self, url: str) -> str:
+        from urllib.parse import urlparse
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            if domain.startswith("www."):
+                domain = domain[4:]
+                
+            state_ru = {
+                "ria.ru", "tass.ru", "rt.com", "sputniknews.com", "rg.ru", "iz.ru", 
+                "lenta.ru", "ukraina.ru", "gazeta.ru", "kp.ru", "tsargrad.tv", 
+                "vz.ru", "ntv.ru", "1tv.ru", "smotrim.ru", "vesti.ru", "tass.com"
+            }
+            independent_ru = {
+                "meduza.io", "novayagazeta.eu", "tvrain.tv", "thebell.io", "vpost.media"
+            }
+            business_ru = {
+                "rbc.ru", "kommersant.ru", "vedomosti.ru"
+            }
+            ua_media = {
+                "unian.net", "unian.ua", "pravda.com.ua", "liga.net", "censor.net", 
+                "nv.ua", "tsn.ua", "obozrevatel.com", "ukrinform.net", "ukrinform.ru", 
+                "hromadske.ua", "kyivindependent.com", "kyivpost.com", "rbc.ua", 
+                "uatv.ua", "suspilne.media"
+            }
+            intl_news = {
+                "reuters.com", "apnews.com", "bloomberg.com", "afp.com", "ft.com", 
+                "nytimes.com", "washingtonpost.com", "theguardian.com", "bbc.com", 
+                "bbc.co.uk", "dw.com", "euronews.com", "france24.com"
+            }
+            analytical = {
+                "understandingwar.org", "cfr.org", "rand.org", "rusi.org", 
+                "chathamhouse.org", "atlanticcouncil.org"
+            }
+            
+            for d in state_ru:
+                if domain == d or domain.endswith("." + d):
+                    return "Russian State-Controlled Media"
+            for d in independent_ru:
+                if domain == d or domain.endswith("." + d):
+                    return "Russian Independent Media (Exiled)"
+            for d in business_ru:
+                if domain == d or domain.endswith("." + d):
+                    return "Russian Business/Local Media"
+            for d in ua_media:
+                if domain == d or domain.endswith("." + d):
+                    return "Ukrainian Media"
+            for d in intl_news:
+                if domain == d or domain.endswith("." + d):
+                    return "International News / Public Broadcaster"
+            for d in analytical:
+                if domain == d or domain.endswith("." + d):
+                    return "Independent Think Tank / Analysis"
+                    
+            if domain.endswith(".gov.ua"):
+                return "Ukrainian Government/Official Source"
+            if domain.endswith(".mil.gov.ua") or domain == "mil.gov.ua":
+                return "Ukrainian Military Official Source"
+            if domain.endswith(".mil.ru") or domain == "mil.ru":
+                return "Russian Ministry of Defense Official Source"
+            if domain.endswith(".gov.ru") or domain.endswith(".gov"):
+                return "Government Official Source"
+                
+            if domain.endswith(".ru"):
+                return "Russian Domain Source"
+            if domain.endswith(".ua"):
+                return "Ukrainian Domain Source"
+            if domain.endswith(".by"):
+                return "Belarusian Domain Source"
+                
+            return "Web Source"
+        except Exception:
+            return "Web Source"
+
+    def _format_search_results(self, results: list, max_results: int, query: str = "") -> str:
+        # Detect if the query specifically targets video/social platforms
+        query_lower = query.lower()
+        wants_video = any(w in query_lower for w in ["video", "youtube", "ролик", "видео", "клип", "фильм", "watch"])
+        wants_social = any(w in query_lower for w in ["reddit", "twitter", "x.com", "tiktok", "facebook", "instagram"])
+        
+        from urllib.parse import urlparse
+        
+        filtered_results = []
+        for r in results:
+            url = r.get("url") or r.get("link") or ""
+            try:
+                parsed = urlparse(url)
+                domain = parsed.netloc.lower()
+                if domain.startswith("www."):
+                    domain = domain[4:]
+                
+                # Check if it matches any excluded domains
+                is_excluded = False
+                if not wants_video and (domain in {"youtube.com", "youtu.be", "tiktok.com"} or domain.endswith(".youtube.com")):
+                    is_excluded = True
+                if not wants_social and (domain in {"twitter.com", "x.com", "facebook.com", "instagram.com", "reddit.com", "pinterest.com"}):
+                    is_excluded = True
+                    
+                if is_excluded:
+                    continue
+            except Exception:
+                pass
+            
+            filtered_results.append(r)
+            
+        formatted = []
+        for i, r in enumerate(filtered_results[:max_results]):
+            title = r.get("title") or r.get("name") or "No title"
+            url = r.get("url") or r.get("link") or ""
+            content = r.get("content") or r.get("snippet") or r.get("text") or ""
+            
+            label = self._get_domain_label(url)
+            
+            formatted.append(
+                f"[{i+1}] [{label}] {title}\n"
+                f"URL: {url}\n"
+                f"{content[:400]}"
+            )
+        return "\n\n".join(formatted)

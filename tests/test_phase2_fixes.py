@@ -181,8 +181,8 @@ class TestE2EProcessTask:
             f"Information query routed to 'direct' (no tools). "
             f"Got: complexity={complexity}, strategy={strategy}"
         )
-        # Should match research or coding profile
-        assert strategy in ("swarm_research", "swarm_code", "single"), (
+        # Should match research, coding, or direct search profile
+        assert strategy in ("swarm_research", "swarm_code", "single", "direct_search"), (
             f"Unexpected strategy: {strategy}"
         )
 

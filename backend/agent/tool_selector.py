@@ -68,7 +68,7 @@ TASK_CLASSIFIERS = {
 MAX_TOOLS = 12
 
 # Essential tools that must always be available to the agent for recovery and operations
-ESSENTIAL_TOOLS = {"search", "shell", "file"}
+ESSENTIAL_TOOLS = {"search", "shell", "file", "message"}
 
 def select_tools(
     task: str,

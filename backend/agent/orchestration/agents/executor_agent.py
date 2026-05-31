@@ -261,9 +261,10 @@ class ExecutorAgent(BaseAgent):
             if use_stream and websocket_send:
                 async def _stream_token(t):
                     # Ensure tokens are wrapped in a structured event for SSE/WS
+                    token_str = t.get("content", "") if isinstance(t, dict) else t
                     await websocket_send({
                         "type": "token",
-                        "content": t
+                        "content": token_str
                     })
                 on_token = _stream_token
 
@@ -682,7 +683,7 @@ class ExecutorAgent(BaseAgent):
                 message_result = None
                 for call_id, t_name, t_params, success, output, should_stop, reason, tool_res, this_error in results:
                     if t_name == "message" and success:
-                        message_result = output or t_params.get("content", "")
+                        message_result = t_params.get("content", "") or output
                         break
                 
                 if message_result:

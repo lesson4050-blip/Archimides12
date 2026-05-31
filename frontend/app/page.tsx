@@ -8,6 +8,7 @@ import AgentDashboard from "@/components/AgentDashboard";
 import ModelCouncil from "@/components/ModelCouncil";
 import DeepResearch from "@/components/DeepResearch";
 import { AgentEvent } from "@/lib/websocket";
+import { Scale, Microscope } from "lucide-react";
 
 export default function Home() {
   const [sessionKey, setSessionKey] = useState(0);
@@ -118,8 +119,8 @@ export default function Home() {
       {isCouncilOpen && (
         <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#222]">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚖️</span>
+            <div className="flex items-center gap-3 text-gray-300">
+              <Scale className="w-5 h-5 text-gray-400" />
               <span className="font-semibold text-white">Model Council</span>
             </div>
             <button
@@ -138,8 +139,8 @@ export default function Home() {
       {isResearchOpen && (
         <div className="fixed inset-0 z-50 bg-[#0A0A0A] flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#222]">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🔬</span>
+            <div className="flex items-center gap-3 text-gray-300">
+              <Microscope className="w-5 h-5 text-gray-400" />
               <span className="font-semibold text-white">Deep Research → Slides</span>
             </div>
             <button

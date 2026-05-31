@@ -33,6 +33,20 @@ class MockModelRouter:
 @pytest.mark.timeout(10)
 async def test_orchestrator_planning_mode():
     """Verify the full Planner -> Executor -> Critic lifecycle."""
+    from backend.agent.orchestration.agents.planner_agent import _PlanResponse, _Phase, _SubTask
+    
+    mock_plan = _PlanResponse(
+        strategy="sequential",
+        phases=[
+            _Phase(
+                title="Test Phase",
+                subtasks=[
+                    _SubTask(type="execute", description="Do something")
+                ]
+            )
+        ]
+    )
+    
     router = MockModelRouter()
     registry = ToolRegistry()
     async def dummy_message(**kwargs):
@@ -42,21 +56,23 @@ async def test_orchestrator_planning_mode():
     cm = ContextManager(max_tokens=1000)
     orch = AgentOrchestrator(router, registry, cm)
     
-    try:
-        result = await asyncio.wait_for(
-            orch.run_task(
-                task_description="analyze my test flow thoroughly",
-                mode=AgentMode.PLANNING,
-                session_id="test-session"
-            ),
-            timeout=8.0
-        )
-        assert result["success"] is True
-        assert result["output"] == "Final Result"
-        assert result["mode"] == "planning"
-        assert result["plan"] is not None
-    except asyncio.TimeoutError:
-        pytest.skip("Orchestrator run_task timed out — likely aiosqlite issue on Windows")
+    with patch("backend.agent.orchestration.agents.planner_agent.llm_router.call", new_callable=AsyncMock) as mock_call:
+        mock_call.return_value = mock_plan
+        try:
+            result = await asyncio.wait_for(
+                orch.run_task(
+                    task_description="analyze my test flow thoroughly",
+                    mode=AgentMode.PLANNING,
+                    session_id="test-session"
+                ),
+                timeout=8.0
+            )
+            assert result["success"] is True
+            assert result["output"] == "Final Result"
+            assert result["mode"] == "planning"
+            assert result["plan"] is not None
+        except asyncio.TimeoutError:
+            pytest.skip("Orchestrator run_task timed out — likely aiosqlite issue on Windows")
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)

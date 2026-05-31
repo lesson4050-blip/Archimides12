@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import VoiceVisualizer from "../VoiceVisualizer";
 import ModeSelector from "../ModeSelector";
 import ModeDiscovery from "../ModeDiscovery";
-import { Search, Plus, Globe, Mic, X } from "lucide-react";
+import { Search, Plus, Globe, Mic, X, Scale, Microscope, Sparkles } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 
 export default function EmptyState({
@@ -146,20 +146,20 @@ export default function EmptyState({
             className="flex items-center gap-2 flex-wrap justify-center mt-6 mb-4"
           >
             {[
-              { icon: '⚖️', label: 'Model Council', desc: 'Compare models', onClick: onCouncilOpen },
-              { icon: '🔬', label: 'Deep Research', desc: 'Research → Slides', onClick: onResearchOpen },
-              { icon: '🧠', label: 'Ask anything', desc: 'General chat', onClick: () => {} },
-              { icon: '💻', label: 'Build website', desc: 'Create web app', onClick: () => setInput('Build a website for ') },
-              { icon: '📊', label: 'Wide Research', desc: 'Deep analysis', onClick: () => setInput('Research and analyze: ') },
+              { icon: <Scale size={15} className="text-gray-400 group-hover:text-white transition-colors" />, label: 'Model Council', desc: 'Compare models', onClick: onCouncilOpen },
+              { icon: <Microscope size={15} className="text-gray-400 group-hover:text-white transition-colors" />, label: 'Deep Research', desc: 'Research → Slides', onClick: onResearchOpen },
+              { icon: <Sparkles size={15} className="text-gray-400 group-hover:text-white transition-colors" />, label: 'Ask anything', desc: 'General chat', onClick: () => {} },
+              { icon: <Globe size={15} className="text-gray-400 group-hover:text-white transition-colors" />, label: 'Build website', desc: 'Create web app', onClick: () => setInput('Build a website for ') },
+              { icon: <Search size={15} className="text-gray-400 group-hover:text-white transition-colors" />, label: 'Wide Research', desc: 'Deep analysis', onClick: () => setInput('Research and analyze: ') },
             ].map((tool) => (
               <button
                 key={tool.label}
                 onClick={tool.onClick}
                 className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 
                            border border-white/10 hover:border-white/20 rounded-xl 
-                           text-sm text-gray-300 hover:text-white transition-all"
+                           text-sm text-gray-300 hover:text-white transition-all group"
               >
-                <span>{tool.icon}</span>
+                {tool.icon}
                 <span>{tool.label}</span>
               </button>
             ))}

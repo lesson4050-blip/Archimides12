@@ -7,6 +7,7 @@ Design: dark cards, color-coded by model label, expandable.
 'use client'
 
 import { useState } from 'react'
+import { Scale } from 'lucide-react'
 
 interface CouncilResponse {
   label: string
@@ -94,7 +95,7 @@ export default function ModelCouncil() {
     <div className="flex flex-col gap-4 p-4 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <span className="text-xl">⚖️</span>
+        <Scale className="w-5 h-5 text-gray-400" />
         <h2 className="text-lg font-semibold text-white">Model Council</h2>
         <span className="text-xs text-gray-500 ml-2">
           Run your task across multiple model configs simultaneously

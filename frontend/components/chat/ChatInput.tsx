@@ -88,16 +88,23 @@ export default function ChatInput({
            
            <div className="flex items-center justify-between px-2 pb-1 pt-2">
               <div className="flex items-center gap-1">
-                  <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-white hover:bg-[#333] rounded-full transition-colors tooltip tooltip-top" title="Прикрепить файл">
+                  <button 
+                    disabled={isWorking} 
+                    onClick={() => fileInputRef.current?.click()} 
+                    className={`p-2 rounded-full transition-colors tooltip tooltip-top ${isWorking ? "text-gray-600 cursor-not-allowed" : "text-gray-400 hover:text-white hover:bg-[#333]"}`}
+                    title="Прикрепить файл"
+                  >
                     <Plus size={14} />
                   </button>
                   
                   <button
                     onClick={startCapture}
-                    disabled={isSelecting}
+                    disabled={isSelecting || isWorking}
                     className={`p-2 rounded-full transition-colors tooltip tooltip-top ${
                       isSelecting
                         ? 'text-blue-400 bg-blue-900/30 animate-pulse'
+                        : isWorking
+                        ? 'text-gray-600 cursor-not-allowed'
                         : 'text-gray-400 hover:text-white hover:bg-[#333]'
                     }`}
                     title="Appshots — выделить область экрана (Ctrl+Shift+S)"
@@ -106,31 +113,35 @@ export default function ChatInput({
                   </button>
                  
                  <button 
+                   disabled={isWorking}
                    onClick={() => setWebSearchEnabled(!webSearchEnabled)} 
-                   className={`p-2 rounded-full transition-colors tooltip tooltip-top ${webSearchEnabled ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-[#333]"}`}
+                   className={`p-2 rounded-full transition-colors tooltip tooltip-top ${webSearchEnabled ? "text-blue-400 bg-blue-900/30" : isWorking ? "text-gray-600 cursor-not-allowed" : "text-gray-400 hover:text-white hover:bg-[#333]"}`}
                    title="Веб-поиск"
                  >
                    <Search size={14} />
                  </button>
                  
                  <button 
+                   disabled={isWorking}
                    onClick={() => setGlobeEnabled(!globeEnabled)} 
-                   className={`p-2 rounded-full transition-colors tooltip tooltip-top ${globeEnabled ? "text-blue-400 bg-blue-900/30" : "text-gray-400 hover:text-white hover:bg-[#333]"}`}
+                   className={`p-2 rounded-full transition-colors tooltip tooltip-top ${globeEnabled ? "text-blue-400 bg-blue-900/30" : isWorking ? "text-gray-600 cursor-not-allowed" : "text-gray-400 hover:text-white hover:bg-[#333]"}`}
                    title="Сёрфинг и контекст интернета"
                  >
                    <Globe size={14} />
                  </button>
 
-                  <div className="flex items-center ml-2 bg-[#1A1A1A] rounded-full p-0.5 border border-[#333]">
+                  <div className={`flex items-center ml-2 bg-[#1A1A1A] rounded-full p-0.5 border border-[#333] ${isWorking ? "opacity-50 cursor-not-allowed" : ""}`}>
                     <button 
+                      disabled={isWorking}
                       onClick={() => onModeChange?.("fast")}
-                      className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold transition-all ${executionMode === "fast" ? "bg-amber-500/20 text-amber-500 shadow-sm" : "text-gray-500 hover:text-gray-400"}`}
+                      className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold transition-all ${executionMode === "fast" ? "bg-amber-500/20 text-amber-500 shadow-sm" : isWorking ? "text-gray-600 cursor-not-allowed" : "text-gray-500 hover:text-gray-400"}`}
                     >
                       Fast
                     </button>
                     <button 
+                      disabled={isWorking}
                       onClick={() => onModeChange?.("planning")}
-                      className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold transition-all ${executionMode === "planning" ? "bg-blue-500/20 text-blue-500 shadow-sm" : "text-gray-500 hover:text-gray-400"}`}
+                      className={`px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-bold transition-all ${executionMode === "planning" ? "bg-blue-500/20 text-blue-500 shadow-sm" : isWorking ? "text-gray-600 cursor-not-allowed" : "text-gray-500 hover:text-gray-400"}`}
                     >
                       Plan
                     </button>
@@ -145,25 +156,29 @@ export default function ChatInput({
                     <span className="text-xs text-red-400">{voiceError}</span>
                   )}
                   <button 
+                    disabled={isWorking}
                     onClick={voiceToggleMic}
-                    className={`p-2 rounded-full transition-colors tooltip tooltip-top ${isListening ? "text-red-400 bg-red-900/30 animate-pulse" : "text-gray-400 hover:text-white"}`}
+                    className={`p-2 rounded-full transition-colors tooltip tooltip-top ${isListening ? "text-red-400 bg-red-900/30 animate-pulse" : isWorking ? "text-gray-600 cursor-not-allowed" : "text-gray-400 hover:text-white hover:bg-[#333]"}`}
                     title="Голосовой ввод"
                   >
                     <Mic size={16} />
                   </button>
                  {isWorking ? (
                     <button 
-                       onClick={stopTask}
-                       className="w-8 h-8 rounded-full bg-[#E5E5E5] flex items-center justify-center hover:bg-white transition-colors flex-shrink-0"
+                       disabled
+                       className="w-8 h-8 rounded-full bg-[#333] flex items-center justify-center flex-shrink-0 cursor-not-allowed"
                     >
-                       <div className="w-3 h-3 bg-black rounded-sm"></div>
+                       <svg className="animate-spin h-4.5 w-4.5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                       </svg>
                     </button>
                  ) : (
                     <button 
                        onClick={handleSend}
                        disabled={!input.trim()}
                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
-                          input.trim() ? "bg-[#E5E5E5] hover:bg-white text-black" : "bg-[#444] text-[#888]"
+                          input.trim() ? "bg-[#E5E5E5] hover:bg-white text-black" : "bg-[#444] text-[#888] cursor-not-allowed"
                        }`}
                     >
                        <ArrowUpIcon />

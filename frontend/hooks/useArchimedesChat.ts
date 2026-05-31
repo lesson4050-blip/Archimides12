@@ -97,7 +97,7 @@ export function useArchimedesChat(
     };
 
     const handleAgentEvent = (event: AgentEvent) => {
-        if (["message_info", "message_ask", "message_result", "agent_error", "session_end"].includes(event.type)) {
+        if (["message_ask", "message_result", "agent_error", "session_end"].includes(event.type)) {
           store.setIsWorking(false);
         }
     

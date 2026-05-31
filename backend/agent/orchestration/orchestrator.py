@@ -335,7 +335,7 @@ class AgentOrchestrator:
         if SEARCH_DIRECT.search(task) and not any(
             w in task_lower for w in ['код', 'code', 'fix', 'bug', 'implement', 'write a function']
         ):
-            return "simple", "direct"
+            return "simple", "direct_search"
         
         # CODING tasks
         CODING = re.compile(
@@ -520,12 +520,17 @@ class AgentOrchestrator:
                 except Exception as e:
                     logger.warning(f"Checkpoint save failed (non-critical): {e}")
 
-                if strategy == "direct":
+                if strategy == "direct" and mode != AgentMode.PLANNING:
                     logger.info(f"[{session_id}] Simple direct task → conversational mode (no search)")
                     result = await self._run_conversational(state, websocket_send, perform_search=False)
-                elif strategy == "direct_search":
+                elif strategy == "direct_search" and mode != AgentMode.PLANNING:
                     logger.info(f"[{session_id}] Simple search task → conversational mode (with search)")
                     result = await self._run_conversational(state, websocket_send, perform_search=True)
+                elif mode == AgentMode.PLANNING:
+                    # Explicit planning mode requested — always use planning pipeline
+                    logger.info(f"[{session_id}] Explicit PLANNING mode → planning pipeline (strategy: {strategy})")
+                    state.metadata["strategy"] = strategy
+                    result = await self._run_planning_mode(state, websocket_send)
                 elif complexity == "simple":
                     logger.info(f"[{session_id}] Simple task → fast mode (strategy: {strategy})")
                     result = await self._run_fast_mode(state, websocket_send)

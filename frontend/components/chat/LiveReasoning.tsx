@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BrainCircuit, ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function LiveReasoning({ content }: { content: string }) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -62,7 +63,23 @@ export default function LiveReasoning({ content }: { content: string }) {
                   className="p-4 text-[13.5px] text-gray-300 font-mono leading-relaxed max-h-[300px] overflow-y-auto custom-scrollbar"
                 >
                   <div className="prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown>{thinkContent}</ReactMarkdown>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ href, children }) => (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors"
+                          >
+                            {children}
+                          </a>
+                        ),
+                      }}
+                    >
+                      {thinkContent}
+                    </ReactMarkdown>
                   </div>
                 </div>
               </motion.div>
@@ -77,7 +94,23 @@ export default function LiveReasoning({ content }: { content: string }) {
           animate={{ opacity: 1 }} 
           className="markdown-content prose prose-invert prose-sm max-w-none text-[#ECECEC] text-[15px] leading-relaxed mt-2"
         >
-          <ReactMarkdown>{finalContent}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ href, children }) => (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors"
+                >
+                  {children}
+                </a>
+              ),
+            }}
+          >
+            {finalContent}
+          </ReactMarkdown>
         </motion.div>
       )}
     </div>

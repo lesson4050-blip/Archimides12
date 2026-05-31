@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Microscope } from 'lucide-react'
 
 interface MarpResult {
   success: boolean
@@ -116,7 +117,7 @@ export default function DeepResearch() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl animate-pulse">🔬</span>
+          <Microscope className="w-7 h-7 text-gray-400 animate-pulse" />
           <div>
             <h2 className="text-xl font-bold text-white tracking-tight">Archimedes Marp Slides</h2>
             <p className="text-xs text-gray-400 mt-0.5">
@@ -190,7 +191,7 @@ export default function DeepResearch() {
                 </>
               ) : (
                 <>
-                  <span>🔬</span>
+                  <Microscope className="w-4 h-4" />
                   Generate Slides
                 </>
               )}

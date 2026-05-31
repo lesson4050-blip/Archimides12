@@ -48,36 +48,21 @@ class HydraAgent:
         # Get all tool definitions from registry
         if not hasattr(self, 'tool_registry') or not self.tool_registry:
             return []
+            
+        role_allowed = {
+            "scout": ["repo_map", "file", "search", "ast_navigator"],
+            "warrior": ["code_edit", "file", "shell", "patch", "git"],
+            "sentinel": ["shell", "fast_linter"],
+            "commander": ["search"]
+        }
         
-        all_tools = []
-        for tool_name, tool_fn in self.tool_registry.tools.items():
-            # Build OpenAI-compatible tool definition
-            import inspect
-            try:
-                sig = inspect.signature(tool_fn)
-                params = {}
-                required = []
-                for pname, param in sig.parameters.items():
-                    if pname in ('self', 'kwargs', 'args'):
-                        continue
-                    params[pname] = {"type": "string", "description": pname}
-                    if param.default == inspect.Parameter.empty:
-                        required.append(pname)
-                
-                all_tools.append({
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": f"Tool: {tool_name}",
-                        "parameters": {
-                            "type": "object",
-                            "properties": params,
-                            "required": required
-                        }
-                    }
-                })
-            except Exception:
-                pass
+        allowed = role_allowed.get(self.role, [])
+        all_defs = self.tool_registry.get_all_tool_definitions()
+        
+        all_tools = [
+            d for d in all_defs
+            if d.get("function", {}).get("name") in allowed
+        ]
         
         # Select relevant tools for this role
         task = self.history[-1].get("content", "") if self.history else ""

@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit, Sparkles, Search, Library, Plus, ListFilter, Settings, LayoutGrid, MonitorSmartphone, Plug } from "lucide-react";
+import { Edit, Sparkles, Search, Library, Plus, ListFilter, Settings, LayoutGrid, MonitorSmartphone, Plug, Scale, Microscope } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import SettingsModal from "./SettingsModal";
@@ -76,10 +76,10 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
           className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
         >
           <div className="flex items-center gap-3">
-            <Sparkles size={16} className="text-gray-400 group-hover:text-[#f59e0b] transition-colors" />
+            <Sparkles size={16} className="text-gray-400 group-hover:text-amber-400 transition-colors" />
             <span>Агенты</span>
           </div>
-          <span className="text-[10px] text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded font-medium">Новый</span>
+          <span className="text-[10px] text-blue-400/90 bg-blue-950/40 border border-blue-900/30 px-1.5 py-0.5 rounded font-medium">Новый</span>
         </button>
 
         <button 
@@ -103,7 +103,7 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
           className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
         >
           <div className="flex items-center gap-3">
-            <span className="text-gray-400 text-base">⚖️</span>
+            <Scale size={16} className="text-gray-400 group-hover:text-white transition-colors" />
             <span>Model Council</span>
           </div>
         </button>
@@ -113,19 +113,19 @@ export default function Sidebar({ onNewTask, onAgentSelect, selectedAgent, onDas
           className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
         >
           <div className="flex items-center gap-3">
-            <span className="text-gray-400 text-base">🔬</span>
+            <Microscope size={16} className="text-gray-400 group-hover:text-white transition-colors" />
             <span>Ресёрч</span>
           </div>
-          <span className="text-[10px] text-green-400 bg-green-900/30 px-1.5 py-0.5 rounded font-medium">New</span>
+          <span className="text-[10px] text-emerald-400/90 bg-emerald-950/40 border border-emerald-900/30 px-1.5 py-0.5 rounded font-medium">New</span>
         </button>
 
         <button 
           onClick={() => setIsConnectorsOpen(true)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#1f1f1f] transition-colors w-full text-left group"
         >
-          <Plug size={16} className="text-gray-400 group-hover:text-[#7C6FFF] transition-colors" />
+          <Plug size={16} className="text-gray-400 group-hover:text-white transition-colors" />
           <span>Коннекторы</span>
-          <span className="ml-auto text-[10px] text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded font-medium">80+</span>
+          <span className="ml-auto text-[10px] text-purple-400/90 bg-purple-950/40 border border-purple-900/30 px-1.5 py-0.5 rounded font-medium">80+</span>
         </button>
       </div>
 

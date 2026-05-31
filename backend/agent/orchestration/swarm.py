@@ -63,7 +63,10 @@ MICRO_AGENT_TEMPLATES = {
             "Find the most accurate, recent, authoritative information. "
             "Synthesize multiple sources. "
             "Distinguish facts from opinions. "
-            "Always cite sources."
+            "Always cite sources. "
+            "CRITICAL: If the task/context is in Russian, you MUST execute search queries and read pages in Russian. "
+            "Do not translate search terms literally word-by-word into broken Russian (like 'замени курсов'). "
+            "Use natural Russian search queries (e.g., 'курс доллара к рублю на сегодня')."
         ),
         "tools": ["search", "web_read"]
     },
@@ -107,6 +110,7 @@ MICRO_AGENT_TEMPLATES = {
             "Your job is to verify claims made by the researcher. "
             "Identify potential biases, check for contradictions, and ensure the information is up-to-date. "
             "CRITICAL: Use the search tool to verify specific facts or dates. "
+            "If the task/context is in Russian, you MUST execute search queries and read pages in Russian (using natural Russian search queries). "
             "Output: List of verified points, corrections, and a confidence score (0-100%)."
         ),
         "tools": ["search", "web_read"]
